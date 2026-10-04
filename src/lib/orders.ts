@@ -1,9 +1,45 @@
-import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 import { getStoreSettings, StoreShippingSettings } from '@/lib/settings'
 import { validateCoupon } from '@/lib/coupons'
 import { reserveStockForCheckout, confirmStockReservation, releaseStockReservation } from '@/lib/inventory'
 import { createCashfreeOrder } from '@/lib/payments/cashfree'
+import { MOCK_PRODUCTS, MOCK_ORDERS } from '@/lib/mock-data'
+import fs from 'fs'
+import path from 'path'
+
+function getDevOrdersFilePath() {
+  const dir = path.join(process.cwd(), '.next')
+  return path.join(dir, 'bb_dev_orders.json')
+}
+
+export function getDevOrders(): any[] {
+  try {
+    const file = getDevOrdersFilePath()
+    if (fs.existsSync(file)) {
+      const content = fs.readFileSync(file, 'utf-8')
+      const diskOrders = JSON.parse(content)
+      return [...diskOrders, ...MOCK_ORDERS]
+    }
+  } catch {}
+  return MOCK_ORDERS
+}
+
+export function saveDevOrder(order: any) {
+  try {
+    const file = getDevOrdersFilePath()
+    let current: any[] = []
+    if (fs.existsSync(file)) {
+      try {
+        current = JSON.parse(fs.readFileSync(file, 'utf-8'))
+      } catch {}
+    }
+    current = [order, ...current.filter((o: any) => o.id !== order.id && o.order_number !== order.order_number)]
+    fs.writeFileSync(file, JSON.stringify(current, null, 2), 'utf-8')
+  } catch (e) {
+    console.error('Failed to save dev order to disk:', e)
+  }
+}
 
 export type Order = Database['public']['Tables']['orders']['Row']
 export type OrderItem = Database['public']['Tables']['order_items']['Row']
@@ -72,8 +108,6 @@ export function isValidOrderStatusTransition(currentStatus: OrderStatus, newStat
  * - Creates order with immutable snapshots.
  */
 export async function createOrder(input: CreateOrderInput) {
-  const supabase = await createServiceClient()
-
   // 1. Validate contact info
   const phone = input.guest_phone || input.shipping_address.phone
   if (!validateIndianPhone(phone)) {
@@ -87,6 +121,112 @@ export async function createOrder(input: CreateOrderInput) {
   if (!input.cart_items || input.cart_items.length === 0) {
     return { error: 'Your cart is empty.' }
   }
+
+  if (!isSupabaseConfigured()) {
+    let subtotalPaise = 0
+    const itemSnapshots: any[] = []
+
+    for (const item of input.cart_items) {
+      let foundVariant: any = null
+      let foundProduct: any = null
+      for (const p of MOCK_PRODUCTS) {
+        const v = p.variants?.find((vr: any) => vr.id === item.variant_id)
+        if (v) {
+          foundVariant = v
+          foundProduct = p
+          break
+        }
+      }
+
+      if (!foundVariant || !foundProduct) {
+        return { error: 'One or more items in your cart could not be verified.' }
+      }
+
+      const sellingPricePaise = Math.round(foundProduct.selling_price * 100)
+      const itemTotalPaise = sellingPricePaise * item.quantity
+      subtotalPaise += itemTotalPaise
+
+      itemSnapshots.push({
+        id: `oi_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        order_id: '',
+        product_id: foundProduct.id,
+        variant_id: foundVariant.id,
+        product_name: foundProduct.name,
+        variant_info: {
+          sku: foundVariant.sku,
+          color: foundVariant.color,
+          size: foundVariant.size,
+        },
+        quantity: item.quantity,
+        mrp: foundProduct.mrp,
+        selling_price: foundProduct.selling_price,
+        discount_amount: Math.max(0, foundProduct.mrp - foundProduct.selling_price),
+        total_amount: Math.round(itemTotalPaise / 100),
+      })
+    }
+
+    const shippingSettings = await getStoreSettings<StoreShippingSettings>('shipping')
+    const freeThreshold = shippingSettings.free_shipping_threshold_paise
+    const shippingPaise = subtotalPaise >= freeThreshold ? 0 : shippingSettings.standard_shipping_paise
+    const codFeePaise =
+      input.payment_method === 'cod' && shippingSettings.cod_enabled
+        ? shippingSettings.cod_fee_paise
+        : 0
+
+    let couponDiscountPaise = 0
+    if (input.coupon_code) {
+      const code = input.coupon_code.trim().toUpperCase()
+      if (code === 'BOOM10') {
+        couponDiscountPaise = Math.round(subtotalPaise * 0.1)
+      } else if (code === 'FIRSTBOOM' && subtotalPaise >= 149900) {
+        couponDiscountPaise = 20000
+      }
+    }
+
+    const totalPaise = Math.max(0, subtotalPaise - couponDiscountPaise + shippingPaise + codFeePaise)
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000)
+    const orderNumber = `BB-${dateStr}-${randomSuffix}`
+
+    const orderRecord: Order = {
+      id: `ord_${Date.now()}_${randomSuffix}`,
+      order_number: orderNumber,
+      user_id: input.user_id || null,
+      guest_email: input.guest_email || null,
+      guest_phone: phone,
+      status: input.payment_method === 'cod' ? 'confirmed' : 'pending',
+      payment_status: input.payment_method === 'cod' ? 'pending' : 'pending',
+      payment_method: input.payment_method,
+      subtotal: Math.round(subtotalPaise / 100),
+      discount_amount: Math.round(couponDiscountPaise / 100),
+      shipping_amount: Math.round((shippingPaise + codFeePaise) / 100),
+      total_amount: Math.round(totalPaise / 100),
+      coupon_id: null,
+      coupon_discount: Math.round(couponDiscountPaise / 100),
+      shipping_address: input.shipping_address as any,
+      billing_address: (input.billing_address || input.shipping_address) as any,
+      notes: input.notes || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    for (const itm of itemSnapshots) {
+      itm.order_id = orderRecord.id
+    }
+
+    const devOrderFull = {
+      ...orderRecord,
+      order_items: itemSnapshots,
+      payments: [],
+    }
+
+    saveDevOrder(devOrderFull)
+    MOCK_ORDERS.unshift(devOrderFull)
+
+    return { data: orderRecord }
+  }
+
+  const supabase = await createServiceClient()
 
   // 2. Fetch authoritative product and variant details from DB
   const variantIds = input.cart_items.map((i) => i.variant_id)
@@ -299,6 +439,13 @@ export async function createOrder(input: CreateOrderInput) {
  * Initialize Cashfree payment session for an order
  */
 export async function createCashfreeSessionForOrder(order: Order) {
+  if (!isSupabaseConfigured() || !process.env.CASHFREE_CLIENT_ID || process.env.CASHFREE_CLIENT_ID === 'your-cashfree-client-id') {
+    return {
+      payment_session_id: `session_dev_${order.order_number}`,
+      order_id: order.order_number,
+    }
+  }
+
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
   const customerPhone = order.guest_phone || '9999999999'
 
@@ -338,6 +485,17 @@ export async function createCashfreeSessionForOrder(order: Order) {
 }
 
 export async function getOrderById(orderId: string) {
+  if (!isSupabaseConfigured()) {
+    const orders = getDevOrders()
+    const found = orders.find((o) => o.id === orderId || o.order_number === orderId)
+    if (!found) return null
+    return {
+      ...found,
+      order_items: found.order_items || [],
+      payments: found.payments || [],
+    }
+  }
+
   const supabase = await createServiceClient()
   const { data: order, error } = await supabase
     .from('orders')
@@ -370,6 +528,13 @@ export async function getOrderById(orderId: string) {
 }
 
 export async function getOrdersByUserId(userId: string): Promise<Order[]> {
+  if (!isSupabaseConfigured()) {
+    const orders = getDevOrders()
+    const userOrders = orders.filter((o) => o.user_id === userId)
+    if (userOrders.length > 0) return userOrders
+    return orders.filter((o) => !o.user_id || o.user_id === userId)
+  }
+
   const supabase = await createServerClient()
   const { data, error } = await supabase
     .from('orders')
@@ -389,6 +554,19 @@ export async function updateOrderStatus(
   newStatus: OrderStatus,
   adminUserId?: string
 ) {
+  if (!isSupabaseConfigured()) {
+    const found = MOCK_ORDERS.find((o) => o.id === orderId || o.order_number === orderId)
+    if (!found) return { error: 'Order not found' }
+    if (!isValidOrderStatusTransition(found.status, newStatus)) {
+      return {
+        error: `Transition from "${found.status}" to "${newStatus}" is not permitted.`,
+      }
+    }
+    found.status = newStatus
+    found.updated_at = new Date().toISOString()
+    return { data: found }
+  }
+
   const supabase = await createServiceClient()
 
   const { data: currentOrder, error: fetchErr } = await supabase
@@ -432,6 +610,21 @@ export async function updateOrderStatus(
 }
 
 export async function cancelOrder(orderId: string, reason: string, cancelledByUserId?: string) {
+  if (!isSupabaseConfigured()) {
+    const found = MOCK_ORDERS.find((o) => o.id === orderId || o.order_number === orderId)
+    if (!found) return { error: 'Order not found' }
+    if (!['pending', 'confirmed', 'packed'].includes(found.status)) {
+      return {
+        error: `Orders with status "${found.status}" cannot be cancelled. You can request a return after delivery.`,
+      }
+    }
+    found.status = 'cancelled'
+    found.cancellation_reason = reason
+    found.cancelled_at = new Date().toISOString()
+    found.updated_at = new Date().toISOString()
+    return { data: found }
+  }
+
   const supabase = await createServiceClient()
 
   const { data: order, error: fetchErr } = await supabase
@@ -471,6 +664,36 @@ export async function cancelOrder(orderId: string, reason: string, cancelledByUs
  * Public track order lookup requiring both order number AND matching phone/email verification
  */
 export async function getOrderByTracking(orderNumber: string, verifier: string) {
+  if (!isSupabaseConfigured()) {
+    const cleanOrder = orderNumber.trim()
+    const cleanVerifier = verifier.trim().toLowerCase()
+    const cleanPhone = verifier.replace(/\D/g, '')
+
+    const orders = getDevOrders()
+    const order = orders.find(
+      (o) => o.order_number === cleanOrder || o.id === cleanOrder
+    )
+
+    if (!order) {
+      return { error: 'Order not found. Please verify the order number.' }
+    }
+
+    const address = order.shipping_address as any
+    const orderEmail = (order.guest_email || address?.email || '').toLowerCase()
+    const orderPhone = (order.guest_phone || address?.phone || '').replace(/\D/g, '')
+
+    const matchesEmail = cleanVerifier.includes('@') && orderEmail && orderEmail === cleanVerifier
+    const matchesPhone = cleanPhone.length >= 10 && orderPhone && orderPhone.endsWith(cleanPhone.slice(-10))
+
+    if (!matchesEmail && !matchesPhone) {
+      return {
+        error: 'The email or phone number does not match this order. Please verify your details.',
+      }
+    }
+
+    return { data: order }
+  }
+
   const supabase = await createServiceClient()
   const cleanOrder = orderNumber.trim()
   const cleanVerifier = verifier.trim().toLowerCase()

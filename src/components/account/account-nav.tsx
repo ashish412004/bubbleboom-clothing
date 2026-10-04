@@ -22,8 +22,11 @@ export function AccountNav() {
 
   const handleSignOut = async () => {
     try {
-      const supabase = createClient()
-      await supabase.auth.signOut()
+      await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      })
       await resetCart()
       toast.success('Signed out')
       router.push('/login')

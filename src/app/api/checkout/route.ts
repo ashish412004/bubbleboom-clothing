@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { createOrder, createCashfreeSessionForOrder } from '@/lib/orders'
 import { getCart, clearCart } from '@/lib/cart'
 
@@ -11,21 +11,24 @@ export async function POST(request: NextRequest) {
 
     // Auth check
     let userId: string | undefined = undefined
-    try {
-      const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          cookies: {
-            getAll: () => cookieStore.getAll(),
-            setAll: () => {},
-          },
-        }
-      )
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) userId = user.id
-    } catch {
-      // Guest mode
+    const rawAuth = cookieStore.get('bb_auth_user')?.value
+    if (rawAuth) {
+      try {
+        const u = JSON.parse(rawAuth)
+        userId = u.id
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!userId && isSupabaseConfigured()) {
+      try {
+        const supabase = await createServerClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) userId = user.id
+      } catch {
+        // Guest mode
+      }
     }
 
     const body = await request.json()
@@ -104,18 +107,23 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         order_number: order.order_number,
         payment_session_id: cfSessionRes.payment_session_id,
         payment_method: 'cashfree',
+        redirect_url: `/payment-return?order_id=${order.order_number}&method=cashfree`,
       })
+      response.cookies.delete('bb_cart')
+      return response
     } else {
       // Cash on Delivery
-      return NextResponse.json({
+      const response = NextResponse.json({
         order_number: order.order_number,
         payment_method: 'cod',
         redirect_url: `/payment-return?order_id=${order.order_number}&method=cod`,
       })
+      response.cookies.delete('bb_cart')
+      return response
     }
   } catch (err: any) {
     console.error('Checkout API error:', err)

@@ -3,7 +3,7 @@ import { Footer } from '@/components/footer/footer'
 import { getOrderById } from '@/lib/orders'
 import { getPaymentStatus } from '@/lib/payments/cashfree'
 import { confirmStockReservation } from '@/lib/inventory'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { CheckCircle2, AlertCircle, Clock, ArrowRight, Package, MapPin } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
@@ -67,31 +67,36 @@ export default async function PaymentReturnPage({ searchParams }: PaymentReturnP
 
   // 2. If online and not yet marked paid, verify directly with Cashfree
   if (!isCod && !isVerifiedPaid) {
-    try {
-      const cfStatus = await getPaymentStatus(order.order_number)
-      if (cfStatus && !('error' in cfStatus)) {
-        if (cfStatus.order_status === 'PAID') {
-          // Authoritative Cashfree API reports PAID
-          const supabase = await createServiceClient()
-          await supabase
-            .from('orders')
-            .update({
-              status: 'confirmed',
-              payment_status: 'paid',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', order.id)
+    if (!isSupabaseConfigured()) {
+      isVerifiedPaid = true
+      isPending = false
+    } else {
+      try {
+        const cfStatus = await getPaymentStatus(order.order_number)
+        if (cfStatus && !('error' in cfStatus)) {
+          if (cfStatus.order_status === 'PAID') {
+            // Authoritative Cashfree API reports PAID
+            const supabase = await createServiceClient()
+            await supabase
+              .from('orders')
+              .update({
+                status: 'confirmed',
+                payment_status: 'paid',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', order.id)
 
-          await confirmStockReservation(order.id)
-          isVerifiedPaid = true
-          isPending = false
-        } else if (['EXPIRED', 'FAILED', 'CANCELLED'].includes(cfStatus.order_status)) {
-          isFailed = true
-          isPending = false
+            await confirmStockReservation(order.id)
+            isVerifiedPaid = true
+            isPending = false
+          } else if (['EXPIRED', 'FAILED', 'CANCELLED'].includes(cfStatus.order_status)) {
+            isFailed = true
+            isPending = false
+          }
         }
+      } catch (err) {
+        console.error('Error verifying payment status on return page:', err)
       }
-    } catch (err) {
-      console.error('Error verifying payment status on return page:', err)
     }
   }
 

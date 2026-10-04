@@ -41,26 +41,24 @@ export function SignupForm() {
     setLoading(true)
 
     try {
-      const supabase = createClient()
-      const siteUrl = window.location.origin
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-          emailRedirectTo: `${siteUrl}/auth/callback?next=${encodeURIComponent(safeRedirect)}`,
-        },
+      const res = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'signup',
+          email,
+          password,
+          full_name: fullName,
+        }),
       })
 
-      if (signUpError) {
-        throw signUpError
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to create account. Please try again.')
       }
 
-      // Check if email confirmation is required or if session was created immediately
-      if (data.session) {
-        toast.success('Account created!')
+      if (data.user) {
+        toast.success('Account created successfully!')
         router.push(safeRedirect)
         router.refresh()
       } else {

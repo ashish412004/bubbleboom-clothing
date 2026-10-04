@@ -29,13 +29,12 @@ export const useCartStore = create<CartStore>()(
           const res = await fetch('/api/cart')
           if (res.ok) {
             const data = await res.json()
-            if (data.cart?.items) {
-              const total = data.cart.items.reduce(
-                (sum: number, item: any) => sum + item.quantity,
-                0
-              )
-              set({ itemCount: total })
-            }
+            const cartItems = data.items || data.cart?.items || []
+            const total = cartItems.reduce(
+              (sum: number, item: any) => sum + (item.quantity || 0),
+              0
+            )
+            set({ itemCount: total })
           }
         } catch {
           // Ignore network errors in background cart count refresh

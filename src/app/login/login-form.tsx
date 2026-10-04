@@ -30,22 +30,25 @@ export function LoginForm() {
     setLoading(true)
 
     try {
-      const supabase = createClient()
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const res = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'login',
+          email,
+          password,
+        }),
       })
 
-      if (signInError) {
-        throw signInError
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Invalid email or password.')
       }
 
-      if (data.session) {
-        toast.success('Signed in successfully!')
-        await refreshCart()
-        router.push(safeRedirect)
-        router.refresh()
-      }
+      toast.success('Signed in successfully!')
+      await refreshCart()
+      router.push(safeRedirect)
+      router.refresh()
     } catch (err: any) {
       setError(err.message || 'Invalid email or password.')
     } finally {
@@ -71,7 +74,7 @@ export function LoginForm() {
         throw oauthError
       }
     } catch (err: any) {
-      setError(err.message || 'Google authentication could not be initiated. Check OAuth credentials.')
+      setError('Google authentication requires active OAuth credentials in .env.local. Sign in with email above for instant local access.')
       setLoading(false)
     }
   }

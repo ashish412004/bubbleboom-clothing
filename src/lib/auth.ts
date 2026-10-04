@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
+import { cookies } from 'next/headers'
 
 export async function signUp(email: string, password: string, fullName?: string) {
   const supabase = createClient()
@@ -95,6 +96,16 @@ export async function updatePassword(newPassword: string) {
 }
 
 export async function getCurrentUser() {
+  try {
+    const cookieStore = await cookies()
+    const rawAuth = cookieStore.get('bb_auth_user')?.value
+    if (rawAuth) {
+      return JSON.parse(rawAuth)
+    }
+  } catch {
+    // ignore
+  }
+
   if (!isSupabaseConfigured()) {
     return null
   }
@@ -112,6 +123,27 @@ export async function getCurrentUser() {
 }
 
 export async function getUserProfile(userId: string) {
+  try {
+    const cookieStore = await cookies()
+    const rawAuth = cookieStore.get('bb_auth_user')?.value
+    if (rawAuth) {
+      const u = JSON.parse(rawAuth)
+      if (u.id === userId) {
+        return {
+          id: u.id,
+          email: u.email,
+          full_name: u.user_metadata?.full_name || 'Bubble Boom Member',
+          phone: null,
+          role: 'customer',
+          created_at: u.created_at,
+          updated_at: u.created_at,
+        } as any
+      }
+    }
+  } catch {
+    // ignore
+  }
+
   if (!isSupabaseConfigured()) {
     return null
   }

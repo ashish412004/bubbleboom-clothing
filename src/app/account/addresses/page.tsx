@@ -2,7 +2,7 @@ import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { getCurrentUser } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { createClient as createServerClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { AccountNav } from '@/components/account/account-nav'
 import { AddressManager } from './address-manager'
 
@@ -20,13 +20,21 @@ export default async function AddressesPage() {
     redirect('/login?next=/account/addresses')
   }
 
-  const supabase = await createServerClient()
-  const { data: addresses } = await supabase
-    .from('addresses')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('is_default', { ascending: false })
-    .order('created_at', { ascending: false })
+  let addresses: any[] = []
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServerClient()
+      const { data } = await supabase
+        .from('addresses')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: false })
+      addresses = data || []
+    } catch {
+      // ignore
+    }
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-black">

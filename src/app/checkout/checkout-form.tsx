@@ -191,7 +191,7 @@ export function CheckoutForm({
 
       if (paymentMethod === 'cod') {
         router.push(data.redirect_url || `/payment-return?order_id=${data.order_number}&method=cod`)
-      } else if (data.payment_session_id) {
+      } else if (data.payment_session_id && !data.payment_session_id.startsWith('session_dev_')) {
         // Launch Cashfree SDK checkout
         try {
           const cashfree = await loadCashfreeSdk()
@@ -204,6 +204,8 @@ export function CheckoutForm({
           // Fallback redirect to return page
           router.push(`/payment-return?order_id=${data.order_number}&session_id=${data.payment_session_id}`)
         }
+      } else {
+        router.push(data.redirect_url || `/payment-return?order_id=${data.order_number}&method=cashfree`)
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Network error during checkout.')

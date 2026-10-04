@@ -8,7 +8,7 @@ import {
   clearCart,
   calculateCartSummary,
 } from '@/lib/cart'
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, isSupabaseConfigured } from '@/lib/supabase/server'
 
 async function getAuthAndSession() {
   const cookieStore = await cookies()
@@ -18,23 +18,27 @@ async function getAuthAndSession() {
     sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
   }
 
-  // Check auth user
+  // 1. Check local session cookie first
   let userId: string | undefined = undefined
-  try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      }
-    )
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) userId = user.id
-  } catch {
-    // Guest mode
+  const rawAuth = cookieStore.get('bb_auth_user')?.value
+  if (rawAuth) {
+    try {
+      const u = JSON.parse(rawAuth)
+      userId = u.id
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. Check live Supabase if configured and not yet resolved
+  if (!userId && isSupabaseConfigured()) {
+    try {
+      const supabase = await createServerClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) userId = user.id
+    } catch {
+      // Guest mode
+    }
   }
 
   return { userId, sessionId, cookieStore }
@@ -82,6 +86,14 @@ export async function POST(request: NextRequest) {
         maxAge: 60 * 60 * 24 * 30,
       })
     }
+    if ((result as any).cartCookieValue) {
+      response.cookies.set('bb_cart', (result as any).cartCookieValue, {
+        path: '/',
+        httpOnly: false,
+        maxAge: 60 * 60 * 24 * 30,
+        sameSite: 'lax',
+      })
+    }
     return response
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
@@ -100,7 +112,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
-    return NextResponse.json(result)
+    const response = NextResponse.json(result)
+    if ((result as any).cartCookieValue) {
+      response.cookies.set('bb_cart', (result as any).cartCookieValue, {
+        path: '/',
+        httpOnly: false,
+        maxAge: 60 * 60 * 24 * 30,
+        sameSite: 'lax',
+      })
+    }
+    return response
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
@@ -113,12 +134,23 @@ export async function DELETE(request: NextRequest) {
 
     if (itemId) {
       const result = await removeCartItem(itemId)
-      return NextResponse.json(result)
+      const response = NextResponse.json(result)
+      if ((result as any).cartCookieValue) {
+        response.cookies.set('bb_cart', (result as any).cartCookieValue, {
+          path: '/',
+          httpOnly: false,
+          maxAge: 60 * 60 * 24 * 30,
+          sameSite: 'lax',
+        })
+      }
+      return response
     }
 
     const { userId, sessionId } = await getAuthAndSession()
     const result = await clearCart(userId, sessionId)
-    return NextResponse.json(result)
+    const response = NextResponse.json(result)
+    response.cookies.delete('bb_cart')
+    return response
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

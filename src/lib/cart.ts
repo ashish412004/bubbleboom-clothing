@@ -1,6 +1,8 @@
-import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 import { getStoreSettings, StoreShippingSettings } from '@/lib/settings'
+import { MOCK_PRODUCTS } from '@/lib/mock-data'
+import { cookies } from 'next/headers'
 
 export interface CartItemWithDetails {
   id: string
@@ -44,7 +46,56 @@ export interface CartSummary {
   coupon_discount_paise: number
 }
 
+export interface LocalCartEntry {
+  id: string
+  variant_id: string
+  quantity: number
+}
+
+export function findMockVariantWithProduct(variantId: string) {
+  for (const product of MOCK_PRODUCTS) {
+    const variant = product.variants?.find((v: any) => v.id === variantId)
+    if (variant) {
+      return { variant, product }
+    }
+  }
+  return null
+}
+
+async function getLocalCartFromCookie(): Promise<LocalCartEntry[]> {
+  try {
+    const cookieStore = await cookies()
+    const raw = cookieStore.get('bb_cart')?.value
+    if (!raw) return []
+    try {
+      return JSON.parse(decodeURIComponent(raw))
+    } catch {
+      return JSON.parse(raw)
+    }
+  } catch {
+    return []
+  }
+}
+
+async function setLocalCartCookie(cart: LocalCartEntry[]) {
+  try {
+    const cookieStore = await cookies()
+    cookieStore.set('bb_cart', JSON.stringify(cart), {
+      path: '/',
+      httpOnly: false,
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      sameSite: 'lax',
+    })
+  } catch {
+    // Handled in Route Handler via response.cookies if server component
+  }
+}
+
 export async function getOrCreateCart(userId?: string, sessionId?: string) {
+  if (!isSupabaseConfigured()) {
+    return { id: 'local_cart', user_id: userId || null, session_id: sessionId || null }
+  }
+
   const supabase = await createServerClient()
   if (!userId && !sessionId) return null
 
@@ -76,6 +127,43 @@ export async function getOrCreateCart(userId?: string, sessionId?: string) {
 }
 
 export async function getCart(userId?: string, sessionId?: string): Promise<CartItemWithDetails[]> {
+  if (!isSupabaseConfigured()) {
+    const localEntries = await getLocalCartFromCookie()
+    const items: CartItemWithDetails[] = []
+
+    for (const entry of localEntries) {
+      const match = findMockVariantWithProduct(entry.variant_id)
+      if (match) {
+        items.push({
+          id: entry.id,
+          cart_id: 'local_cart',
+          variant_id: entry.variant_id,
+          quantity: entry.quantity,
+          variant: {
+            id: match.variant.id,
+            product_id: match.product.id,
+            sku: match.variant.sku,
+            color: match.variant.color,
+            size: match.variant.size,
+            stock: match.variant.stock,
+            is_active: match.variant.is_active,
+            product: {
+              id: match.product.id,
+              name: match.product.name,
+              slug: match.product.slug,
+              mrp: match.product.mrp,
+              selling_price: match.product.selling_price,
+              is_published: match.product.is_published,
+              is_active: match.product.is_active,
+              images: match.product.images || [],
+            },
+          },
+        })
+      }
+    }
+    return items
+  }
+
   const supabase = await createServerClient()
   if (!userId && !sessionId) return []
 
@@ -135,6 +223,47 @@ export async function addToCart(
   userId?: string,
   sessionId?: string
 ) {
+  if (!isSupabaseConfigured()) {
+    const match = findMockVariantWithProduct(variantId)
+    if (!match) {
+      return { error: 'Variant not found' }
+    }
+
+    if (!match.product.is_published || !match.product.is_active || !match.variant.is_active) {
+      return { error: 'Product is currently not available' }
+    }
+
+    const currentCart = await getLocalCartFromCookie()
+    const existingIndex = currentCart.findIndex((i) => i.variant_id === variantId)
+    const currentQty = existingIndex >= 0 ? currentCart[existingIndex].quantity : 0
+    const newQty = currentQty + quantity
+
+    if (newQty > match.variant.stock) {
+      return {
+        error: `Only ${match.variant.stock} item(s) available in stock.`,
+        available_stock: match.variant.stock,
+      }
+    }
+
+    let updatedCart: LocalCartEntry[]
+    let itemId = `ci_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+
+    if (existingIndex >= 0) {
+      updatedCart = currentCart.map((i, idx) =>
+        idx === existingIndex ? { ...i, quantity: newQty } : i
+      )
+      itemId = currentCart[existingIndex].id
+    } else {
+      updatedCart = [...currentCart, { id: itemId, variant_id: variantId, quantity: newQty }]
+    }
+
+    await setLocalCartCookie(updatedCart)
+    return {
+      data: { id: itemId, variant_id: variantId, quantity: newQty },
+      cartCookieValue: JSON.stringify(updatedCart),
+    }
+  }
+
   const supabase = await createServerClient()
   const cart = await getOrCreateCart(userId, sessionId)
   if (!cart) return { error: 'Unable to initialize cart' }
@@ -206,6 +335,30 @@ export async function updateCartItemQuantity(
   itemId: string,
   quantity: number
 ) {
+  if (!isSupabaseConfigured()) {
+    if (quantity <= 0) {
+      return removeCartItem(itemId)
+    }
+
+    const currentCart = await getLocalCartFromCookie()
+    const target = currentCart.find((i) => i.id === itemId)
+    if (target) {
+      const match = findMockVariantWithProduct(target.variant_id)
+      if (match && quantity > match.variant.stock) {
+        return {
+          error: `Only ${match.variant.stock} item(s) available in stock.`,
+        }
+      }
+    }
+
+    const updatedCart = currentCart.map((i) => (i.id === itemId ? { ...i, quantity } : i))
+    await setLocalCartCookie(updatedCart)
+    return {
+      data: { id: itemId, quantity },
+      cartCookieValue: JSON.stringify(updatedCart),
+    }
+  }
+
   const supabase = await createServerClient()
 
   if (quantity <= 0) {
@@ -240,6 +393,16 @@ export async function updateCartItemQuantity(
 }
 
 export async function removeCartItem(itemId: string) {
+  if (!isSupabaseConfigured()) {
+    const currentCart = await getLocalCartFromCookie()
+    const updatedCart = currentCart.filter((i) => i.id !== itemId)
+    await setLocalCartCookie(updatedCart)
+    return {
+      success: true,
+      cartCookieValue: JSON.stringify(updatedCart),
+    }
+  }
+
   const supabase = await createServerClient()
   const { error } = await supabase
     .from('cart_items')
@@ -251,6 +414,15 @@ export async function removeCartItem(itemId: string) {
 }
 
 export async function clearCart(userId?: string, sessionId?: string) {
+  if (!isSupabaseConfigured()) {
+    await setLocalCartCookie([])
+    try {
+      const cookieStore = await cookies()
+      cookieStore.delete('bb_cart')
+    } catch {}
+    return { success: true, cartCookieValue: '[]' }
+  }
+
   const supabase = await createServerClient()
   let cartQuery = supabase.from('carts').select('id')
   if (userId) {
@@ -276,6 +448,8 @@ export async function clearCart(userId?: string, sessionId?: string) {
  * Prevents duplicates by summing quantities up to available stock.
  */
 export async function mergeGuestCartIntoUserCart(userId: string, sessionId: string) {
+  if (!isSupabaseConfigured()) return { success: true }
+
   const supabase = await createServiceClient()
 
   const { data: guestCart } = await supabase

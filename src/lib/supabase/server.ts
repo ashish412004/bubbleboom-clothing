@@ -37,6 +37,7 @@ export async function createClient() {
     }
   )
 }
+export { createClient as createServerClient }
 
 export async function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
