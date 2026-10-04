@@ -1,6 +1,7 @@
-import { createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { ArrowRight, Search, Filter } from 'lucide-react'
+import { MOCK_ORDERS } from '@/lib/mock-data'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,28 +15,55 @@ interface AdminOrdersPageProps {
 
 export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageProps) {
   const { status, payment, search } = await searchParams
-  const supabase = await createServiceClient()
+  let ordersList: any[] = MOCK_ORDERS
 
-  let query = supabase
-    .from('orders')
-    .select('*')
-    .order('created_at', { ascending: false })
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
 
+      let query = supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (status && status !== 'all') {
+        // @ts-ignore
+        query = query.eq('status', status)
+      }
+
+      if (payment && payment !== 'all') {
+        // @ts-ignore
+        query = query.eq('payment_method', payment)
+      }
+
+      if (search) {
+        query = query.or(`order_number.ilike.%${search}%,guest_email.ilike.%${search}%,guest_phone.ilike.%${search}%`)
+      }
+
+      const { data } = await query
+      if (data && data.length > 0) {
+        ordersList = data
+      }
+    } catch {
+      // Fallback to MOCK_ORDERS
+    }
+  }
+
+  // Filter in-memory if using mock
+  let orders = ordersList
   if (status && status !== 'all') {
-    // @ts-ignore
-    query = query.eq('status', status)
+    orders = orders.filter((o) => o.status === status)
   }
-
   if (payment && payment !== 'all') {
-    // @ts-ignore
-    query = query.eq('payment_method', payment)
+    orders = orders.filter((o) => o.payment_method?.toLowerCase() === payment.toLowerCase())
   }
-
   if (search) {
-    query = query.or(`order_number.ilike.%${search}%,guest_email.ilike.%${search}%,guest_phone.ilike.%${search}%`)
+    const s = search.toLowerCase()
+    orders = orders.filter((o) =>
+      o.order_number?.toLowerCase().includes(s) ||
+      o.guest_email?.toLowerCase().includes(s)
+    )
   }
-
-  const { data: orders } = await query
 
   const STATUS_TABS = [
     { key: 'all', label: 'All Orders' },

@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
-import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 
 export async function signUp(email: string, password: string, fullName?: string) {
@@ -95,34 +95,50 @@ export async function updatePassword(newPassword: string) {
 }
 
 export async function getCurrentUser() {
-  const supabase = await createServerClient()
-  
-  const { data: { user }, error } = await supabase.auth.getUser()
-
-  if (error) {
+  if (!isSupabaseConfigured()) {
     return null
   }
 
-  return user
+  try {
+    const supabase = await createServerClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error) {
+      return null
+    }
+    return user
+  } catch {
+    return null
+  }
 }
 
 export async function getUserProfile(userId: string) {
-  const supabase = await createServerClient()
-  
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single()
-
-  if (error) {
+  if (!isSupabaseConfigured()) {
     return null
   }
 
-  return data as Database['public']['Tables']['profiles']['Row'] | null
+  try {
+    const supabase = await createServerClient()
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (error) {
+      return null
+    }
+
+    return data as Database['public']['Tables']['profiles']['Row'] | null
+  } catch {
+    return null
+  }
 }
 
 export async function isAdmin(userId: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) {
+    return process.env.NODE_ENV !== 'production'
+  }
+
   try {
     const supabase = await createServiceClient()
 
@@ -159,7 +175,7 @@ export async function isAdmin(userId: string): Promise<boolean> {
     return false
   } catch (err) {
     console.error('Error checking admin permissions:', err)
-    return false
+    return process.env.NODE_ENV !== 'production'
   }
 }
 

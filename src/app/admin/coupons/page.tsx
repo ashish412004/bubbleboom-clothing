@@ -1,14 +1,29 @@
-import { createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { CouponManager } from './coupon-manager'
+import { MOCK_COUPONS } from '@/lib/mock-data'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminCouponsPage() {
-  const supabase = await createServiceClient()
-  const { data: coupons } = await supabase
-    .from('coupons')
-    .select('*')
-    .order('created_at', { ascending: false })
+  let couponsList: any[] = MOCK_COUPONS
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      const { data } = await supabase
+        .from('coupons')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (data && data.length > 0) {
+        couponsList = data
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  const coupons = couponsList
 
   return (
     <div className="space-y-6">

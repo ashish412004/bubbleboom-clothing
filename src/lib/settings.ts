@@ -1,4 +1,4 @@
-import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 
 export interface StoreGeneralSettings {
@@ -70,6 +70,13 @@ export const DEFAULT_ORDER_SETTINGS: StoreOrderSettings = {
 }
 
 export async function getStoreSettings<T = any>(key: 'general' | 'shipping' | 'orders' | 'banners' | string): Promise<T> {
+  if (!isSupabaseConfigured()) {
+    if (key === 'general') return DEFAULT_GENERAL_SETTINGS as unknown as T
+    if (key === 'shipping') return DEFAULT_SHIPPING_SETTINGS as unknown as T
+    if (key === 'orders') return DEFAULT_ORDER_SETTINGS as unknown as T
+    return {} as T
+  }
+
   try {
     const supabase = await createServerClient()
     const { data, error } = await supabase

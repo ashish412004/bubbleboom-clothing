@@ -1,30 +1,43 @@
-import { createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { ReturnsInspector } from './returns-inspector'
+import { MOCK_RETURNS } from '@/lib/mock-data'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminReturnsPage() {
-  const supabase = await createServiceClient()
-  const { data: returns } = await supabase
-    .from('returns')
-    .select('*')
-    .order('created_at', { ascending: false })
+  let enrichedReturns: any[] = MOCK_RETURNS.map((ret) => ({
+    ...ret,
+    order: { order_number: ret.orders.order_number },
+  }))
 
-  // Enrich with order_number
-  const enrichedReturns = await Promise.all(
-    (returns || []).map(async (ret) => {
-      const { data: ord } = await supabase
-        .from('orders')
-        .select('order_number')
-        .eq('id', ret.order_id)
-        .maybeSingle()
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      const { data: returns } = await supabase
+        .from('returns')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-      return {
-        ...ret,
-        order: ord ? { order_number: ord.order_number } : null,
+      if (returns && returns.length > 0) {
+        enrichedReturns = await Promise.all(
+          returns.map(async (ret) => {
+            const { data: ord } = await supabase
+              .from('orders')
+              .select('order_number')
+              .eq('id', ret.order_id)
+              .maybeSingle()
+
+            return {
+              ...ret,
+              order: ord ? { order_number: ord.order_number } : null,
+            }
+          })
+        )
       }
-    })
-  )
+    } catch {
+      // Fallback
+    }
+  }
 
   return (
     <div className="space-y-6">

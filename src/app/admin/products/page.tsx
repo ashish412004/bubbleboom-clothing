@@ -1,24 +1,35 @@
-import { createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Plus, Edit3, Eye, ExternalLink } from 'lucide-react'
+import { MOCK_PRODUCTS } from '@/lib/mock-data'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminProductsPage() {
-  const supabase = await createServiceClient()
+  let allProducts: any[] = MOCK_PRODUCTS
 
-  const { data: products } = await supabase
-    .from('products')
-    .select(`
-      *,
-      category:categories(name),
-      variants:product_variants(*),
-      images:product_images(*)
-    `)
-    .order('created_at', { ascending: false })
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
 
-  const allProducts = products || []
+      const { data: products } = await supabase
+        .from('products')
+        .select(`
+          *,
+          category:categories(name),
+          variants:product_variants(*),
+          images:product_images(*)
+        `)
+        .order('created_at', { ascending: false })
+
+      if (products && products.length > 0) {
+        allProducts = products
+      }
+    } catch {
+      // Fallback to MOCK_PRODUCTS
+    }
+  }
 
   return (
     <div className="space-y-6">

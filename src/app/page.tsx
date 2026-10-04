@@ -185,6 +185,7 @@ export default async function HomePage() {
                     src="/images/brand/bubble-boom-icon.png"
                     alt="Bubble Boom Monogram"
                     fill
+                    sizes="(max-width: 640px) 192px, 256px"
                     className="object-contain"
                   />
                 </div>

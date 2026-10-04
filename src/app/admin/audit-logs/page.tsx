@@ -1,14 +1,29 @@
-import { createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
+import { MOCK_AUDIT_LOGS } from '@/lib/mock-data'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminAuditLogsPage() {
-  const supabase = await createServiceClient()
-  const { data: logs } = await supabase
-    .from('admin_audit_logs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(50)
+  let logsList: any[] = MOCK_AUDIT_LOGS
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      const { data: logs } = await supabase
+        .from('admin_audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (logs && logs.length > 0) {
+        logsList = logs
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  const logs = logsList
 
   return (
     <div className="space-y-6">
@@ -38,17 +53,19 @@ export default async function AdminAuditLogsPage() {
                     <td className="p-3 text-neutral-500 whitespace-nowrap">
                       {new Date(log.created_at).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-3 font-bold">{log.admin_id.slice(0, 8)}...</td>
+                    <td className="p-3 font-bold">
+                      {log.admin_id ? `${String(log.admin_id).slice(0, 8)}...` : 'SYSTEM'}
+                    </td>
                     <td className="p-3">
                       <span className="bg-black text-white text-[10px] uppercase px-2 py-0.5 font-bold">
                         {log.action}
                       </span>
                     </td>
                     <td className="p-3 text-neutral-700">
-                      {log.entity} {log.entity_id ? `(#${log.entity_id.slice(0, 8)})` : ''}
+                      {log.entity || log.entity_type || '—'} {log.entity_id ? `(#${String(log.entity_id).slice(0, 8)})` : ''}
                     </td>
                     <td className="p-3 text-neutral-600 max-w-xs truncate">
-                      {JSON.stringify(log.metadata)}
+                      {JSON.stringify(log.metadata || log.details || {})}
                     </td>
                   </tr>
                 ))

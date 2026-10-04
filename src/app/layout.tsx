@@ -9,14 +9,21 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Streetwear Store",
-  description: "Premium streetwear clothing brand",
+  title: {
+    default: "BUBBLE BOOM | Wear The Boom",
+    template: "%s | BUBBLE BOOM",
+  },
+  description: "Bubble Boom - Premium Indian Fashion & Streetwear. Wear The Boom. Every style. Every mood. Make it yours.",
+  keywords: ["Bubble Boom", "Indian streetwear", "oversized t-shirts", "hoodies", "cargo pants", "fashion"],
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} h-full antialiased`}>
+      <body suppressHydrationWarning className="min-h-full flex flex-col">
         <ToasterProvider />
         {children}
       </body>

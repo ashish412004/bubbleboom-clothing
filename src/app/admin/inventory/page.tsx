@@ -1,38 +1,88 @@
-import { createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { InventoryTable } from './inventory-table'
+import { MOCK_PRODUCTS } from '@/lib/mock-data'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminInventoryPage() {
-  const supabase = await createServiceClient()
+  const mockVariants = MOCK_PRODUCTS.flatMap((p) =>
+    p.variants.map((v: any) => ({
+      id: v.id,
+      sku: v.sku,
+      color: v.color,
+      size: v.size,
+      stock: v.stock,
+      product: { name: p.name },
+    }))
+  )
 
-  // 1. Fetch variants with products
-  const { data: variants } = await supabase
-    .from('product_variants')
-    .select(`
-      id,
-      sku,
-      color,
-      size,
-      stock,
-      product:products(name)
-    `)
-    .order('stock', { ascending: true })
-
-  // 2. Fetch active reservations to compute reserved counts
-  const now = new Date().toISOString()
-  const { data: reservations } = await supabase
-    .from('inventory_reservations')
-    .select('variant_id, quantity')
-    .eq('status', 'active')
-    .gt('expires_at', now)
-
+  let variantsList = mockVariants
   const reservedMap: Record<string, number> = {}
-  reservations?.forEach((r) => {
-    reservedMap[r.variant_id] = (reservedMap[r.variant_id] || 0) + r.quantity
-  })
+  let movements: any[] = [
+    {
+      id: 'mov_1',
+      variant: {
+        sku: 'BB-TEE-BLK-M',
+        color: 'Black',
+        size: 'M',
+        product: { name: 'Bubble Boom Heavyweight Boxy Tee' },
+      },
+      movement_type: 'audit_adjustment',
+      quantity_change: 10,
+      reason: 'Physical warehouse count reconciliation',
+      created_at: '2026-10-04T11:00:00Z',
+    },
+  ]
 
-  const inventoryItems = (variants || []).map((v: any) => {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+
+      // 1. Fetch variants with products
+      const { data: variants } = await supabase
+        .from('product_variants')
+        .select(`
+          id,
+          sku,
+          color,
+          size,
+          stock,
+          product:products(name)
+        `)
+        .order('stock', { ascending: true })
+
+      if (variants && variants.length > 0) {
+        variantsList = variants
+      }
+
+      // 2. Fetch active reservations to compute reserved counts
+      const now = new Date().toISOString()
+      const { data: reservations } = await supabase
+        .from('inventory_reservations')
+        .select('variant_id, quantity')
+        .eq('status', 'active')
+        .gt('expires_at', now)
+
+      reservations?.forEach((r) => {
+        reservedMap[r.variant_id] = (reservedMap[r.variant_id] || 0) + r.quantity
+      })
+
+      // 3. Fetch recent movements
+      const { data: movs } = await supabase
+        .from('inventory_movements')
+        .select('*, variant:product_variants(sku, color, size, product:products(name))')
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      if (movs && movs.length > 0) {
+        movements = movs
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  const inventoryItems = variantsList.map((v: any) => {
     const reserved = reservedMap[v.id] || 0
     return {
       id: v.id,
@@ -45,13 +95,6 @@ export default async function AdminInventoryPage() {
       product_name: v.product?.name || 'Unknown Product',
     }
   })
-
-  // 3. Fetch recent movements
-  const { data: movements } = await supabase
-    .from('inventory_movements')
-    .select('*, variant:product_variants(sku, color, size, product:products(name))')
-    .order('created_at', { ascending: false })
-    .limit(10)
 
   return (
     <div className="space-y-8">

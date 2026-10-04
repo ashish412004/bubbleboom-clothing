@@ -77,6 +77,7 @@ export function Footer() {
                 src="/images/brand/bubble-boom-logo-white.png"
                 alt="BUBBLE BOOM"
                 fill
+                sizes="176px"
                 className="object-contain object-left"
               />
             </div>

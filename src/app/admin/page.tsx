@@ -1,4 +1,4 @@
-import { createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import Link from 'next/link'
 import {
   DollarSign,
@@ -8,44 +8,66 @@ import {
   ArrowRight,
   ExternalLink,
 } from 'lucide-react'
+import { MOCK_ORDERS } from '@/lib/mock-data'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminDashboard() {
-  const supabase = await createServiceClient()
+  let allOrders = MOCK_ORDERS
+  let lowStockVariants: any[] = []
+  let pendingReturnsCount = 1
 
-  // 1. Fetch Orders metrics
-  const { data: orders } = await supabase
-    .from('orders')
-    .select('id, order_number, total_amount, status, payment_status, created_at, guest_email, shipping_address')
-    .order('created_at', { ascending: false })
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
 
-  const allOrders = orders || []
+      // 1. Fetch Orders metrics
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('id, order_number, total_amount, status, payment_status, created_at, guest_email, shipping_address')
+        .order('created_at', { ascending: false })
+
+      if (orders && orders.length > 0) {
+        allOrders = orders
+      }
+
+      // 2. Fetch Low Stock Variants (stock <= 5)
+      const { data: variants } = await supabase
+        .from('product_variants')
+        .select(`
+          id,
+          sku,
+          color,
+          size,
+          stock,
+          product:products (id, name, slug)
+        `)
+        .lte('stock', 5)
+        .order('stock', { ascending: true })
+        .limit(8)
+
+      if (variants) {
+        lowStockVariants = variants
+      }
+
+      // 3. Pending returns count
+      const { count } = await supabase
+        .from('returns')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'requested')
+
+      if (count !== null) {
+        pendingReturnsCount = count
+      }
+    } catch {
+      // Fallback already set to mock data
+    }
+  }
+
   const paidOrders = allOrders.filter((o) => o.payment_status === 'paid')
   const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0)
   const totalOrdersCount = allOrders.length
   const aov = paidOrders.length > 0 ? Math.round(totalRevenue / paidOrders.length) : 0
-
-  // 2. Fetch Low Stock Variants (stock <= 5)
-  const { data: lowStockVariants } = await supabase
-    .from('product_variants')
-    .select(`
-      id,
-      sku,
-      color,
-      size,
-      stock,
-      product:products (id, name, slug)
-    `)
-    .lte('stock', 5)
-    .order('stock', { ascending: true })
-    .limit(8)
-
-  // 3. Pending returns count
-  const { count: pendingReturnsCount } = await supabase
-    .from('returns')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'requested')
 
   return (
     <div className="space-y-8">

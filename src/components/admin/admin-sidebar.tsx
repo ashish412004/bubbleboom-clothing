@@ -45,6 +45,7 @@ export function AdminSidebar() {
               src="/images/brand/bubble-boom-icon.png"
               alt="Bubble Boom Monogram"
               fill
+              sizes="32px"
               className="object-contain"
             />
           </div>
