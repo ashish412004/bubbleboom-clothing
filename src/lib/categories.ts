@@ -156,7 +156,11 @@ export async function updateCategory(id: string, category: Database['public']['T
   if (!isSupabaseConfigured()) {
     const idx = MOCK_CATEGORIES.findIndex((c) => c.id === id)
     if (idx >= 0) {
-      MOCK_CATEGORIES[idx] = { ...MOCK_CATEGORIES[idx], ...category }
+      MOCK_CATEGORIES[idx] = {
+        ...MOCK_CATEGORIES[idx],
+        ...category,
+        description: category.description !== undefined ? (category.description ?? '') : MOCK_CATEGORIES[idx].description,
+      } as any
       return { data: MOCK_CATEGORIES[idx] }
     }
   }

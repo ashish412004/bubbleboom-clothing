@@ -233,7 +233,12 @@ export async function updateCollection(id: string, collection: Database['public'
   if (!isSupabaseConfigured()) {
     const idx = MOCK_COLLECTIONS.findIndex((c) => c.id === id)
     if (idx >= 0) {
-      MOCK_COLLECTIONS[idx] = { ...MOCK_COLLECTIONS[idx], ...collection }
+      MOCK_COLLECTIONS[idx] = {
+        ...MOCK_COLLECTIONS[idx],
+        ...collection,
+        description: collection.description !== undefined ? (collection.description ?? '') : MOCK_COLLECTIONS[idx].description,
+        banner_image_url: collection.banner_image_url !== undefined ? (collection.banner_image_url ?? '') : MOCK_COLLECTIONS[idx].banner_image_url,
+      } as any
       return { data: MOCK_COLLECTIONS[idx] }
     }
   }

@@ -206,6 +206,10 @@ export async function createOrder(input: CreateOrderInput) {
       shipping_address: input.shipping_address as any,
       billing_address: (input.billing_address || input.shipping_address) as any,
       notes: input.notes || null,
+      cancellation_reason: null,
+      cancelled_at: null,
+      tracking_number: null,
+      carrier: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -682,7 +686,7 @@ export async function deleteOrder(orderId: string) {
     try {
       const supabase = await createServiceClient()
       await supabase.from('order_items').delete().eq('order_id', orderId)
-      await supabase.from('payment_records').delete().eq('order_id', orderId)
+      await supabase.from('payments').delete().eq('order_id', orderId)
       await supabase.from('inventory_reservations').delete().eq('order_id', orderId)
       const { error } = await supabase.from('orders').delete().eq('id', orderId)
       if (error) return { error: error.message }
