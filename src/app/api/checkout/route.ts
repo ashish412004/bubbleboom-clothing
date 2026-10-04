@@ -1,0 +1,124 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
+import { createOrder, createCashfreeSessionForOrder } from '@/lib/orders'
+import { getCart, clearCart } from '@/lib/cart'
+
+export async function POST(request: NextRequest) {
+  try {
+    const cookieStore = await cookies()
+    const sessionId = cookieStore.get('bb_session_id')?.value
+
+    // Auth check
+    let userId: string | undefined = undefined
+    try {
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll: () => cookieStore.getAll(),
+            setAll: () => {},
+          },
+        }
+      )
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) userId = user.id
+    } catch {
+      // Guest mode
+    }
+
+    const body = await request.json()
+    const {
+      full_name,
+      email,
+      phone,
+      address_line1,
+      address_line2,
+      city,
+      state,
+      pin_code,
+      payment_method = 'cashfree',
+      coupon_code,
+      notes,
+    } = body
+
+    if (!full_name || !email || !phone || !address_line1 || !city || !state || !pin_code) {
+      return NextResponse.json(
+        { error: 'Please provide all required shipping and contact details.' },
+        { status: 400 }
+      )
+    }
+
+    // 1. Fetch current cart items
+    const cartItems = await getCart(userId, sessionId)
+    if (!cartItems || cartItems.length === 0) {
+      return NextResponse.json(
+        { error: 'Your shopping cart is empty. Please add items before checking out.' },
+        { status: 400 }
+      )
+    }
+
+    const orderCartItems = cartItems.map((item) => ({
+      variant_id: item.variant_id,
+      quantity: item.quantity,
+    }))
+
+    // 2. Server creates authoritative order and atomically reserves inventory
+    const orderRes = await createOrder({
+      user_id: userId,
+      guest_email: email,
+      guest_phone: phone,
+      shipping_address: {
+        full_name,
+        phone,
+        address_line1,
+        address_line2: address_line2 || null,
+        city,
+        state,
+        pin_code,
+        country: 'India',
+      },
+      payment_method,
+      coupon_code: coupon_code || undefined,
+      cart_items: orderCartItems,
+      notes,
+    })
+
+    if ('error' in orderRes && orderRes.error) {
+      return NextResponse.json({ error: orderRes.error }, { status: 400 })
+    }
+
+    const order = orderRes.data!
+
+    // 3. Clear cart since order is created & stock is reserved
+    await clearCart(userId, sessionId)
+
+    // 4. Handle payment method
+    if (payment_method === 'cashfree') {
+      const cfSessionRes = await createCashfreeSessionForOrder(order)
+      if ('error' in cfSessionRes && cfSessionRes.error) {
+        return NextResponse.json(
+          { error: `Payment gateway error: ${cfSessionRes.error}` },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        order_number: order.order_number,
+        payment_session_id: cfSessionRes.payment_session_id,
+        payment_method: 'cashfree',
+      })
+    } else {
+      // Cash on Delivery
+      return NextResponse.json({
+        order_number: order.order_number,
+        payment_method: 'cod',
+        redirect_url: `/payment-return?order_id=${order.order_number}&method=cod`,
+      })
+    }
+  } catch (err: any) {
+    console.error('Checkout API error:', err)
+    return NextResponse.json({ error: err.message || 'Checkout failed' }, { status: 500 })
+  }
+}
