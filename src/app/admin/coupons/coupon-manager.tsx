@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Plus, Tag, Check, X } from 'lucide-react'
+import { Plus, Tag, Check, X, Trash2, Loader2, AlertTriangle } from 'lucide-react'
 
 interface Coupon {
   id: string
@@ -24,6 +24,8 @@ export function CouponManager({ initialCoupons }: { initialCoupons: Coupon[] }) 
   const [coupons, setCoupons] = useState<Coupon[]>(initialCoupons)
   const [showAddForm, setShowAddForm] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmDeleteCoupon, setConfirmDeleteCoupon] = useState<Coupon | null>(null)
 
   // Form State
   const [code, setCode] = useState('')
@@ -33,6 +35,26 @@ export function CouponManager({ initialCoupons }: { initialCoupons: Coupon[] }) 
   const [minAmount, setMinAmount] = useState(999)
   const [maxDiscount, setMaxDiscount] = useState<number | ''>('')
   const [usageLimit, setUsageLimit] = useState<number | ''>('')
+
+  const handleDelete = async (coupon: Coupon) => {
+    setDeletingId(coupon.id)
+    try {
+      const res = await fetch(`/api/admin/coupons?id=${encodeURIComponent(coupon.id)}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to delete coupon')
+
+      setCoupons((prev) => prev.filter((c) => c.id !== coupon.id))
+      setConfirmDeleteCoupon(null)
+      toast.success(`Coupon ${coupon.code} deleted`)
+      router.refresh()
+    } catch (err: any) {
+      toast.error(err.message || 'Error deleting coupon')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const handleCreateCoupon = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -94,6 +116,58 @@ export function CouponManager({ initialCoupons }: { initialCoupons: Coupon[] }) 
 
   return (
     <div className="space-y-6">
+      {/* Delete Confirmation Modal */}
+      {confirmDeleteCoupon && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white border-2 border-black max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-neutral-100 border border-black flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-black" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black uppercase tracking-tight">Delete Coupon</h3>
+                <p className="text-xs text-neutral-600 font-mono">
+                  Are you sure you want to permanently delete coupon{' '}
+                  <span className="font-bold text-black">"{confirmDeleteCoupon.code}"</span>?
+                </p>
+                <p className="text-[11px] text-neutral-500 font-mono mt-1">
+                  Customers will no longer be able to apply this discount code at checkout.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-200">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteCoupon(null)}
+                disabled={deletingId !== null}
+                className="px-4 py-2 border border-black text-xs font-mono uppercase font-bold hover:bg-neutral-100 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(confirmDeleteCoupon)}
+                disabled={deletingId !== null}
+                className="inline-flex items-center gap-2 bg-black text-white px-5 py-2 text-xs font-mono uppercase font-bold hover:bg-neutral-800 transition-colors disabled:opacity-50"
+              >
+                {deletingId ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Coupon</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center pb-4 border-b border-neutral-200">
         <div>
           <h2 className="text-sm font-black uppercase tracking-tight">Active Promotions</h2>
@@ -240,12 +314,21 @@ export function CouponManager({ initialCoupons }: { initialCoupons: Coupon[] }) 
                     </span>
                   </td>
                   <td className="p-3 text-right">
-                    <button
-                      onClick={() => handleToggle(c)}
-                      className="border border-black px-2.5 py-1 text-[11px] uppercase font-bold hover:bg-black hover:text-white transition-colors"
-                    >
-                      {c.is_active ? 'Disable' : 'Enable'}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleToggle(c)}
+                        className="border border-black px-2.5 py-1 text-[11px] uppercase font-bold hover:bg-black hover:text-white transition-colors"
+                      >
+                        {c.is_active ? 'Disable' : 'Enable'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteCoupon(c)}
+                        title="Delete coupon"
+                        className="border border-neutral-300 p-1 hover:border-black hover:bg-black hover:text-white transition-colors text-neutral-700"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

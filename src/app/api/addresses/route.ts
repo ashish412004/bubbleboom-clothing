@@ -1,16 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { createClient as createServerClient, isSupabaseConfigured } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth'
 import { validateIndianPhone, validateIndianPinCode } from '@/lib/orders'
+import { cookies } from 'next/headers'
+
+function getDevAddresses(cookieStore: any): any[] {
+  try {
+    const raw = cookieStore.get('bb_dev_addresses')?.value
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return [
+    {
+      id: 'addr-dev-1',
+      full_name: 'Bubble Boom Member',
+      phone: '9876543210',
+      address_line1: 'Flat 402, Boom Street',
+      address_line2: 'Sector 15',
+      city: 'Mumbai',
+      state: 'Maharashtra',
+      pin_code: '400001',
+      country: 'IN',
+      is_default: true,
+      created_at: new Date().toISOString(),
+    },
+  ]
+}
 
 export async function GET() {
   try {
-    const supabase = await createServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
+    const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (!isSupabaseConfigured()) {
+      const cookieStore = await cookies()
+      const addresses = getDevAddresses(cookieStore)
+      return NextResponse.json({ success: true, addresses })
+    }
+
+    const supabase = await createServerClient()
     const { data: addresses, error } = await supabase
       .from('addresses')
       .select('*')
@@ -28,9 +57,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
+    const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -50,7 +77,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Please enter a valid 6-digit Indian PIN code.' }, { status: 400 })
     }
 
-    // If setting default, unset existing default
+    if (!isSupabaseConfigured()) {
+      const cookieStore = await cookies()
+      let list = getDevAddresses(cookieStore)
+      if (is_default) {
+        list = list.map((a) => ({ ...a, is_default: false }))
+      }
+      const newAddr = {
+        id: `addr-${Date.now()}`,
+        user_id: user.id,
+        full_name,
+        phone,
+        address_line1,
+        address_line2: address_line2 || null,
+        city,
+        state,
+        pin_code,
+        country: 'IN',
+        is_default: Boolean(is_default),
+        created_at: new Date().toISOString(),
+      }
+      list.unshift(newAddr)
+      const res = NextResponse.json({ success: true, address: newAddr })
+      res.cookies.set('bb_dev_addresses', JSON.stringify(list), {
+        path: '/',
+        httpOnly: true,
+        maxAge: 60 * 60 * 24 * 30,
+      })
+      return res
+    }
+
+    const supabase = await createServerClient()
     if (is_default) {
       await supabase
         .from('addresses')
@@ -85,9 +142,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const supabase = await createServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
+    const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -99,6 +154,20 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Address id is required' }, { status: 400 })
     }
 
+    if (!isSupabaseConfigured()) {
+      const cookieStore = await cookies()
+      let list = getDevAddresses(cookieStore)
+      list = list.filter((a) => a.id !== id)
+      const res = NextResponse.json({ success: true, message: 'Address removed' })
+      res.cookies.set('bb_dev_addresses', JSON.stringify(list), {
+        path: '/',
+        httpOnly: true,
+        maxAge: 60 * 60 * 24 * 30,
+      })
+      return res
+    }
+
+    const supabase = await createServerClient()
     const { error } = await supabase
       .from('addresses')
       .delete()

@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWishlist, toggleWishlistItem, removeFromWishlist } from '@/lib/wishlist'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth'
 import { cookies } from 'next/headers'
 
 async function getSessionIdentifiers() {
   const cookieStore = await cookies()
   let sessionId = cookieStore.get('bubbleboom_guest_session')?.value
-  
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
 
   return { userId: user?.id, sessionId }
 }

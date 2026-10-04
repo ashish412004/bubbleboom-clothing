@@ -1,7 +1,7 @@
 import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { ArrowRight, Search, Filter } from 'lucide-react'
-import { MOCK_ORDERS } from '@/lib/mock-data'
+import { getDevOrders } from '@/lib/orders'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +15,7 @@ interface AdminOrdersPageProps {
 
 export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageProps) {
   const { status, payment, search } = await searchParams
-  let ordersList: any[] = MOCK_ORDERS
+  let ordersList: any[] = getDevOrders()
 
   if (isSupabaseConfigured()) {
     try {

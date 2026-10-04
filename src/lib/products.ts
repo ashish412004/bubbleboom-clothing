@@ -2,6 +2,64 @@ import { createClient as createServerClient, createServiceClient, isSupabaseConf
 import { Database } from '@/types/database'
 import { generateSlug } from './utils'
 import { MOCK_PRODUCTS } from './mock-data'
+import fs from 'fs'
+import path from 'path'
+
+export function getDeletedProductIds(): Set<string> {
+  try {
+    const file = path.join(process.cwd(), '.next', 'bb_deleted_products.json')
+    if (fs.existsSync(file)) {
+      const arr = JSON.parse(fs.readFileSync(file, 'utf-8'))
+      return new Set(arr)
+    }
+  } catch {}
+  return new Set()
+}
+
+export function saveDeletedProductId(id: string) {
+  try {
+    const dir = path.join(process.cwd(), '.next')
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const file = path.join(dir, 'bb_deleted_products.json')
+    let current: string[] = []
+    if (fs.existsSync(file)) {
+      try {
+        current = JSON.parse(fs.readFileSync(file, 'utf-8'))
+      } catch {}
+    }
+    if (!current.includes(id)) {
+      current.push(id)
+      fs.writeFileSync(file, JSON.stringify(current, null, 2), 'utf-8')
+    }
+  } catch {}
+}
+
+export function getDevProducts(): any[] {
+  try {
+    const file = path.join(process.cwd(), '.next', 'bb_dev_products.json')
+    if (fs.existsSync(file)) {
+      const arr = JSON.parse(fs.readFileSync(file, 'utf-8'))
+      return arr
+    }
+  } catch {}
+  return []
+}
+
+export function saveDevProduct(prod: any) {
+  try {
+    const dir = path.join(process.cwd(), '.next')
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const file = path.join(dir, 'bb_dev_products.json')
+    let current: any[] = []
+    if (fs.existsSync(file)) {
+      try {
+        current = JSON.parse(fs.readFileSync(file, 'utf-8'))
+      } catch {}
+    }
+    current = [prod, ...current.filter((p: any) => p.id !== prod.id && p.slug !== prod.slug)]
+    fs.writeFileSync(file, JSON.stringify(current, null, 2), 'utf-8')
+  } catch {}
+}
 
 export type Product = Database['public']['Tables']['products']['Row']
 export type ProductInsert = Database['public']['Tables']['products']['Insert']
@@ -26,7 +84,9 @@ export interface ProductFilterOptions {
 }
 
 function filterMockProducts(filters?: ProductFilterOptions) {
-  let result = [...MOCK_PRODUCTS]
+  const deletedIds = getDeletedProductIds()
+  const devProducts = getDevProducts()
+  let result = [...devProducts, ...MOCK_PRODUCTS].filter((p) => !deletedIds.has(p.id) && !deletedIds.has(p.slug))
 
   if (filters?.category) {
     const cat = filters.category.toLowerCase()
@@ -247,8 +307,11 @@ export async function getProducts(filters?: ProductFilterOptions) {
 }
 
 export async function getProductBySlug(slug: string) {
+  const deletedIds = getDeletedProductIds()
+  if (deletedIds.has(slug)) return null
+
   if (!isSupabaseConfigured()) {
-    return MOCK_PRODUCTS.find((p) => p.slug === slug) || null
+    return MOCK_PRODUCTS.find((p) => p.slug === slug && !deletedIds.has(p.id)) || null
   }
 
   try {
@@ -267,18 +330,21 @@ export async function getProductBySlug(slug: string) {
       .eq('is_active', true)
       .maybeSingle()
 
-    if (error || !data) {
-      return MOCK_PRODUCTS.find((p) => p.slug === slug) || null
+    if (error || !data || deletedIds.has(data.id)) {
+      return MOCK_PRODUCTS.find((p) => p.slug === slug && !deletedIds.has(p.id)) || null
     }
     return data
   } catch {
-    return MOCK_PRODUCTS.find((p) => p.slug === slug) || null
+    return MOCK_PRODUCTS.find((p) => p.slug === slug && !deletedIds.has(p.id)) || null
   }
 }
 
 export async function getProductById(id: string) {
+  const deletedIds = getDeletedProductIds()
+  if (deletedIds.has(id)) return null
+
   if (!isSupabaseConfigured()) {
-    return MOCK_PRODUCTS.find((p) => p.id === id) || null
+    return MOCK_PRODUCTS.find((p) => p.id === id && !deletedIds.has(p.slug)) || null
   }
 
   try {
@@ -295,13 +361,41 @@ export async function getProductById(id: string) {
       .eq('id', id)
       .maybeSingle()
 
-    if (error || !data) {
-      return MOCK_PRODUCTS.find((p) => p.id === id) || null
+    if (error || !data || deletedIds.has(data.id) || deletedIds.has(data.slug)) {
+      return MOCK_PRODUCTS.find((p) => p.id === id && !deletedIds.has(p.slug)) || null
     }
     return data
   } catch {
-    return MOCK_PRODUCTS.find((p) => p.id === id) || null
+    return MOCK_PRODUCTS.find((p) => p.id === id && !deletedIds.has(p.slug)) || null
   }
+}
+
+export async function getAdminProducts() {
+  const deletedIds = getDeletedProductIds()
+  const devProducts = getDevProducts()
+  let list = [...devProducts, ...MOCK_PRODUCTS].filter((p) => !deletedIds.has(p.id) && !deletedIds.has(p.slug))
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      const { data: products } = await supabase
+        .from('products')
+        .select(`
+          *,
+          category:categories(name),
+          variants:product_variants(*),
+          images:product_images(*)
+        `)
+        .order('created_at', { ascending: false })
+
+      if (products && products.length > 0) {
+        list = products.filter((p) => !deletedIds.has(p.id) && !deletedIds.has(p.slug))
+      }
+    } catch {
+      // Fallback
+    }
+  }
+  return list
 }
 
 export async function getRelatedProducts(productId: string, categoryId?: string, limit: number = 4) {
@@ -400,4 +494,65 @@ export async function addProductImage(image: Database['public']['Tables']['produ
 
   if (error) return { error: error.message }
   return { data }
+}
+
+export async function deleteProduct(id: string) {
+  saveDeletedProductId(id)
+
+  try {
+    const file = path.join(process.cwd(), '.next', 'bb_dev_products.json')
+    if (fs.existsSync(file)) {
+      const arr = JSON.parse(fs.readFileSync(file, 'utf-8'))
+      const filtered = arr.filter((p: any) => p.id !== id && p.slug !== id)
+      fs.writeFileSync(file, JSON.stringify(filtered, null, 2), 'utf-8')
+    }
+  } catch {}
+
+  const idx = MOCK_PRODUCTS.findIndex((p) => p.id === id || p.slug === id)
+  if (idx >= 0) {
+    saveDeletedProductId(MOCK_PRODUCTS[idx].id)
+    saveDeletedProductId(MOCK_PRODUCTS[idx].slug)
+    MOCK_PRODUCTS.splice(idx, 1)
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      await supabase.from('product_variants').delete().eq('product_id', id)
+      await supabase.from('product_images').delete().eq('product_id', id)
+      const { error } = await supabase.from('products').delete().eq('id', id)
+      if (error) return { error: error.message }
+    } catch (err: any) {
+      console.error('Error deleting product from DB:', err)
+      return { error: err.message }
+    }
+  }
+
+  return { success: true }
+}
+
+export async function deleteProductVariant(id: string) {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      const { error } = await supabase.from('product_variants').delete().eq('id', id)
+      if (error) return { error: error.message }
+    } catch (err: any) {
+      return { error: err.message }
+    }
+  }
+  return { success: true }
+}
+
+export async function deleteProductImage(id: string) {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      const { error } = await supabase.from('product_images').delete().eq('id', id)
+      if (error) return { error: error.message }
+    } catch (err: any) {
+      return { error: err.message }
+    }
+  }
+  return { success: true }
 }

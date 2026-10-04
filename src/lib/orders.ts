@@ -611,9 +611,10 @@ export async function updateOrderStatus(
 
 export async function cancelOrder(orderId: string, reason: string, cancelledByUserId?: string) {
   if (!isSupabaseConfigured()) {
-    const found = MOCK_ORDERS.find((o) => o.id === orderId || o.order_number === orderId)
+    const devOrders = getDevOrders()
+    const found = devOrders.find((o) => o.id === orderId || o.order_number === orderId)
     if (!found) return { error: 'Order not found' }
-    if (!['pending', 'confirmed', 'packed'].includes(found.status)) {
+    if (!['pending', 'confirmed', 'packed', 'processing'].includes(found.status)) {
       return {
         error: `Orders with status "${found.status}" cannot be cancelled. You can request a return after delivery.`,
       }
@@ -622,6 +623,7 @@ export async function cancelOrder(orderId: string, reason: string, cancelledByUs
     found.cancellation_reason = reason
     found.cancelled_at = new Date().toISOString()
     found.updated_at = new Date().toISOString()
+    saveDevOrder(found)
     return { data: found }
   }
 
@@ -635,7 +637,7 @@ export async function cancelOrder(orderId: string, reason: string, cancelledByUs
 
   if (fetchErr || !order) return { error: 'Order not found' }
 
-  if (!['pending', 'confirmed', 'packed'].includes(order.status)) {
+  if (!['pending', 'confirmed', 'packed', 'processing'].includes(order.status)) {
     return {
       error: `Orders with status "${order.status}" cannot be cancelled. You can request a return after delivery.`,
     }
@@ -658,6 +660,38 @@ export async function cancelOrder(orderId: string, reason: string, cancelledByUs
 
   if (error) return { error: error.message }
   return { data }
+}
+
+export async function deleteOrder(orderId: string) {
+  try {
+    const file = getDevOrdersFilePath()
+    if (fs.existsSync(file)) {
+      const content = fs.readFileSync(file, 'utf-8')
+      const orders = JSON.parse(content)
+      const filtered = orders.filter((o: any) => o.id !== orderId && o.order_number !== orderId)
+      fs.writeFileSync(file, JSON.stringify(filtered, null, 2), 'utf-8')
+    }
+  } catch {}
+
+  const mIdx = MOCK_ORDERS.findIndex((o) => o.id === orderId || o.order_number === orderId)
+  if (mIdx >= 0) {
+    MOCK_ORDERS.splice(mIdx, 1)
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      await supabase.from('order_items').delete().eq('order_id', orderId)
+      await supabase.from('payment_records').delete().eq('order_id', orderId)
+      await supabase.from('inventory_reservations').delete().eq('order_id', orderId)
+      const { error } = await supabase.from('orders').delete().eq('id', orderId)
+      if (error) return { error: error.message }
+    } catch (err: any) {
+      return { error: err.message }
+    }
+  }
+
+  return { success: true }
 }
 
 /**

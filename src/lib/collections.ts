@@ -1,36 +1,81 @@
 import { createClient as createServerClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 import { MOCK_COLLECTIONS, MOCK_PRODUCTS } from './mock-data'
+import fs from 'fs'
+import path from 'path'
+
+export function getDeletedCollectionIds(): Set<string> {
+  try {
+    const file = path.join(process.cwd(), '.next', 'bb_deleted_collections.json')
+    if (fs.existsSync(file)) {
+      const arr = JSON.parse(fs.readFileSync(file, 'utf-8'))
+      return new Set(arr)
+    }
+  } catch {}
+  return new Set()
+}
+
+export function saveDeletedCollectionId(id: string) {
+  try {
+    const dir = path.join(process.cwd(), '.next')
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const file = path.join(dir, 'bb_deleted_collections.json')
+    let current: string[] = []
+    if (fs.existsSync(file)) {
+      try {
+        current = JSON.parse(fs.readFileSync(file, 'utf-8'))
+      } catch {}
+    }
+    if (!current.includes(id)) {
+      current.push(id)
+      fs.writeFileSync(file, JSON.stringify(current, null, 2), 'utf-8')
+    }
+  } catch {}
+}
 
 export type Collection = Database['public']['Tables']['collections']['Row']
 
-export async function getCollections() {
+export async function getCollections(includeDrafts: boolean = false) {
+  const deletedIds = getDeletedCollectionIds()
+  let list = MOCK_COLLECTIONS.filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.slug))
+  if (!includeDrafts) {
+    list = list.filter((c) => c.is_visible)
+  }
+
   if (!isSupabaseConfigured()) {
-    return MOCK_COLLECTIONS
+    return list
   }
 
   try {
     const supabase = await createServerClient()
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('collections')
       .select('*')
-      .eq('is_visible', true)
       .order('sort_order')
 
-    if (error || !data || data.length === 0) {
-      return MOCK_COLLECTIONS
+    if (!includeDrafts) {
+      query = query.eq('is_visible', true)
     }
 
-    return data
+    const { data, error } = await query
+
+    if (error || !data || data.length === 0) {
+      return list
+    }
+
+    return data.filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.slug))
   } catch {
-    return MOCK_COLLECTIONS
+    return list
   }
 }
 
 export async function getCollectionBySlug(slug: string) {
+  const deletedIds = getDeletedCollectionIds()
+  if (deletedIds.has(slug)) return null
+
   if (!isSupabaseConfigured()) {
-    const col = MOCK_COLLECTIONS.find((c) => c.slug === slug)
+    const col = MOCK_COLLECTIONS.find((c) => c.slug === slug && !deletedIds.has(c.id))
     if (!col) return null
     return {
       ...col,
@@ -57,8 +102,8 @@ export async function getCollectionBySlug(slug: string) {
       .eq('is_visible', true)
       .single()
 
-    if (error || !data) {
-      const col = MOCK_COLLECTIONS.find((c) => c.slug === slug)
+    if (error || !data || deletedIds.has(data.id)) {
+      const col = MOCK_COLLECTIONS.find((c) => c.slug === slug && !deletedIds.has(c.id))
       if (!col) return null
       return {
         ...col,
@@ -71,7 +116,7 @@ export async function getCollectionBySlug(slug: string) {
 
     return data
   } catch {
-    const col = MOCK_COLLECTIONS.find((c) => c.slug === slug)
+    const col = MOCK_COLLECTIONS.find((c) => c.slug === slug && !deletedIds.has(c.id))
     if (!col) return null
     return {
       ...col,
@@ -84,8 +129,11 @@ export async function getCollectionBySlug(slug: string) {
 }
 
 export async function getCollectionById(id: string) {
+  const deletedIds = getDeletedCollectionIds()
+  if (deletedIds.has(id)) return null
+
   if (!isSupabaseConfigured()) {
-    return MOCK_COLLECTIONS.find((c) => c.id === id) || null
+    return MOCK_COLLECTIONS.find((c) => c.id === id && !deletedIds.has(c.slug)) || null
   }
 
   try {
@@ -97,13 +145,13 @@ export async function getCollectionById(id: string) {
       .eq('id', id)
       .single()
 
-    if (error || !data) {
-      return MOCK_COLLECTIONS.find((c) => c.id === id) || null
+    if (error || !data || deletedIds.has(data.id) || deletedIds.has(data.slug)) {
+      return MOCK_COLLECTIONS.find((c) => c.id === id && !deletedIds.has(c.slug)) || null
     }
 
     return data
   } catch {
-    return MOCK_COLLECTIONS.find((c) => c.id === id) || null
+    return MOCK_COLLECTIONS.find((c) => c.id === id && !deletedIds.has(c.slug)) || null
   }
 }
 
@@ -149,6 +197,21 @@ export async function getProductsByCollectionId(collectionId: string) {
 
 // Admin functions
 export async function createCollection(collection: Database['public']['Tables']['collections']['Insert']) {
+  if (!isSupabaseConfigured()) {
+    const newCol = {
+      id: `col-${Date.now()}`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      is_visible: true,
+      sort_order: 10,
+      description: null,
+      banner_image_url: null,
+      ...collection,
+    } as any
+    MOCK_COLLECTIONS.push(newCol)
+    return { data: newCol }
+  }
+
   const supabase = await createServerClient()
 
   // @ts-ignore
@@ -167,6 +230,14 @@ export async function createCollection(collection: Database['public']['Tables'][
 }
 
 export async function updateCollection(id: string, collection: Database['public']['Tables']['collections']['Update']) {
+  if (!isSupabaseConfigured()) {
+    const idx = MOCK_COLLECTIONS.findIndex((c) => c.id === id)
+    if (idx >= 0) {
+      MOCK_COLLECTIONS[idx] = { ...MOCK_COLLECTIONS[idx], ...collection }
+      return { data: MOCK_COLLECTIONS[idx] }
+    }
+  }
+
   const supabase = await createServerClient()
 
   // @ts-ignore
@@ -186,16 +257,31 @@ export async function updateCollection(id: string, collection: Database['public'
 }
 
 export async function deleteCollection(id: string) {
-  const supabase = await createServerClient()
+  saveDeletedCollectionId(id)
 
-  const { error } = await supabase
-    .from('collections')
-    .delete()
-    .eq('id', id)
+  const idx = MOCK_COLLECTIONS.findIndex((c) => c.id === id || c.slug === id)
+  if (idx >= 0) {
+    saveDeletedCollectionId(MOCK_COLLECTIONS[idx].id)
+    saveDeletedCollectionId(MOCK_COLLECTIONS[idx].slug)
+    MOCK_COLLECTIONS.splice(idx, 1)
+  }
 
-  if (error) {
-    console.error('Error deleting collection:', error)
-    return { error: error.message }
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServerClient()
+      await supabase.from('collection_products').delete().eq('collection_id', id)
+      const { error } = await supabase
+        .from('collections')
+        .delete()
+        .eq('id', id)
+
+      if (error) {
+        console.error('Error deleting collection from DB:', error)
+        return { error: error.message }
+      }
+    } catch (err: any) {
+      return { error: err.message }
+    }
   }
 
   return { success: true }

@@ -34,6 +34,30 @@ export default async function AddressesPage() {
     } catch {
       // ignore
     }
+  } else {
+    try {
+      const { cookies } = await import('next/headers')
+      const cookieStore = await cookies()
+      const raw = cookieStore.get('bb_dev_addresses')?.value
+      if (raw) {
+        addresses = JSON.parse(raw)
+      } else {
+        addresses = [
+          {
+            id: 'addr-dev-1',
+            full_name: (user as any).user_metadata?.full_name || 'Bubble Boom Member',
+            phone: '9876543210',
+            address_line1: 'Flat 402, Boom Street',
+            address_line2: 'Sector 15',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            pin_code: '400001',
+            country: 'IN',
+            is_default: true,
+          },
+        ]
+      }
+    } catch {}
   }
 
   return (
