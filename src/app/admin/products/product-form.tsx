@@ -14,8 +14,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Link2,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 
 interface ProductFormProps {
   categories: Array<{ id: string; name: string; slug: string }>
@@ -62,10 +65,16 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
       : []
   )
   const [uploadingImages, setUploadingImages] = useState(false)
+  const [uploadProgressText, setUploadProgressText] = useState('')
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [failedFiles, setFailedFiles] = useState<File[] | null>(null)
+  const [replacingIndex, setReplacingIndex] = useState<number | null>(null)
+  const [replaceTargetIndex, setReplaceTargetIndex] = useState<number | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [showManualUrl, setShowManualUrl] = useState(false)
   const [manualUrlInput, setManualUrlInput] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const replaceFileInputRef = useRef<HTMLInputElement>(null)
 
   const handleNameChange = (val: string) => {
     setName(val)
@@ -93,39 +102,123 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
     })
   }
 
+  // Upload single file via direct signed upload to Supabase Storage, with fallback
+  const uploadSingleFile = async (file: File): Promise<string> => {
+    // 1. Prefer direct signed upload to avoid routing large payloads through Vercel Functions
+    try {
+      const signRes = await fetch('/api/admin/upload/sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          size: file.size,
+        }),
+      })
+
+      if (signRes.ok) {
+        const signData = await signRes.json()
+        if (signData.path && signData.token) {
+          const supabase = createClient()
+          const { error: uploadErr } = await supabase.storage
+            .from('product-images')
+            .uploadToSignedUrl(signData.path, signData.token, file, {
+              contentType: file.type,
+            })
+
+          if (!uploadErr && signData.publicUrl) {
+            return signData.publicUrl
+          }
+        }
+      }
+    } catch (directErr) {
+      console.warn('[Direct Upload] Falling back to server upload:', directErr)
+    }
+
+    // 2. Fallback to server-side Supabase Storage upload
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch('/api/admin/upload', {
+      method: 'POST',
+      body: formData,
+    })
+
+    const data = await res.json()
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to upload photo to Supabase Storage')
+    }
+
+    const publicUrl = data.url || data.urls?.[0]
+    if (!publicUrl) {
+      throw new Error('No public URL returned from upload')
+    }
+    return publicUrl
+  }
+
   const handleFiles = async (files: FileList | File[]) => {
     const fileArray = Array.from(files).filter((f) => f.type.startsWith('image/'))
     if (fileArray.length === 0) {
-      toast.error('Please select valid image files (JPG, PNG, WEBP, AVIF)')
+      toast.error('Please select valid image files (JPG, PNG, WEBP, AVIF, GIF)')
       return
     }
 
     setUploadingImages(true)
+    setUploadError(null)
+    setFailedFiles(null)
     const toastId = toast.loading(`Uploading ${fileArray.length} photo(s)...`)
 
     try {
-      const formData = new FormData()
-      fileArray.forEach((file) => formData.append('files', file))
-
-      const res = await fetch('/api/admin/upload', {
-        method: 'POST',
-        body: formData,
-      })
-
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to upload images')
+      const newUrls: string[] = []
+      for (let i = 0; i < fileArray.length; i++) {
+        setUploadProgressText(`Uploading photo ${i + 1} of ${fileArray.length}...`)
+        const uploadedUrl = await uploadSingleFile(fileArray[i])
+        newUrls.push(uploadedUrl)
       }
 
-      const newUrls: string[] = data.urls || (data.url ? [data.url] : [])
       if (newUrls.length > 0) {
         setImageUrls((prev) => [...prev.filter(Boolean), ...newUrls])
-        toast.success(`Uploaded ${newUrls.length} photo(s) successfully!`, { id: toastId })
+        toast.success(`Uploaded ${newUrls.length} photo(s) to storage!`, { id: toastId })
       }
     } catch (err: any) {
-      toast.error(err.message || 'Image upload failed', { id: toastId })
+      const errorMsg = err.message || 'Image upload failed. Please try again.'
+      setUploadError(errorMsg)
+      setFailedFiles(fileArray)
+      toast.error(errorMsg, { id: toastId })
     } finally {
       setUploadingImages(false)
+      setUploadProgressText('')
+    }
+  }
+
+  const triggerReplace = (index: number) => {
+    setReplaceTargetIndex(index)
+    replaceFileInputRef.current?.click()
+  }
+
+  const handleReplaceFile = async (file: File, index: number) => {
+    if (!file || !file.type.startsWith('image/')) {
+      toast.error('Please choose a valid image file.')
+      return
+    }
+
+    setReplacingIndex(index)
+    const toastId = toast.loading('Uploading replacement photo...')
+
+    try {
+      const newUrl = await uploadSingleFile(file)
+      // Only update image list once new upload succeeds; previous image is retained until now!
+      setImageUrls((prev) => {
+        const next = [...prev]
+        next[index] = newUrl
+        return next
+      })
+      toast.success('Photo replaced successfully!', { id: toastId })
+    } catch (err: any) {
+      // Retain original image intact on failure
+      toast.error(err.message || 'Replacement failed. Original photo kept.', { id: toastId })
+    } finally {
+      setReplacingIndex(null)
+      setReplaceTargetIndex(null)
     }
   }
 
@@ -511,6 +604,42 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
           </button>
         </div>
 
+        {/* Hidden Input for Single Image Replacement */}
+        <input
+          ref={replaceFileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files && e.target.files[0] && replaceTargetIndex !== null) {
+              handleReplaceFile(e.target.files[0], replaceTargetIndex)
+              e.target.value = ''
+            }
+          }}
+        />
+
+        {/* Failure / Retry Banner */}
+        {uploadError && failedFiles && (
+          <div className="border border-red-500 bg-red-50 p-3.5 text-xs font-mono flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-red-800">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>{uploadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const retryList = failedFiles
+                setUploadError(null)
+                setFailedFiles(null)
+                handleFiles(retryList)
+              }}
+              className="px-3.5 py-1.5 bg-red-600 text-white font-bold uppercase hover:bg-red-700 transition-colors self-start sm:self-auto min-h-[36px]"
+            >
+              Retry Upload
+            </button>
+          </div>
+        )}
+
         {/* Dropzone / Upload Area */}
         <input
           ref={fileInputRef}
@@ -541,7 +670,7 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
             <div className="flex flex-col items-center gap-2 py-4">
               <Loader2 className="w-8 h-8 animate-spin text-black" />
               <span className="text-xs font-mono uppercase tracking-wider font-bold">
-                Uploading photo(s) to server...
+                {uploadProgressText || 'Uploading photo(s) to storage...'}
               </span>
             </div>
           ) : (
@@ -554,7 +683,7 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
                   Click to choose photos or drag &amp; drop files here
                 </p>
                 <p className="text-[11px] text-neutral-500 font-mono">
-                  Supports JPG, PNG, WEBP, AVIF (up to 10MB each). Select multiple files at once.
+                  Supports JPG, PNG, WEBP, AVIF (up to 10MB each). Direct Supabase Storage uploads.
                 </p>
               </div>
               <button
@@ -635,6 +764,14 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
                       }}
                     />
 
+                    {/* Replacing Overlay */}
+                    {replacingIndex === idx && (
+                      <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center text-white z-10 gap-1.5 p-2 text-center">
+                        <Loader2 className="w-5 h-5 animate-spin text-white" />
+                        <span className="text-[10px] font-mono uppercase font-bold tracking-wider">Replacing...</span>
+                      </div>
+                    )}
+
                     {/* Badge */}
                     <div className="absolute top-2 left-2">
                       {idx === 0 ? (
@@ -662,6 +799,15 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
                           <Star className="w-3.5 h-3.5" />
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => triggerReplace(idx)}
+                        disabled={replacingIndex !== null || uploadingImages}
+                        title="Replace Photo with New Upload"
+                        className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black cursor-pointer disabled:opacity-30"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${replacingIndex === idx ? 'animate-spin' : ''}`} />
+                      </button>
                       <button
                         type="button"
                         disabled={idx === 0}

@@ -3,6 +3,7 @@ import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server
 import { getCurrentUser, isAdmin } from '@/lib/auth'
 import { deleteProduct, saveDevProduct } from '@/lib/products'
 import { getSafeImageUrl } from '@/lib/utils'
+import { extractStoragePath } from '@/lib/storage'
 
 export async function POST(req: NextRequest) {
   try {
@@ -106,16 +107,33 @@ export async function POST(req: NextRequest) {
 
     // 3. Insert images
     if (images && images.length > 0) {
-      const imagesToInsert = images.map((img: any, idx: number) => ({
-        product_id: createdProduct.id,
-        image_url: getSafeImageUrl(typeof img === 'string' ? img : img.image_url),
-        alt_text: product.name,
-        sort_order: idx,
-      }))
+      const imagesToInsert = images
+        .map((img: any, idx: number) => {
+          const rawUrl = typeof img === 'string' ? img : img.image_url
+          const safeUrl = getSafeImageUrl(rawUrl)
+          const storagePath = (typeof img === 'object' && img.storage_path)
+            ? img.storage_path
+            : extractStoragePath(safeUrl)
+          return {
+            product_id: createdProduct.id,
+            image_url: safeUrl,
+            storage_path: storagePath || null,
+            alt_text: product.name,
+            sort_order: idx,
+          }
+        })
+        .filter((item: any) => item.image_url)
 
-      const { error: imgErr } = await supabase.from('product_images').insert(imagesToInsert)
-      if (imgErr) {
-        console.error('Error creating product images:', imgErr)
+      if (imagesToInsert.length > 0) {
+        let { error: imgErr } = await supabase.from('product_images').insert(imagesToInsert)
+        if (imgErr && imgErr.message?.includes('storage_path')) {
+          const fallbackImages = imagesToInsert.map(({ storage_path, ...rest }: any) => rest)
+          const fallbackRes = await supabase.from('product_images').insert(fallbackImages)
+          imgErr = fallbackRes.error
+        }
+        if (imgErr) {
+          console.error('Error creating product images:', imgErr)
+        }
       }
     }
 
@@ -210,20 +228,47 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    // 3. Update images
+    // 3. Update images (retain old images until new upload and database insert succeed)
     if (images && Array.isArray(images)) {
-      // Delete old images and insert updated sequence
-      await supabase.from('product_images').delete().eq('product_id', product.id)
+      const validImages = images
+        .map((img: any, idx: number) => {
+          const rawUrl = typeof img === 'string' ? img : img.image_url
+          const safeUrl = getSafeImageUrl(rawUrl)
+          const storagePath = (typeof img === 'object' && img.storage_path)
+            ? img.storage_path
+            : extractStoragePath(safeUrl)
+          return {
+            product_id: product.id,
+            image_url: safeUrl,
+            storage_path: storagePath || null,
+            alt_text: product.name,
+            sort_order: idx,
+          }
+        })
+        .filter((item: any) => item.image_url)
 
-      const imagesToInsert = images.map((img: any, idx: number) => ({
-        product_id: product.id,
-        image_url: getSafeImageUrl(typeof img === 'string' ? img : img.image_url),
-        alt_text: product.name,
-        sort_order: idx,
-      }))
+      if (validImages.length > 0) {
+        // Collect current image IDs so we retain them if the new insert fails
+        const { data: existingImages } = await supabase
+          .from('product_images')
+          .select('id')
+          .eq('product_id', product.id)
+        const oldImageIds = (existingImages || []).map((ci: any) => ci.id)
 
-      if (imagesToInsert.length > 0) {
-        await supabase.from('product_images').insert(imagesToInsert)
+        // Insert new sequence first
+        let { error: insertErr } = await supabase.from('product_images').insert(validImages)
+        if (insertErr && insertErr.message?.includes('storage_path')) {
+          const fallbackImages = validImages.map(({ storage_path, ...rest }: any) => rest)
+          const fallbackRes = await supabase.from('product_images').insert(fallbackImages)
+          insertErr = fallbackRes.error
+        }
+
+        if (insertErr) {
+          console.error('Failed to update product images; old images preserved:', insertErr)
+        } else if (oldImageIds.length > 0) {
+          // New sequence inserted successfully; now delete previous records
+          await supabase.from('product_images').delete().in('id', oldImageIds)
+        }
       }
     }
 
