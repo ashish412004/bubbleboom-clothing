@@ -207,7 +207,7 @@ export function CollectionManager({ initialCollections }: CollectionManagerProps
       {/* Confirmation Modal */}
       {confirmDeleteCol && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-          <div className="bg-white border-2 border-black max-w-md w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-white border-2 border-black max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 bg-neutral-100 border border-black flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5 text-black" />
@@ -224,12 +224,12 @@ export function CollectionManager({ initialCollections }: CollectionManagerProps
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-200">
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-3 border-t border-neutral-200">
               <button
                 type="button"
                 onClick={() => setConfirmDeleteCol(null)}
                 disabled={deletingId !== null}
-                className="px-4 py-2 border border-black text-xs font-mono uppercase font-bold hover:bg-neutral-100 transition-colors disabled:opacity-50"
+                className="min-h-[44px] px-4 py-2 border border-black text-xs font-mono uppercase font-bold hover:bg-neutral-100 transition-colors disabled:opacity-50 text-center"
               >
                 Cancel
               </button>
@@ -237,7 +237,7 @@ export function CollectionManager({ initialCollections }: CollectionManagerProps
                 type="button"
                 onClick={() => handleDelete(confirmDeleteCol)}
                 disabled={deletingId !== null}
-                className="inline-flex items-center gap-2 bg-black text-white px-5 py-2 text-xs font-mono uppercase font-bold hover:bg-neutral-800 transition-colors disabled:opacity-50"
+                className="min-h-[44px] inline-flex items-center justify-center gap-2 bg-black text-white px-5 py-2 text-xs font-mono uppercase font-bold hover:bg-neutral-800 transition-colors disabled:opacity-50"
               >
                 {deletingId ? (
                   <>
@@ -258,8 +258,8 @@ export function CollectionManager({ initialCollections }: CollectionManagerProps
 
       {/* Collections Table */}
       <div className="border border-black bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full min-w-[550px] text-left text-xs font-mono">
             <thead>
               <tr className="border-b-2 border-black bg-neutral-100 uppercase">
                 <th className="p-3">Collection Name</th>
@@ -296,7 +296,7 @@ export function CollectionManager({ initialCollections }: CollectionManagerProps
                           href={`/collections/${col.slug}`}
                           target="_blank"
                           title="View on storefront"
-                          className="p-1.5 border border-neutral-200 hover:border-black hover:bg-black hover:text-white transition-colors"
+                          className="p-1.5 border border-neutral-200 hover:border-black hover:bg-black hover:text-white transition-colors inline-flex items-center justify-center min-w-[36px] min-h-[36px]"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
                         </Link>
@@ -304,7 +304,7 @@ export function CollectionManager({ initialCollections }: CollectionManagerProps
                           type="button"
                           onClick={() => setConfirmDeleteCol(col)}
                           title="Delete collection"
-                          className="p-1.5 border border-neutral-200 hover:border-black hover:bg-black hover:text-white transition-colors text-neutral-700"
+                          className="p-1.5 border border-neutral-200 hover:border-black hover:bg-black hover:text-white transition-colors text-neutral-700 inline-flex items-center justify-center min-w-[36px] min-h-[36px]"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

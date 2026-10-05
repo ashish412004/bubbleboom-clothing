@@ -94,8 +94,8 @@ export function SubscribersClient({
   return (
     <div className="space-y-6">
       {/* Metrics Banner */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="border-2 border-black bg-white p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="border-2 border-black bg-white p-4 sm:p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center justify-between text-neutral-500 mb-2">
             <span className="text-[11px] font-mono uppercase tracking-widest font-bold">Total Audience</span>
             <Users size={16} className="text-black" />
@@ -104,7 +104,7 @@ export function SubscribersClient({
           <div className="text-[10px] font-mono text-neutral-500 mt-1">All Recorded Submissions</div>
         </div>
 
-        <div className="border-2 border-black bg-white p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+        <div className="border-2 border-black bg-white p-4 sm:p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center justify-between text-neutral-500 mb-2">
             <span className="text-[11px] font-mono uppercase tracking-widest font-bold">Active Squad</span>
             <CheckCircle2 size={16} className="text-black" />
@@ -113,7 +113,7 @@ export function SubscribersClient({
           <div className="text-[10px] font-mono text-neutral-500 mt-1">Verified Double Opt-In</div>
         </div>
 
-        <div className="border-2 border-black bg-white p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+        <div className="border-2 border-black bg-white p-4 sm:p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center justify-between text-neutral-500 mb-2">
             <span className="text-[11px] font-mono uppercase tracking-widest font-bold">Pending Link</span>
             <Clock size={16} className="text-black" />
@@ -122,7 +122,7 @@ export function SubscribersClient({
           <div className="text-[10px] font-mono text-neutral-500 mt-1">Awaiting Email Click</div>
         </div>
 
-        <div className="border-2 border-black bg-white p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+        <div className="border-2 border-black bg-white p-4 sm:p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center justify-between text-neutral-500 mb-2">
             <span className="text-[11px] font-mono uppercase tracking-widest font-bold">Unsubscribed</span>
             <UserX size={16} className="text-black" />
@@ -149,7 +149,7 @@ export function SubscribersClient({
               <button
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
-                className={`px-3 py-1.5 text-xs font-mono font-bold uppercase transition-colors shrink-0 flex items-center gap-1.5 ${
+                className={`px-3 py-2 text-xs font-mono font-bold uppercase transition-colors shrink-0 flex items-center gap-1.5 min-h-[40px] ${
                   isSelected
                     ? 'bg-black text-white'
                     : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
@@ -172,7 +172,7 @@ export function SubscribersClient({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search email..."
-              className="w-full bg-neutral-50 border border-black px-3 py-1.5 pl-8 text-xs font-mono placeholder-neutral-400 focus:outline-none focus:bg-white"
+              className="w-full bg-neutral-50 border border-black px-3 py-2 pl-8 text-xs font-mono placeholder-neutral-400 focus:outline-none focus:bg-white min-h-[40px]"
             />
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500" />
           </form>
@@ -181,7 +181,7 @@ export function SubscribersClient({
             onClick={() => fetchSubscribers(activeTab, search)}
             disabled={loading}
             title="Refresh List"
-            className="p-2 border border-black bg-white hover:bg-neutral-100 transition-colors disabled:opacity-50"
+            className="p-2.5 border border-black bg-white hover:bg-neutral-100 transition-colors disabled:opacity-50 min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -189,7 +189,7 @@ export function SubscribersClient({
           <button
             onClick={exportCsv}
             disabled={!subscribers.length}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold border border-black bg-white hover:bg-neutral-100 transition-colors disabled:opacity-50"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-mono font-bold border border-black bg-white hover:bg-neutral-100 transition-colors disabled:opacity-50 min-h-[40px] shrink-0"
           >
             <Download size={14} />
             <span className="hidden sm:inline">Export CSV</span>
@@ -199,8 +199,8 @@ export function SubscribersClient({
 
       {/* Subscribers Table */}
       <div className="border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full min-w-[650px] text-left text-xs font-mono">
             <thead className="bg-neutral-100 border-b-2 border-black uppercase tracking-wider text-[11px]">
               <tr>
                 <th className="p-3.5">Subscriber Email</th>

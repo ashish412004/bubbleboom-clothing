@@ -243,11 +243,11 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl">
-      <div className="flex items-center justify-between pb-4 border-b border-black">
+    <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8 max-w-4xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-black">
         <Link
           href="/admin/products"
-          className="inline-flex items-center gap-2 text-xs font-mono uppercase font-bold hover:underline"
+          className="inline-flex items-center gap-2 text-xs font-mono uppercase font-bold hover:underline min-h-[38px]"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Products</span>
@@ -255,7 +255,7 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
         <button
           type="submit"
           disabled={loading}
-          className="bg-black text-white px-6 py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-400 cursor-pointer"
+          className="bg-black text-white px-5 sm:px-6 py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-400 cursor-pointer min-h-[44px]"
         >
           {loading ? 'Saving...' : isEdit ? 'Update Product' : 'Publish Product'}
         </button>
@@ -424,8 +424,8 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
 
         <div className="space-y-2">
           {variants.map((v, idx) => (
-            <div key={idx} className="flex flex-wrap items-center gap-3 p-3 bg-[#F8F8F6] border border-neutral-300">
-              <div className="w-28">
+            <div key={idx} className="grid grid-cols-2 sm:grid-cols-4 md:flex md:flex-wrap items-end gap-2.5 sm:gap-3 p-3 bg-[#F8F8F6] border border-neutral-300">
+              <div className="col-span-1 md:w-28">
                 <label className="block text-[10px] uppercase font-mono text-neutral-500">Color</label>
                 <input
                   type="text"
@@ -435,7 +435,7 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
                 />
               </div>
 
-              <div className="w-24">
+              <div className="col-span-1 md:w-24">
                 <label className="block text-[10px] uppercase font-mono text-neutral-500">Size</label>
                 <select
                   value={v.size}
@@ -453,7 +453,7 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
                 </select>
               </div>
 
-              <div className="flex-1 min-w-[140px]">
+              <div className="col-span-2 sm:col-span-1 md:flex-1 md:min-w-[140px]">
                 <label className="block text-[10px] uppercase font-mono text-neutral-500">SKU (Optional)</label>
                 <input
                   type="text"
@@ -464,7 +464,7 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
                 />
               </div>
 
-              <div className="w-24">
+              <div className="col-span-1 md:w-24">
                 <label className="block text-[10px] uppercase font-mono text-neutral-500">Stock Qty</label>
                 <input
                   type="number"
@@ -475,13 +475,15 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
                 />
               </div>
 
-              <button
-                type="button"
-                onClick={() => removeVariantRow(idx)}
-                className="self-end p-2 text-neutral-500 hover:text-black hover:bg-neutral-200"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="col-span-1 flex justify-end md:self-end">
+                <button
+                  type="button"
+                  onClick={() => removeVariantRow(idx)}
+                  className="p-2 text-neutral-500 hover:text-black hover:bg-neutral-200 min-h-[36px] min-w-[36px] flex items-center justify-center cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
         </div>

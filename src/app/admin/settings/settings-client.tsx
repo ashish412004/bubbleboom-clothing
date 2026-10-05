@@ -191,7 +191,7 @@ export function SettingsClient({
   return (
     <form onSubmit={handleSaveSettings} className="space-y-8 max-w-4xl">
       {/* 1. SHIPPING & LOGISTICS FINANCIALS */}
-      <div className="border border-black bg-white p-6 space-y-4">
+      <div className="border border-black bg-white p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-2 pb-2 border-b border-neutral-200">
           <Truck className="w-4 h-4 text-black" />
           <h2 className="text-sm font-black uppercase tracking-tight">
@@ -275,7 +275,7 @@ export function SettingsClient({
       </div>
 
       {/* 2. REAL DELIVERY DATE ESTIMATES & PROCESSING TIME */}
-      <div className="border border-black bg-white p-6 space-y-4">
+      <div className="border border-black bg-white p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
           <div className="flex items-center gap-2">
             <Truck className="w-4 h-4 text-black" />
@@ -409,7 +409,7 @@ export function SettingsClient({
       </div>
 
       {/* 3. EXCHANGE POLICY RULES */}
-      <div className="border border-black bg-white p-6 space-y-4">
+      <div className="border border-black bg-white p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
           <div className="flex items-center gap-2">
             <RotateCcw className="w-4 h-4 text-black" />
@@ -540,7 +540,7 @@ export function SettingsClient({
       </div>
 
       {/* 4. ORDERS & GENERAL SETTINGS */}
-      <div className="border border-black bg-white p-6 space-y-4">
+      <div className="border border-black bg-white p-4 sm:p-6 space-y-4">
         <h2 className="text-sm font-black uppercase tracking-tight pb-2 border-b border-neutral-200">
           General Brand Support
         </h2>
@@ -555,7 +555,7 @@ export function SettingsClient({
               required
               value={supportEmail}
               onChange={(e) => setSupportEmail(e.target.value)}
-              className="w-full border border-black p-2.5 text-xs focus:outline-none"
+              className="w-full border border-black p-2.5 text-xs focus:outline-none min-h-[40px]"
             />
           </div>
 
@@ -568,7 +568,7 @@ export function SettingsClient({
               required
               value={storeName}
               onChange={(e) => setStoreName(e.target.value)}
-              className="w-full border border-black p-2.5 text-xs focus:outline-none"
+              className="w-full border border-black p-2.5 text-xs focus:outline-none min-h-[40px]"
             />
           </div>
         </div>
@@ -578,7 +578,7 @@ export function SettingsClient({
         <button
           type="submit"
           disabled={loading}
-          className="inline-flex items-center gap-2 bg-black text-white px-8 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors"
+          className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-2 bg-black text-white px-8 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors"
         >
           <Save className="w-4 h-4" />
           <span>{loading ? 'Saving Settings...' : 'Save All Settings'}</span>

@@ -72,52 +72,52 @@ export default async function AdminDashboard() {
   const aov = paidOrders.length > 0 ? Math.round(totalRevenue / paidOrders.length) : 0
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <div>
-        <h1 className="text-2xl font-black uppercase tracking-tight">Operations Dashboard</h1>
+        <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight break-words">Operations Dashboard</h1>
         <p className="text-xs text-neutral-600 font-mono mt-1">Real-time revenue, order queue, and inventory alerts.</p>
       </div>
 
-      {/* KPI Stats Cards */}
+      {/* KPI Stats Cards: 1 column on narrow mobile, 2 on sm, 4 on lg */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="border-2 border-black bg-white p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] min-w-0">
           <div className="flex items-center justify-between text-neutral-500 mb-2">
-            <span className="text-xs font-mono uppercase font-bold">Total Paid Revenue</span>
-            <DollarSign className="w-4 h-4 text-black" />
+            <span className="text-xs font-mono uppercase font-bold truncate">Total Paid Revenue</span>
+            <DollarSign className="w-4 h-4 text-black shrink-0" />
           </div>
-          <div className="text-2xl font-black font-mono">₹{totalRevenue.toLocaleString('en-IN')}</div>
+          <div className="text-xl sm:text-2xl font-black font-mono break-all">₹{totalRevenue.toLocaleString('en-IN')}</div>
           <span className="text-[10px] text-neutral-500 font-mono mt-1 block">Authoritative captured payments</span>
         </div>
 
-        <div className="border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="border-2 border-black bg-white p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] min-w-0">
           <div className="flex items-center justify-between text-neutral-500 mb-2">
-            <span className="text-xs font-mono uppercase font-bold">Total Orders</span>
-            <Package className="w-4 h-4 text-black" />
+            <span className="text-xs font-mono uppercase font-bold truncate">Total Orders</span>
+            <Package className="w-4 h-4 text-black shrink-0" />
           </div>
-          <div className="text-2xl font-black font-mono">{totalOrdersCount}</div>
+          <div className="text-xl sm:text-2xl font-black font-mono">{totalOrdersCount}</div>
           <span className="text-[10px] text-neutral-500 font-mono mt-1 block">
             {allOrders.filter((o) => o.status === 'pending' || o.status === 'confirmed').length} awaiting fulfillment
           </span>
         </div>
 
-        <div className="border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="border-2 border-black bg-white p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] min-w-0">
           <div className="flex items-center justify-between text-neutral-500 mb-2">
-            <span className="text-xs font-mono uppercase font-bold">Average Order Value</span>
-            <TrendingUp className="w-4 h-4 text-black" />
+            <span className="text-xs font-mono uppercase font-bold truncate">Average Order Value</span>
+            <TrendingUp className="w-4 h-4 text-black shrink-0" />
           </div>
-          <div className="text-2xl font-black font-mono">₹{aov.toLocaleString('en-IN')}</div>
+          <div className="text-xl sm:text-2xl font-black font-mono break-all">₹{aov.toLocaleString('en-IN')}</div>
           <span className="text-[10px] text-neutral-500 font-mono mt-1 block">Net revenue / completed orders</span>
         </div>
 
-        <div className="border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="border-2 border-black bg-white p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] min-w-0">
           <div className="flex items-center justify-between text-neutral-500 mb-2">
-            <span className="text-xs font-mono uppercase font-bold">Pending Return Audits</span>
-            <AlertTriangle className="w-4 h-4 text-black" />
+            <span className="text-xs font-mono uppercase font-bold truncate">Pending Return Audits</span>
+            <AlertTriangle className="w-4 h-4 text-black shrink-0" />
           </div>
-          <div className="text-2xl font-black font-mono">{pendingReturnsCount || 0}</div>
+          <div className="text-xl sm:text-2xl font-black font-mono">{pendingReturnsCount || 0}</div>
           <Link
             href="/admin/returns"
-            className="text-[10px] font-mono uppercase underline text-black font-bold mt-1 block hover:text-neutral-600"
+            className="text-[10px] font-mono uppercase underline text-black font-bold mt-1 inline-block hover:text-neutral-600 min-h-[32px] sm:min-h-0 flex items-center"
           >
             Review return claims →
           </Link>
@@ -125,25 +125,25 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Two Column Section: Recent Orders & Low Stock */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         {/* Recent Orders (2 Columns) */}
-        <div className="lg:col-span-2 border border-black bg-white p-6">
-          <div className="flex items-center justify-between pb-4 mb-4 border-b border-neutral-200">
+        <div className="lg:col-span-2 border border-black bg-white p-4 sm:p-6 min-w-0">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-neutral-200 gap-2">
             <div>
               <h2 className="text-base font-black uppercase tracking-tight">Recent Order Pipeline</h2>
               <p className="text-xs text-neutral-500 font-mono">Latest checkouts requiring packing &amp; shipment</p>
             </div>
             <Link
               href="/admin/orders"
-              className="text-xs uppercase tracking-wider font-bold underline hover:text-neutral-600"
+              className="text-xs uppercase tracking-wider font-bold underline hover:text-neutral-600 self-start sm:self-auto min-h-[36px] flex items-center"
             >
               All Orders ({allOrders.length})
             </Link>
           </div>
 
           {allOrders.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-mono">
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-left text-xs font-mono min-w-[550px]">
                 <thead>
                   <tr className="border-b border-neutral-200 text-neutral-500 uppercase">
                     <th className="py-2.5">Order</th>

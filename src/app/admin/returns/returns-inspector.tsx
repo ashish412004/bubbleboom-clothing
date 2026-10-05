@@ -76,8 +76,8 @@ export function ReturnsInspector({ initialReturns }: { initialReturns: ReturnIte
   return (
     <div className="space-y-6">
       <div className="border border-black bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full min-w-[650px] text-left text-xs font-mono">
             <thead>
               <tr className="border-b-2 border-black bg-neutral-100 uppercase">
                 <th className="p-3">Return ID</th>
@@ -105,7 +105,7 @@ export function ReturnsInspector({ initialReturns }: { initialReturns: ReturnIte
                       {r.status === 'requested' ? (
                         <button
                           onClick={() => handleOpenInspect(r)}
-                          className="bg-black text-white px-3 py-1 text-[11px] uppercase font-bold hover:bg-neutral-800"
+                          className="bg-black text-white px-3 py-1.5 text-[11px] uppercase font-bold hover:bg-neutral-800 min-h-[36px] inline-flex items-center"
                         >
                           Inspect &amp; Decide
                         </button>
@@ -131,8 +131,8 @@ export function ReturnsInspector({ initialReturns }: { initialReturns: ReturnIte
 
       {/* Inspection Modal */}
       {selectedReturn && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white border-2 border-black max-w-md w-full p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border-2 border-black max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
             <h3 className="text-base font-black uppercase tracking-tight mb-2">
               Quality Inspection &amp; Restock Decision
             </h3>
@@ -210,19 +210,19 @@ export function ReturnsInspector({ initialReturns }: { initialReturns: ReturnIte
                 />
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setSelectedReturn(null)}
                   disabled={loading}
-                  className="flex-1 border border-neutral-300 py-2 text-xs uppercase font-bold hover:bg-neutral-100"
+                  className="flex-1 min-h-[44px] border border-neutral-300 py-2 text-xs uppercase font-bold hover:bg-neutral-100 flex items-center justify-center"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 bg-black text-white py-2 text-xs uppercase font-bold hover:bg-neutral-800 disabled:bg-neutral-400"
+                  className="flex-1 min-h-[44px] bg-black text-white py-2 text-xs uppercase font-bold hover:bg-neutral-800 disabled:bg-neutral-400 flex items-center justify-center"
                 >
                   {loading ? 'Submitting...' : 'Commit Decision'}
                 </button>

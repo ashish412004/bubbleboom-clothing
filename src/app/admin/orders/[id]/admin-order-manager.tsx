@@ -592,19 +592,19 @@ Collectable COD : ${codAmount}
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex flex-wrap justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowCancelModal(false)}
                   disabled={loading}
-                  className="border border-neutral-300 px-4 py-2 text-xs uppercase font-bold hover:bg-neutral-100"
+                  className="px-4 py-2 text-xs uppercase font-bold border border-neutral-300 hover:bg-neutral-100 min-h-[44px] cursor-pointer"
                 >
                   Close
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-black text-white px-5 py-2 text-xs uppercase font-bold hover:bg-neutral-800 disabled:opacity-50"
+                  className="bg-black text-white px-5 py-2 text-xs uppercase font-bold hover:bg-neutral-800 disabled:opacity-50 min-h-[44px] cursor-pointer"
                 >
                   {loading ? 'Cancelling...' : 'Confirm Cancellation'}
                 </button>
@@ -617,7 +617,7 @@ Collectable COD : ${codAmount}
       {/* Delete Order Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white border-2 border-black max-w-md w-full p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-4">
+          <div className="bg-white border-2 border-black max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-4 mx-3">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 bg-neutral-100 border border-black flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5 text-black" />
@@ -634,12 +634,12 @@ Collectable COD : ${codAmount}
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-neutral-200">
+            <div className="flex flex-wrap justify-end gap-3 pt-3 border-t border-neutral-200">
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
                 disabled={loading}
-                className="border border-neutral-300 px-4 py-2 text-xs uppercase font-bold hover:bg-neutral-100"
+                className="border border-neutral-300 px-4 py-2 text-xs uppercase font-bold hover:bg-neutral-100 min-h-[44px] cursor-pointer"
               >
                 Cancel
               </button>
@@ -647,7 +647,7 @@ Collectable COD : ${codAmount}
                 type="button"
                 onClick={handleDeleteOrder}
                 disabled={loading}
-                className="inline-flex items-center gap-2 bg-black text-white px-5 py-2 text-xs uppercase font-bold hover:bg-neutral-800 disabled:opacity-50"
+                className="inline-flex items-center gap-2 bg-black text-white px-5 py-2 text-xs uppercase font-bold hover:bg-neutral-800 disabled:opacity-50 min-h-[44px] cursor-pointer"
               >
                 {loading ? (
                   <>
@@ -687,7 +687,7 @@ Collectable COD : ${codAmount}
       {/* Refund Modal */}
       {showRefundModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white border-2 border-black max-w-md w-full p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+          <div className="bg-white border-2 border-black max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mx-3">
             <h3 className="text-lg font-black uppercase tracking-tight mb-2">Process Refund</h3>
             <p className="text-xs text-neutral-600 mb-4">
               Order: <span className="font-mono font-bold text-black">{order.order_number}</span> ({order.payment_method.toUpperCase()})
@@ -704,7 +704,7 @@ Collectable COD : ${codAmount}
                   max={order.total_amount}
                   value={refundAmount}
                   onChange={(e) => setRefundAmount(Number(e.target.value))}
-                  className="w-full border border-black p-2 text-xs font-mono"
+                  className="w-full border border-black p-2 text-xs font-mono min-h-[44px]"
                 />
                 <span className="text-[10px] text-neutral-500 font-mono mt-0.5 block">
                   Max allowable refund ceiling: ₹{order.total_amount}
@@ -721,7 +721,7 @@ Collectable COD : ${codAmount}
                   value={refundReason}
                   onChange={(e) => setRefundReason(e.target.value)}
                   placeholder="e.g. Size mismatch return after quality check"
-                  className="w-full border border-black p-2 text-xs"
+                  className="w-full border border-black p-2 text-xs min-h-[44px]"
                 />
               </div>
 
@@ -729,14 +729,14 @@ Collectable COD : ${codAmount}
                 <button
                   type="button"
                   onClick={() => setShowRefundModal(false)}
-                  className="flex-1 border border-neutral-300 py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-100"
+                  className="flex-1 border border-neutral-300 py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-100 min-h-[44px] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 bg-black text-white py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-400"
+                  className="flex-1 bg-black text-white py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-400 min-h-[44px] cursor-pointer"
                 >
                   {loading ? 'Processing...' : 'Confirm Refund'}
                 </button>

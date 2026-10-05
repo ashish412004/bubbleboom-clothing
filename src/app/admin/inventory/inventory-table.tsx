@@ -84,8 +84,8 @@ export function InventoryTable({ initialVariants }: { initialVariants: VariantIt
   return (
     <div className="space-y-6">
       <div className="border border-black bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left text-xs font-mono min-w-[650px]">
             <thead>
               <tr className="border-b-2 border-black bg-neutral-100 uppercase">
                 <th className="p-3">Product Name</th>
@@ -122,7 +122,7 @@ export function InventoryTable({ initialVariants }: { initialVariants: VariantIt
                     <td className="p-3 text-right">
                       <button
                         onClick={() => handleOpenAdjust(v)}
-                        className="inline-flex items-center gap-1.5 border border-black px-3 py-1.5 uppercase font-bold hover:bg-black hover:text-white transition-colors"
+                        className="inline-flex items-center gap-1.5 border border-black px-3 py-1.5 uppercase font-bold hover:bg-black hover:text-white transition-colors min-h-[38px] cursor-pointer"
                       >
                         <Sliders className="w-3.5 h-3.5" />
                         <span>Adjust</span>
@@ -139,7 +139,7 @@ export function InventoryTable({ initialVariants }: { initialVariants: VariantIt
       {/* Adjust Modal */}
       {selectedVariant && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white border-2 border-black max-w-md w-full p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+          <div className="bg-white border-2 border-black max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mx-3">
             <h3 className="text-base font-black uppercase tracking-tight mb-1">
               Adjust Inventory Stock
             </h3>

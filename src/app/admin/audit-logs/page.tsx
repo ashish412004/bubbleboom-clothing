@@ -35,8 +35,8 @@ export default async function AdminAuditLogsPage() {
       </div>
 
       <div className="border border-black bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full min-w-[650px] text-left text-xs font-mono">
             <thead>
               <tr className="border-b-2 border-black bg-neutral-100 uppercase">
                 <th className="p-3">Timestamp</th>

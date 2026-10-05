@@ -55,13 +55,13 @@ export function BannersClient({ initialBanners }: { initialBanners: any }) {
   return (
     <form onSubmit={handleSave} className="space-y-8 max-w-4xl">
       {/* Announcement Bar */}
-      <div className="border border-black bg-white p-6 space-y-4">
+      <div className="border border-black bg-white p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
           <div className="flex items-center gap-2">
             <Megaphone className="w-4 h-4 text-black" />
             <h2 className="text-sm font-black uppercase tracking-tight">Top Announcement Bar</h2>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
             <input
               type="checkbox"
               checked={announcementActive}
@@ -81,7 +81,7 @@ export function BannersClient({ initialBanners }: { initialBanners: any }) {
             required
             value={announcementText}
             onChange={(e) => setAnnouncementText(e.target.value)}
-            className="w-full border border-black p-2.5 text-xs font-mono uppercase focus:outline-none"
+            className="w-full border border-black p-2.5 text-xs font-mono uppercase focus:outline-none min-h-[40px]"
           />
         </div>
 
@@ -90,14 +90,14 @@ export function BannersClient({ initialBanners }: { initialBanners: any }) {
           <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block mb-1">
             Live Preview
           </span>
-          <div className="bg-black text-white py-2 px-4 text-center font-mono text-[11px] font-bold tracking-wider">
+          <div className="bg-black text-white py-2 px-4 text-center font-mono text-[11px] font-bold tracking-wider break-words">
             {announcementText}
           </div>
         </div>
       </div>
 
       {/* Editorial Homepage Copy */}
-      <div className="border border-black bg-white p-6 space-y-4">
+      <div className="border border-black bg-white p-4 sm:p-6 space-y-4">
         <h2 className="text-sm font-black uppercase tracking-tight pb-2 border-b border-neutral-200">
           Homepage Hero &amp; Brand Copy
         </h2>
@@ -111,7 +111,7 @@ export function BannersClient({ initialBanners }: { initialBanners: any }) {
             required
             value={heroHeading}
             onChange={(e) => setHeroHeading(e.target.value)}
-            className="w-full border border-black p-2.5 text-sm font-black uppercase tracking-tight focus:outline-none"
+            className="w-full border border-black p-2.5 text-sm font-black uppercase tracking-tight focus:outline-none min-h-[40px]"
           />
         </div>
 
@@ -124,7 +124,7 @@ export function BannersClient({ initialBanners }: { initialBanners: any }) {
             required
             value={heroSubheading}
             onChange={(e) => setHeroSubheading(e.target.value)}
-            className="w-full border border-black p-2.5 text-xs focus:outline-none"
+            className="w-full border border-black p-2.5 text-xs focus:outline-none min-h-[40px]"
           />
         </div>
 
@@ -137,7 +137,7 @@ export function BannersClient({ initialBanners }: { initialBanners: any }) {
             required
             value={brandStatement}
             onChange={(e) => setBrandStatement(e.target.value)}
-            className="w-full border border-black p-2.5 text-sm font-black uppercase tracking-tight focus:outline-none"
+            className="w-full border border-black p-2.5 text-sm font-black uppercase tracking-tight focus:outline-none min-h-[40px]"
           />
         </div>
       </div>
@@ -146,7 +146,7 @@ export function BannersClient({ initialBanners }: { initialBanners: any }) {
         <button
           type="submit"
           disabled={loading}
-          className="inline-flex items-center gap-2 bg-black text-white px-8 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors"
+          className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-2 bg-black text-white px-8 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors"
         >
           <Save className="w-4 h-4" />
           <span>{loading ? 'Committing...' : 'Commit Copy Changes'}</span>

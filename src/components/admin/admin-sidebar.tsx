@@ -38,7 +38,7 @@ export function AdminSidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="w-64 bg-black text-white flex flex-col min-h-screen border-r border-neutral-800 shrink-0">
+    <aside className="hidden lg:flex w-64 bg-black text-white flex-col min-h-screen border-r border-neutral-800 shrink-0">
       {/* Brand Header */}
       <div className="p-6 border-b border-neutral-800 flex items-center justify-between">
         <div className="flex items-center gap-3">

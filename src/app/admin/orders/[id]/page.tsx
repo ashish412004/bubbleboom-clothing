@@ -28,34 +28,34 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <Link
           href="/admin/orders"
-          className="inline-flex items-center gap-2 text-xs font-mono uppercase font-bold hover:underline"
+          className="inline-flex items-center gap-2 text-xs font-mono uppercase font-bold hover:underline min-h-[40px]"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to All Orders</span>
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <a
             href={`/api/orders/${order.order_number}/invoice`}
             download
-            className="inline-flex items-center gap-1.5 bg-black text-white hover:bg-neutral-800 px-3 py-1.5 text-xs font-mono uppercase font-bold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 bg-black text-white hover:bg-neutral-800 px-3 py-2 text-xs font-mono uppercase font-bold transition-colors cursor-pointer min-h-[40px]"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Download Invoice PDF</span>
           </a>
-          <span className="text-xs font-mono text-neutral-500">Internal Order ID: {order.id}</span>
+          <span className="text-xs font-mono text-neutral-500 break-all">Internal ID: {order.id}</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
         {/* Left 2 Cols: Order Summary & Line Items */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="border border-black bg-white p-6">
-            <div className="flex justify-between items-start pb-4 border-b border-neutral-200">
+        <div className="lg:col-span-2 space-y-6 min-w-0">
+          <div className="border border-black bg-white p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start gap-3 pb-4 border-b border-neutral-200">
               <div>
                 <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block">
                   Order Reference
                 </span>
-                <h2 className="text-xl font-black font-mono">{order.order_number}</h2>
+                <h2 className="text-xl font-black font-mono break-all">{order.order_number}</h2>
                 <p className="text-xs text-neutral-500 mt-1">
                   Placed on {new Date(order.created_at).toLocaleString('en-IN')}
                 </p>
@@ -118,7 +118,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
           </div>
 
           {/* Customer & Shipping info */}
-          <div className="border border-black bg-white p-6 text-xs">
+          <div className="border border-black bg-white p-4 sm:p-6 text-xs">
             <h3 className="text-xs uppercase font-mono font-bold tracking-widest mb-3">Shipping Destination</h3>
             <p className="font-bold text-sm">{shippingAddr?.full_name}</p>
             <p>{shippingAddr?.address_line1}</p>
@@ -129,7 +129,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
           </div>
 
           {/* Payment & Gateway References */}
-          <div className="border border-black bg-white p-6 text-xs">
+          <div className="border border-black bg-white p-4 sm:p-6 text-xs">
             <h3 className="text-xs uppercase font-mono font-bold tracking-widest mb-3 flex items-center gap-2">
               <CreditCard className="w-3.5 h-3.5" />
               <span>Payment Gateway Records &amp; Attempts</span>
@@ -142,12 +142,12 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
               <div className="divide-y divide-neutral-200">
                 {payments.map((p) => (
                   <div key={p.id} className="py-2.5 space-y-1 font-mono">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                      <span className="font-bold break-all">
                         Cashfree Order: {p.cashfree_order_id || order.order_number}
                       </span>
                       <span
-                        className={`px-2 py-0.5 text-[10px] uppercase font-bold ${
+                        className={`self-start sm:self-auto px-2 py-0.5 text-[10px] uppercase font-bold ${
                           p.status === 'paid'
                             ? 'bg-black text-white'
                             : p.status === 'failed'
@@ -159,7 +159,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
                       </span>
                     </div>
                     {p.cf_payment_id && (
-                      <p className="text-neutral-600">
+                      <p className="text-neutral-600 break-all">
                         Cashfree Payment ID: <span className="text-black font-bold">{p.cf_payment_id}</span>
                       </p>
                     )}

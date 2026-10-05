@@ -122,40 +122,40 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
       </div>
 
       {/* Search and Payment Filter Bar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between bg-[#F8F8F6] p-4 border border-black">
-        <form method="GET" action="/admin/orders" className="flex-1 flex gap-2">
+      <div className="flex flex-col gap-3 bg-[#F8F8F6] p-4 border border-black">
+        <form method="GET" action="/admin/orders" className="flex flex-col sm:flex-row gap-2">
           {status && <input type="hidden" name="status" value={status} />}
           {payment && <input type="hidden" name="payment" value={payment} />}
           <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               name="search"
               defaultValue={search || ''}
               placeholder="Search by order number, customer name, phone, or AWB..."
-              className="w-full bg-white border border-neutral-300 pl-9 pr-3 py-1.5 text-xs font-mono focus:outline-none focus:border-black"
+              className="w-full bg-white border border-neutral-300 pl-9 pr-3 py-2 text-xs font-mono focus:outline-none focus:border-black min-h-[44px]"
             />
           </div>
           <button
             type="submit"
-            className="bg-black text-white px-4 py-1.5 text-xs font-mono uppercase font-bold hover:bg-neutral-800 transition-colors"
+            className="bg-black text-white px-5 py-2 text-xs font-mono uppercase font-bold hover:bg-neutral-800 transition-colors min-h-[44px] flex items-center justify-center shrink-0 cursor-pointer"
           >
             Search
           </button>
         </form>
 
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono text-neutral-600 uppercase font-bold flex items-center gap-1">
-            <Filter className="w-3 h-3" /> Payment:
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1 border-t border-neutral-200">
+          <span className="text-[11px] font-mono text-neutral-600 uppercase font-bold flex items-center gap-1 shrink-0">
+            <Filter className="w-3 h-3" /> Payment Filter:
           </span>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {PAYMENT_FILTERS.map((pf) => {
               const isSelected = (payment || 'all') === pf.key
               return (
                 <Link
                   key={pf.key}
                   href={`/admin/orders?payment=${pf.key}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`}
-                  className={`px-2 py-1 text-[11px] font-mono uppercase tracking-wider transition-colors ${
+                  className={`px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wider transition-colors min-h-[36px] flex items-center ${
                     isSelected
                       ? 'bg-black text-white font-bold'
                       : 'bg-white border border-neutral-300 text-neutral-700 hover:border-black'
@@ -181,7 +181,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
               <Link
                 key={tab.key}
                 href={`/admin/orders?status=${tab.key}${payment ? `&payment=${payment}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`}
-                className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors ${
+                className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors min-h-[36px] flex items-center ${
                   isActive
                     ? 'bg-black text-white font-bold'
                     : 'bg-white border border-neutral-300 text-neutral-600 hover:border-black hover:text-black'
@@ -196,8 +196,8 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
 
       {/* Orders Table */}
       <div className="border border-black bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left text-xs font-mono min-w-[760px]">
             <thead>
               <tr className="border-b-2 border-black bg-neutral-100 uppercase">
                 <th className="p-3">Order Number</th>
