@@ -282,8 +282,8 @@ export function CheckoutForm({
 
         // Launch Cashfree SDK checkout
         try {
-          const cashfreeMode =
-            (process.env.NEXT_PUBLIC_CASHFREE_MODE as 'sandbox' | 'production') || 'production'
+          const modeVal = (process.env.NEXT_PUBLIC_CASHFREE_MODE || '').trim().toLowerCase()
+          const cashfreeMode: 'sandbox' | 'production' = modeVal === 'sandbox' ? 'sandbox' : 'production'
           const cashfree = await loadCashfree({ mode: cashfreeMode })
           if (!cashfree) {
             throw new Error('Cashfree payment SDK could not be loaded. Please check your network connection.')

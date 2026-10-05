@@ -28,7 +28,9 @@ export async function createCashfreeOrder(
 ): Promise<CashfreePaymentResponse | { error: string }> {
   const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
   const secretKey = process.env.CASHFREE_SECRET_KEY
-  const isProduction = process.env.NEXT_PUBLIC_CASHFREE_MODE === 'production'
+  const isProduction =
+    process.env.NEXT_PUBLIC_CASHFREE_MODE?.toLowerCase() === 'production' ||
+    process.env.CASHFREE_ENVIRONMENT?.toLowerCase() === 'production'
   const apiBaseUrl = process.env.CASHFREE_API_URL || (isProduction ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg')
 
   if (!appId || !secretKey) {
@@ -127,7 +129,9 @@ export async function verifyCashfreeWebhook(
 export async function getPaymentStatus(orderId: string) {
   const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
   const secretKey = process.env.CASHFREE_SECRET_KEY
-  const isProduction = process.env.NEXT_PUBLIC_CASHFREE_MODE === 'production'
+  const isProduction =
+    process.env.NEXT_PUBLIC_CASHFREE_MODE?.toLowerCase() === 'production' ||
+    process.env.CASHFREE_ENVIRONMENT?.toLowerCase() === 'production'
   const apiBaseUrl = process.env.CASHFREE_API_URL || (isProduction ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg')
 
   if (!appId || !secretKey) {
@@ -173,7 +177,9 @@ export async function getPaymentStatus(orderId: string) {
 export async function getOrderPayments(orderId: string) {
   const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
   const secretKey = process.env.CASHFREE_SECRET_KEY
-  const isProduction = process.env.NEXT_PUBLIC_CASHFREE_MODE === 'production'
+  const isProduction =
+    process.env.NEXT_PUBLIC_CASHFREE_MODE?.toLowerCase() === 'production' ||
+    process.env.CASHFREE_ENVIRONMENT?.toLowerCase() === 'production'
   const apiBaseUrl = process.env.CASHFREE_API_URL || (isProduction ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg')
 
   if (!appId || !secretKey) {

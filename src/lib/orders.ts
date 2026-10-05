@@ -467,7 +467,10 @@ export async function createCashfreeSessionForOrder(order: Order) {
 
   let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || ''
   if (!siteUrl || siteUrl.startsWith('http://localhost')) {
-    if (process.env.NEXT_PUBLIC_CASHFREE_MODE === 'production') {
+    if (
+      process.env.NEXT_PUBLIC_CASHFREE_MODE?.toLowerCase() === 'production' ||
+      process.env.CASHFREE_ENVIRONMENT?.toLowerCase() === 'production'
+    ) {
       siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
         ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
         : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://bubbleboom-clothing.vercel.app')
