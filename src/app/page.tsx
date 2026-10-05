@@ -25,7 +25,7 @@ export default async function HomePage() {
   const bestSellers = products.slice(0, 4)
 
   return (
-    <div className="flex flex-col min-h-screen bg-white text-black">
+    <div suppressHydrationWarning className="flex flex-col min-h-screen bg-white text-black">
       <Header
         announcementText={generalSettings.announcement_text}
         announcementLink={generalSettings.announcement_link}

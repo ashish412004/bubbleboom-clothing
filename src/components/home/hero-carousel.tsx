@@ -146,6 +146,7 @@ export function HeroCarousel({
 
   return (
     <section
+      suppressHydrationWarning
       className="relative min-h-[75vh] sm:min-h-[85vh] h-[80vh] sm:h-[88vh] max-h-[960px] bg-black text-white flex items-center justify-center overflow-hidden"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
