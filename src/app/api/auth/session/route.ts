@@ -72,19 +72,17 @@ export async function POST(request: NextRequest) {
             },
           })
           if (error) {
-            if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('rate_limit')) {
-              if (process.env.NODE_ENV !== 'production') {
-                return NextResponse.json({
-                  success: true,
-                  type: 'email',
-                  message: 'Supabase free limit (3 emails/hr) reached. Dev mode active: Enter OTP "123456" to verify!',
-                })
-              }
+            console.error('Supabase OTP send error:', error.message)
+            if (process.env.NODE_ENV !== 'production') {
               return NextResponse.json({
-                error: 'Email rate limit reached (3 per hour on free tier). Please switch to the "Password" tab to login instantly.',
-              }, { status: 429 })
+                success: true,
+                type: 'email',
+                message: `Supabase mailer error (${error.message}). Dev Mode active: Enter OTP "123456" to verify and continue!`,
+              })
             }
-            return NextResponse.json({ error: error.message }, { status: 400 })
+            return NextResponse.json({
+              error: `Email sending failed (${error.message}). Please ensure SMTP is configured in Supabase or switch to "Password" tab.`,
+            }, { status: 400 })
           }
           return NextResponse.json({
             success: true,
