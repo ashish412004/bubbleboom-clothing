@@ -13,9 +13,9 @@ import { MOCK_ORDERS } from '@/lib/mock-data'
 export const dynamic = 'force-dynamic'
 
 export default async function AdminDashboard() {
-  let allOrders = MOCK_ORDERS
+  let allOrders: any[] = []
   let lowStockVariants: any[] = []
-  let pendingReturnsCount = 1
+  let pendingReturnsCount = 0
 
   if (isSupabaseConfigured()) {
     try {
@@ -27,11 +27,11 @@ export default async function AdminDashboard() {
         .select('id, order_number, total_amount, status, payment_status, created_at, guest_email, shipping_address')
         .order('created_at', { ascending: false })
 
-      if (orders && orders.length > 0) {
+      if (orders) {
         allOrders = orders
       }
 
-      // 2. Fetch Low Stock Variants (stock <= 5)
+      // 2. Fetch Low Stock Variants (stock <= 5) for active products only
       const { data: variants } = await supabase
         .from('product_variants')
         .select(`
@@ -40,14 +40,16 @@ export default async function AdminDashboard() {
           color,
           size,
           stock,
-          product:products (id, name, slug)
+          is_active,
+          product:products (id, name, slug, is_active)
         `)
+        .eq('is_active', true)
         .lte('stock', 5)
         .order('stock', { ascending: true })
         .limit(8)
 
       if (variants) {
-        lowStockVariants = variants
+        lowStockVariants = variants.filter((v: any) => v.product?.is_active)
       }
 
       // 3. Pending returns count
@@ -60,7 +62,7 @@ export default async function AdminDashboard() {
         pendingReturnsCount = count
       }
     } catch {
-      // Fallback already set to mock data
+      // Clean zero fallback
     }
   }
 

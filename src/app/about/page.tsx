@@ -44,7 +44,7 @@ export default function AboutPage() {
                 Bubble Boom was founded in India with a clear mission: break away from cookie-cutter, disposable fast fashion. We create clothing that speaks with attitude, designed for individuals who move at their own rhythm and refuse to conform to standard commercial molds.
               </p>
               <p>
-                From dense, 240 GSM drop-shoulder tees and heavyweight 450 GSM French terry hoodies to precision-cut relaxed cargo trousers, every Bubble Boom garment is a statement of architectural silhouette, durable construction, and raw youthful expression.
+                From drop-shoulder relaxed tees and heavyweight hoodies to precision-cut cargo trousers, every Bubble Boom garment is a statement of architectural silhouette, durable construction, and raw youthful expression.
               </p>
             </div>
           </div>
@@ -70,7 +70,7 @@ export default function AboutPage() {
               <Sparkles className="w-8 h-8 text-black mb-4" />
               <h3 className="text-lg font-black uppercase tracking-tight mb-2">Heavyweight Textiles</h3>
               <p className="text-xs text-neutral-600 leading-relaxed">
-                Dense 100% combed cotton weaves ranging from 240 to 450 GSM. Bio-washed, silicone softened, and preshrunk for longevity and zero post-wash warping.
+                Premium combed cotton and French terry weaves. Bio-washed, silicone softened, and preshrunk for longevity and zero post-wash warping.
               </p>
             </div>
 

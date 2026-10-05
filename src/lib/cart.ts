@@ -214,7 +214,15 @@ export async function getCart(userId?: string, sessionId?: string): Promise<Cart
     return []
   }
 
-  return items as unknown as CartItemWithDetails[]
+  const validItems = items.filter(
+    (item: any) =>
+      item.variant &&
+      item.variant.product &&
+      item.variant.product.is_active &&
+      item.variant.is_active
+  )
+
+  return validItems as unknown as CartItemWithDetails[]
 }
 
 export async function addToCart(

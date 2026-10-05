@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { ShieldCheck, Truck, CreditCard, Banknote, Tag, ArrowRight } from 'lucide-react'
-import { formatPrice } from '@/lib/utils'
+import { formatPrice, getSafeImageUrl } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
 
@@ -511,29 +511,35 @@ export function CheckoutForm({
 
           {/* Line item previews */}
           <div className="max-h-60 overflow-y-auto space-y-3 pr-1 divide-y divide-neutral-200">
-            {items.map((item) => (
-              <div key={item.id} className="pt-2 flex items-center gap-3">
-                <div className="relative w-12 h-16 bg-neutral-100 border shrink-0 overflow-hidden">
-                  {item.variant.product.images?.[0] ? (
-                    <Image
-                      src={item.variant.product.images[0].image_url}
-                      alt={item.variant.product.name}
-                      fill
-                      className="object-cover"
-                    />
-                  ) : null}
+            {items.map((item) => {
+              const prod = item.variant?.product
+              if (!prod) return null
+              const firstImg = prod.images?.[0]?.image_url
+
+              return (
+                <div key={item.id} className="pt-2 flex items-center gap-3">
+                  <div className="relative w-12 h-16 bg-neutral-100 border shrink-0 overflow-hidden">
+                    {firstImg ? (
+                      <Image
+                        src={getSafeImageUrl(firstImg)}
+                        alt={prod.name}
+                        fill
+                        className="object-cover"
+                      />
+                    ) : null}
+                  </div>
+                  <div className="flex-grow text-xs">
+                    <p className="font-bold line-clamp-1">{prod.name}</p>
+                    <p className="text-neutral-500 text-[11px] uppercase">
+                      {item.variant.color} / {item.variant.size} × {item.quantity}
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold shrink-0">
+                    {formatPrice(prod.selling_price * item.quantity)}
+                  </span>
                 </div>
-                <div className="flex-grow text-xs">
-                  <p className="font-bold line-clamp-1">{item.variant.product.name}</p>
-                  <p className="text-neutral-500 text-[11px] uppercase">
-                    {item.variant.color} / {item.variant.size} × {item.quantity}
-                  </p>
-                </div>
-                <span className="text-xs font-bold shrink-0">
-                  {formatPrice(item.variant.product.selling_price * item.quantity)}
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Coupon Code */}

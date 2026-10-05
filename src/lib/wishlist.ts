@@ -108,7 +108,14 @@ export async function getWishlist(
     .order('created_at', { ascending: false })
 
   if (error || !items) return []
-  return items as unknown as WishlistItemWithDetails[]
+  const validItems = items.filter(
+    (item: any) =>
+      item.variant &&
+      item.variant.product &&
+      item.variant.product.is_published &&
+      item.variant.product.is_active !== false
+  )
+  return validItems as unknown as WishlistItemWithDetails[]
 }
 
 export async function addToWishlist(

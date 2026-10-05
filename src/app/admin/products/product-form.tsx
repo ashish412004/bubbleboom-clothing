@@ -19,25 +19,20 @@ export function ProductForm({ categories }: ProductFormProps) {
   const [slug, setSlug] = useState('')
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState(categories[0]?.id || '')
-  const [material, setMaterial] = useState('100% Combed Cotton, 240 GSM')
-  const [fit, setFit] = useState('Boxy Oversized Cut')
-  const [washCare, setWashCare] = useState('Machine wash cold inside-out, do not iron directly on graphics')
-  const [mrp, setMrp] = useState(2499)
-  const [sellingPrice, setSellingPrice] = useState(1499)
+  const [material, setMaterial] = useState('')
+  const [fit, setFit] = useState('')
+  const [washCare, setWashCare] = useState('')
+  const [mrp, setMrp] = useState<number | ''>('')
+  const [sellingPrice, setSellingPrice] = useState<number | ''>('')
   const [isPublished, setIsPublished] = useState(true)
 
   // Variants matrix
   const [variants, setVariants] = useState<Array<{ color: string; size: string; sku: string; stock: number }>>([
-    { color: 'Black', size: 'S', sku: '', stock: 20 },
-    { color: 'Black', size: 'M', sku: '', stock: 25 },
-    { color: 'Black', size: 'L', sku: '', stock: 25 },
-    { color: 'Black', size: 'XL', sku: '', stock: 15 },
+    { color: 'Black', size: 'M', sku: '', stock: 0 },
   ])
 
   // Images
-  const [imageUrls, setImageUrls] = useState<string[]>([
-    'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&q=80',
-  ])
+  const [imageUrls, setImageUrls] = useState<string[]>([''])
 
   const handleNameChange = (val: string) => {
     setName(val)
@@ -49,7 +44,7 @@ export function ProductForm({ categories }: ProductFormProps) {
   const addVariantRow = () => {
     setVariants((prev) => [
       ...prev,
-      { color: 'Black', size: 'M', sku: '', stock: 10 },
+      { color: '', size: 'M', sku: '', stock: 0 },
     ])
   }
 

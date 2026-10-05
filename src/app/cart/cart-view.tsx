@@ -5,7 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Trash2, ShoppingBag, ArrowRight, Tag, Truck } from 'lucide-react'
-import { formatPrice } from '@/lib/utils'
+import { formatPrice, getSafeImageUrl } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
 
@@ -217,7 +217,8 @@ export function CartView({
         {/* Cart Line Items */}
         <div className="lg:col-span-8 divide-y divide-neutral-200 border-t border-b border-neutral-200">
           {items.map((item) => {
-            const prod = item.variant.product
+            const prod = item.variant?.product
+            if (!prod) return null
             const img = prod.images?.[0]
             const lineSubtotal = Math.round(prod.selling_price * item.quantity)
 
@@ -227,7 +228,7 @@ export function CartView({
                 <div className="relative w-24 sm:w-28 aspect-[3/4] bg-neutral-100 border border-neutral-200 shrink-0 overflow-hidden">
                   {img ? (
                     <Image
-                      src={img.image_url}
+                      src={getSafeImageUrl(img.image_url)}
                       alt={img.alt_text || prod.name}
                       fill
                       className="object-cover"

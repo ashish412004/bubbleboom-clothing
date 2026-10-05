@@ -7,6 +7,7 @@ import { WishlistItemWithDetails } from '@/lib/wishlist'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
 import { Trash2, ShoppingBag, ArrowRight } from 'lucide-react'
+import { getSafeImageUrl } from '@/lib/utils'
 
 interface WishlistViewProps {
   initialItems: WishlistItemWithDetails[]
@@ -96,7 +97,7 @@ export function WishlistView({ initialItems }: WishlistViewProps) {
         const variant = item.variant
         if (!product || !variant) return null
 
-        const mainImage = product.images?.[0]?.image_url || 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&q=80'
+        const mainImage = getSafeImageUrl(product.images?.[0]?.image_url)
         const hasDiscount = product.mrp > product.selling_price
         const discountPercent = hasDiscount
           ? Math.round(((product.mrp - product.selling_price) / product.mrp) * 100)

@@ -85,7 +85,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
               {params.sale === 'true' ? 'Sale & Special Drops' : 'Catalog Collection'}
             </h1>
             <p className="mt-2 text-xs sm:text-sm text-neutral-600 max-w-xl">
-              Engineered with heavyweight combed cotton, custom boxy proportions, and durable streetwear finishes.
+              Authentic streetwear wardrobe. Designed for uncompromising individuality.
             </p>
           </div>
         </div>
@@ -120,15 +120,15 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
                 </div>
               ) : (
                 <div className="py-24 text-center border border-dashed border-neutral-200">
-                  <h3 className="text-lg uppercase tracking-widest font-bold mb-2">No Products Match Filters</h3>
-                  <p className="text-xs text-neutral-500 mb-6">
-                    Try loosening your filter choices to explore more of the Bubble Boom catalog.
+                  <h3 className="text-lg uppercase tracking-widest font-black mb-2">New styles coming soon</h3>
+                  <p className="text-xs text-neutral-500 mb-6 font-mono">
+                    New streetwear drops and capsules are currently being prepared. Check back shortly.
                   </p>
                   <Link
                     href="/shop"
                     className="inline-block bg-black text-white px-6 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors"
                   >
-                    Clear All Filters
+                    View All Categories
                   </Link>
                 </div>
               )}

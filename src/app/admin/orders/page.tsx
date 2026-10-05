@@ -41,7 +41,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
       }
 
       const { data } = await query
-      if (data && data.length > 0) {
+      if (data) {
         ordersList = data
       }
     } catch {

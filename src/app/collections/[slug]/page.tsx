@@ -11,56 +11,19 @@ interface CollectionPageProps {
   params: Promise<{ slug: string }>
 }
 
-const FALLBACK_COLLECTION_DATA: Record<string, { name: string; description: string; banner: string }> = {
-  'oversized-streetwear': {
-    name: 'OVERSIZED STREETWEAR',
-    description: 'Heavyweight drop-shoulder tees, structured boxy silhouettes, and signature star monogram accents.',
-    banner: 'https://images.unsplash.com/photo-1552374196-1ab2a1c593e8?w=1600&q=80',
-  },
-  'summer-capsule-26': {
-    name: 'SUMMER CAPSULE \'26',
-    description: 'Breathable textured weaves, relaxed camp collars, and effortless monochrome summer fits.',
-    banner: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=1600&q=80',
-  },
-  'monochrome-essentials': {
-    name: 'MONOCHROME ESSENTIALS',
-    description: 'Timeless core silhouettes engineered in dense 240 GSM combed cotton. Built to last.',
-    banner: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=1600&q=80',
-  },
-  'heavyweight-fleece': {
-    name: 'HEAVYWEIGHT FLEECE',
-    description: '450 GSM custom French terry hoodies and relaxed joggers tailored for ultimate drape.',
-    banner: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=1600&q=80',
-  },
-}
-
 export default async function CollectionDetailPage({ params }: CollectionPageProps) {
   const { slug } = await params
   const collection = await getCollectionBySlug(slug)
 
-  let name = ''
-  let description = ''
-  let banner = ''
-  let products: any[] = []
-
-  if (collection) {
-    name = collection.name
-    description = collection.description || ''
-    banner = collection.banner_image_url || ''
-    // @ts-ignore
-    products = collection.collection_products?.map((cp: any) => cp.products).filter(Boolean) || []
-  } else if (FALLBACK_COLLECTION_DATA[slug]) {
-    name = FALLBACK_COLLECTION_DATA[slug].name
-    description = FALLBACK_COLLECTION_DATA[slug].description
-    banner = FALLBACK_COLLECTION_DATA[slug].banner
-    // Fetch products belonging to collection or catalog
-    products = await getProducts({ collection: slug })
-    if (products.length === 0) {
-      products = await getProducts({ limit: 8 })
-    }
-  } else {
+  if (!collection) {
     notFound()
   }
+
+  const name = collection.name
+  const description = collection.description || ''
+  const banner = collection.banner_image_url || ''
+  // @ts-ignore
+  const products: any[] = collection.collection_products?.map((cp: any) => cp.products).filter(Boolean) || []
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-black">
@@ -121,15 +84,15 @@ export default async function CollectionDetailPage({ params }: CollectionPagePro
             </div>
           ) : (
             <div className="py-24 text-center border border-dashed border-neutral-300">
-              <h3 className="text-lg uppercase tracking-widest font-black mb-2">Capsule Sold Out</h3>
-              <p className="text-xs text-neutral-500 mb-6">
-                All limited units for this drop have been allocated. Check out other available capsules.
+              <h3 className="text-lg uppercase tracking-widest font-black mb-2">New styles coming soon</h3>
+              <p className="text-xs text-neutral-500 mb-6 font-mono">
+                Items for this capsule drop are currently being curated and prepared. Check back shortly.
               </p>
               <Link
                 href="/shop"
                 className="inline-block bg-black text-white px-6 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors"
               >
-                Explore Shop All
+                Browse Shop All
               </Link>
             </div>
           )}
