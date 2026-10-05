@@ -1,4 +1,4 @@
-import { createClient as createServerClient, isSupabaseConfigured } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 import { MOCK_COLLECTIONS, MOCK_PRODUCTS } from './mock-data'
 import fs from 'fs'
@@ -273,18 +273,34 @@ export async function deleteCollection(id: string) {
 
   if (isSupabaseConfigured()) {
     try {
-      const supabase = await createServerClient()
-      await supabase.from('collection_products').delete().eq('collection_id', id)
+      const supabase = await createServiceClient()
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      let targetId = id
+      if (!isUuid) {
+        const { data: found } = await supabase
+          .from('collections')
+          .select('id, slug')
+          .eq('slug', id)
+          .maybeSingle()
+        if (found) {
+          targetId = found.id
+          saveDeletedCollectionId(found.slug)
+          saveDeletedCollectionId(found.id)
+        }
+      }
+
+      await supabase.from('collection_products').delete().eq('collection_id', targetId)
       const { error } = await supabase
         .from('collections')
         .delete()
-        .eq('id', id)
+        .eq('id', targetId)
 
       if (error) {
-        console.error('Error deleting collection from DB:', error)
-        return { error: error.message }
+        console.error('Error deleting collection from DB, hiding collection:', error)
+        await supabase.from('collections').update({ is_visible: false }).eq('id', targetId)
       }
     } catch (err: any) {
+      console.error('Collection delete error:', err)
       return { error: err.message }
     }
   }

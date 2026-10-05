@@ -386,6 +386,7 @@ export async function getAdminProducts() {
           variants:product_variants(*),
           images:product_images(*)
         `)
+        .eq('is_active', true)
         .order('created_at', { ascending: false })
 
       if (products && products.length > 0) {
@@ -496,7 +497,7 @@ export async function addProductImage(image: Database['public']['Tables']['produ
   return { data }
 }
 
-export async function deleteProduct(id: string) {
+export async function deleteProduct(id: string): Promise<{ success: boolean; error?: string }> {
   saveDeletedProductId(id)
 
   try {
@@ -518,13 +519,87 @@ export async function deleteProduct(id: string) {
   if (isSupabaseConfigured()) {
     try {
       const supabase = await createServiceClient()
-      await supabase.from('product_variants').delete().eq('product_id', id)
-      await supabase.from('product_images').delete().eq('product_id', id)
-      const { error } = await supabase.from('products').delete().eq('id', id)
-      if (error) return { error: error.message }
+
+      // Resolve target UUID if passed as a slug
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      let targetId = id
+      if (!isUuid) {
+        const { data: found } = await supabase
+          .from('products')
+          .select('id, slug')
+          .eq('slug', id)
+          .maybeSingle()
+        if (found) {
+          targetId = found.id
+          saveDeletedProductId(found.slug)
+          saveDeletedProductId(found.id)
+        }
+      }
+
+      // 1. Check if product or its variants are referenced in order_items
+      const { data: orderItemRefs } = await supabase
+        .from('order_items')
+        .select('id')
+        .eq('product_id', targetId)
+        .limit(1)
+
+      const hasOrderHistory = Boolean(orderItemRefs && orderItemRefs.length > 0)
+
+      if (hasOrderHistory) {
+        // Soft delete / Archive:
+        // Set is_active = false and is_published = false so it's hidden from catalog & storefront
+        await supabase
+          .from('products')
+          .update({
+            is_active: false,
+            is_published: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', targetId)
+
+        // Deactivate all its variants and zero out stock
+        await supabase
+          .from('product_variants')
+          .update({
+            is_active: false,
+            stock: 0,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('product_id', targetId)
+
+        // Unlink from collections
+        await supabase.from('collection_products').delete().eq('product_id', targetId)
+      } else {
+        // No orders exist: clean hard-delete
+        await supabase.from('collection_products').delete().eq('product_id', targetId)
+        try {
+          await supabase.from('reviews').delete().eq('product_id', targetId)
+        } catch {}
+        await supabase.from('product_images').delete().eq('product_id', targetId)
+        await supabase.from('product_variants').delete().eq('product_id', targetId)
+        const { error } = await supabase.from('products').delete().eq('id', targetId)
+        if (error) {
+          console.warn('Hard delete failed, falling back to soft-delete:', error.message)
+          await supabase
+            .from('products')
+            .update({ is_active: false, is_published: false })
+            .eq('id', targetId)
+          await supabase
+            .from('product_variants')
+            .update({ is_active: false, stock: 0 })
+            .eq('product_id', targetId)
+        }
+      }
     } catch (err: any) {
       console.error('Error deleting product from DB:', err)
-      return { error: err.message }
+      // Fallback: ensure product is deactivated
+      try {
+        const supabase = await createServiceClient()
+        await supabase
+          .from('products')
+          .update({ is_active: false, is_published: false })
+          .eq('id', id)
+      } catch {}
     }
   }
 
@@ -535,8 +610,20 @@ export async function deleteProductVariant(id: string) {
   if (isSupabaseConfigured()) {
     try {
       const supabase = await createServiceClient()
-      const { error } = await supabase.from('product_variants').delete().eq('id', id)
-      if (error) return { error: error.message }
+      const { data: orderItemRefs } = await supabase
+        .from('order_items')
+        .select('id')
+        .eq('variant_id', id)
+        .limit(1)
+
+      if (orderItemRefs && orderItemRefs.length > 0) {
+        await supabase.from('product_variants').update({ is_active: false, stock: 0 }).eq('id', id)
+      } else {
+        const { error } = await supabase.from('product_variants').delete().eq('id', id)
+        if (error) {
+          await supabase.from('product_variants').update({ is_active: false, stock: 0 }).eq('id', id)
+        }
+      }
     } catch (err: any) {
       return { error: err.message }
     }

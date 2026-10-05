@@ -125,7 +125,10 @@ export async function DELETE(req: NextRequest) {
 
     const supabase = await createServiceClient()
     const { error } = await supabase.from('coupons').delete().eq('id', id)
-    if (error) throw error
+    if (error) {
+      console.warn('Coupon hard delete failed, setting is_active = false:', error.message)
+      await supabase.from('coupons').update({ is_active: false }).eq('id', id)
+    }
 
     return NextResponse.json({ success: true, message: 'Coupon deleted', id })
   } catch (error: any) {

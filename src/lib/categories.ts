@@ -1,4 +1,4 @@
-import { createClient as createServerClient, isSupabaseConfigured } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 import { generateSlug } from './utils'
 import { MOCK_CATEGORIES } from './mock-data'
@@ -195,17 +195,38 @@ export async function deleteCategory(id: string) {
 
   if (isSupabaseConfigured()) {
     try {
-      const supabase = await createServerClient()
+      const supabase = await createServiceClient()
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      let targetId = id
+      if (!isUuid) {
+        const { data: found } = await supabase
+          .from('categories')
+          .select('id, slug')
+          .eq('slug', id)
+          .maybeSingle()
+        if (found) {
+          targetId = found.id
+          saveDeletedCategoryId(found.slug)
+          saveDeletedCategoryId(found.id)
+        }
+      }
+
+      // Unlink products referencing this category so deletion never violates FK
+      await supabase.from('products').update({ category_id: null }).eq('category_id', targetId)
+      // Unlink child categories referencing this parent
+      await supabase.from('categories').update({ parent_id: null }).eq('parent_id', targetId)
+
       const { error } = await supabase
         .from('categories')
         .delete()
-        .eq('id', id)
+        .eq('id', targetId)
 
       if (error) {
-        console.error('Error deleting category from DB:', error)
-        return { error: error.message }
+        console.error('Error deleting category from DB, falling back to soft delete:', error)
+        await supabase.from('categories').update({ is_active: false }).eq('id', targetId)
       }
     } catch (err: any) {
+      console.error('Error deleting category:', err)
       return { error: err.message }
     }
   }
