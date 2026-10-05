@@ -23,20 +23,39 @@ export interface CashfreePaymentResponse {
   order_token?: string
 }
 
+function cleanEnvValue(val?: string): string {
+  if (!val) return ''
+  let cleaned = val.trim()
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1).trim()
+  }
+  return cleaned
+}
+
 export function getCashfreeConfig() {
-  const appId = (process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID || '').trim()
-  const secretKey = (process.env.CASHFREE_SECRET_KEY || '').trim()
+  let appId = cleanEnvValue(process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID)
+  let secretKey = cleanEnvValue(process.env.CASHFREE_SECRET_KEY)
+
+  // Guard against accidental swapped keys in environment variables
+  if (appId.startsWith('cfsk_') && !secretKey.startsWith('cfsk_')) {
+    console.warn('CASHFREE_APP_ID and CASHFREE_SECRET_KEY were swapped in environment configuration. Auto-recovering.')
+    const temp = appId
+    appId = secretKey
+    secretKey = temp
+  }
 
   // Detect whether keys are explicitly production keys
   const isKeyProd =
     secretKey.includes('_prod_') ||
     (!secretKey.includes('_test_') && !appId.toLowerCase().startsWith('test_') && appId.length > 0)
 
-  const envVal = (
+  const envVal = cleanEnvValue(
     process.env.NEXT_PUBLIC_CASHFREE_MODE ||
-    process.env.CASHFREE_ENVIRONMENT ||
-    ''
-  ).trim().toLowerCase()
+    process.env.CASHFREE_ENVIRONMENT
+  ).toLowerCase()
 
   const isExplicitSandbox = envVal === 'sandbox'
 
@@ -46,7 +65,7 @@ export function getCashfreeConfig() {
       ? false
       : Boolean(isKeyProd || envVal === 'production' || true)
 
-  let apiBaseUrl = (process.env.CASHFREE_API_URL || '').trim()
+  let apiBaseUrl = cleanEnvValue(process.env.CASHFREE_API_URL)
   if (apiBaseUrl) {
     if (isProduction && apiBaseUrl.includes('sandbox.cashfree.com')) {
       console.warn('Overriding sandbox CASHFREE_API_URL to production endpoint because production credentials are in use.')
@@ -65,12 +84,24 @@ export function getCashfreeConfig() {
 export async function createCashfreeOrder(
   orderRequest: CashfreeOrderRequest
 ): Promise<CashfreePaymentResponse | { error: string }> {
-  const { appId, secretKey, apiBaseUrl } = getCashfreeConfig()
+  const { appId, secretKey, apiBaseUrl, mode } = getCashfreeConfig()
 
   if (!appId || !secretKey) {
     return {
       error:
-        'Cashfree credentials not configured. Please set CASHFREE_APP_ID (or CASHFREE_CLIENT_ID) and CASHFREE_SECRET_KEY.',
+        'Cashfree credentials not configured. Please set CASHFREE_APP_ID and CASHFREE_SECRET_KEY in server environment variables.',
+    }
+  }
+
+  if (
+    appId.includes('your_') ||
+    secretKey.includes('your_') ||
+    appId === 'TEST_your_app_id' ||
+    secretKey === 'TEST_your_secret_key'
+  ) {
+    return {
+      error:
+        'Cashfree credentials contain unconfigured placeholder values. Please provide your real Cashfree Merchant credentials.',
     }
   }
 
@@ -89,8 +120,15 @@ export async function createCashfreeOrder(
     const data = await response.json()
 
     if (!response.ok) {
-      console.error('Cashfree order creation error:', data)
-      return { error: data.message || 'Failed to create Cashfree order' }
+      console.error(`Cashfree order creation error [HTTP ${response.status}]:`, data)
+      if (response.status === 401) {
+        return {
+          error: `Authentication failed [HTTP 401]: Cashfree rejected the provided credentials on ${apiBaseUrl}. Ensure your CASHFREE_APP_ID and CASHFREE_SECRET_KEY on Vercel match the ${mode} environment.`,
+        }
+      }
+      return {
+        error: `${data.message || 'Failed to create Cashfree order'}${data.code ? ` (${data.code})` : ''}`,
+      }
     }
 
     return {

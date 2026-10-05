@@ -88,3 +88,76 @@ describe('Cashfree Webhook Signature Verification & Timing Attack Prevention', (
     expect(resLong).toBe(false)
   })
 })
+
+describe('Cashfree Configuration & Credential Sanitization', () => {
+  const originalEnv = { ...process.env }
+
+  beforeEach(() => {
+    process.env = { ...originalEnv }
+  })
+
+  afterEach(() => {
+    process.env = originalEnv
+  })
+
+  it('strips surrounding quotes and whitespace from environment variables', async () => {
+    const { getCashfreeConfig } = await import('@/lib/payments/cashfree')
+    process.env.CASHFREE_APP_ID = '  "APP_MOCK_TEST_ID_12345"  '
+    process.env.CASHFREE_SECRET_KEY = "  'cfsk_ma_prod_MOCK_TEST_SECRET_ABC_123'  "
+    process.env.NEXT_PUBLIC_CASHFREE_MODE = '  production  '
+
+    const config = getCashfreeConfig()
+    expect(config.appId).toBe('APP_MOCK_TEST_ID_12345')
+    expect(config.secretKey).toBe('cfsk_ma_prod_MOCK_TEST_SECRET_ABC_123')
+    expect(config.isProduction).toBe(true)
+    expect(config.apiBaseUrl).toBe('https://api.cashfree.com/pg')
+  })
+
+  it('detects swapped CASHFREE_APP_ID and CASHFREE_SECRET_KEY and auto-recovers', async () => {
+    const { getCashfreeConfig } = await import('@/lib/payments/cashfree')
+    process.env.CASHFREE_APP_ID = 'cfsk_ma_prod_MOCK_TEST_SECRET_ABC_123' // Swapped!
+    process.env.CASHFREE_SECRET_KEY = 'APP_MOCK_TEST_ID_12345'
+
+    const config = getCashfreeConfig()
+    expect(config.appId).toBe('APP_MOCK_TEST_ID_12345')
+    expect(config.secretKey).toBe('cfsk_ma_prod_MOCK_TEST_SECRET_ABC_123')
+  })
+
+  it('prevents sending production keys to sandbox endpoint even if sandbox URL is configured', async () => {
+    const { getCashfreeConfig } = await import('@/lib/payments/cashfree')
+    process.env.CASHFREE_APP_ID = 'APP_MOCK_TEST_ID_12345'
+    process.env.CASHFREE_SECRET_KEY = 'cfsk_ma_prod_MOCK_TEST_SECRET_ABC_123'
+    process.env.CASHFREE_API_URL = 'https://sandbox.cashfree.com/pg' // Mistakenly sandbox
+
+    const config = getCashfreeConfig()
+    expect(config.isProduction).toBe(true)
+    expect(config.apiBaseUrl).toBe('https://api.cashfree.com/pg')
+  })
+
+  it('fails fast when credentials contain unconfigured placeholder values', async () => {
+    const { createCashfreeOrder } = await import('@/lib/payments/cashfree')
+    process.env.CASHFREE_APP_ID = 'your_cashfree_app_id'
+    process.env.CASHFREE_SECRET_KEY = 'your_cashfree_secret_key'
+
+    const res = await createCashfreeOrder({
+      order_id: 'BB-TEST-001',
+      order_amount: 100,
+      order_currency: 'INR',
+      customer_details: {
+        customer_id: 'c1',
+        customer_name: 'Test',
+        customer_email: 'test@example.com',
+        customer_phone: '9876543210',
+      },
+      order_meta: {
+        return_url: 'http://localhost/return',
+        notify_url: 'http://localhost/notify',
+      },
+    })
+
+    expect('error' in res).toBe(true)
+    if ('error' in res) {
+      expect(res.error).toContain('placeholder')
+    }
+  })
+})
