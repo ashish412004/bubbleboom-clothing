@@ -2,13 +2,20 @@ import { Suspense } from 'react'
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { SignupForm } from './signup-form'
+import { getCurrentUser } from '@/lib/auth'
+import { redirect } from 'next/navigation'
 
 export const metadata = {
   title: 'Create Account | BUBBLE BOOM',
   description: 'Join Bubble Boom to access limited edition streetwear drops and manage orders.',
 }
 
-export default function SignupPage() {
+export default async function SignupPage() {
+  const user = await getCurrentUser()
+  if (user) {
+    redirect('/')
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-white text-black">
       <Header />

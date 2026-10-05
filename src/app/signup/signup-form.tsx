@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useCartStore } from '@/lib/cart-store'
+import { useAuthStore } from '@/lib/auth-store'
+import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 import {
   AlertCircle,
@@ -23,12 +25,6 @@ type SignupStep = 'details' | 'otp' | 'password'
 export function SignupForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const nextParam = searchParams.get('next')
-
-  const safeRedirect =
-    nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')
-      ? nextParam
-      : '/account'
 
   const refreshCart = useCartStore((s) => s.refreshCart)
 
@@ -45,6 +41,24 @@ export function SignupForm() {
   const [error, setError] = useState<string | null>(null)
   const [countdown, setCountdown] = useState(0)
 
+  // Redirect if already signed in
+  useEffect(() => {
+    async function checkExistingAuth() {
+      try {
+        const res = await fetch('/api/auth/session')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.user) {
+            router.replace('/')
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    checkExistingAuth()
+  }, [router])
+
   // Resend countdown timer effect
   useEffect(() => {
     if (countdown <= 0) return
@@ -57,6 +71,7 @@ export function SignupForm() {
   // STEP 1: Send Signup Email OTP
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loading) return
     setError(null)
 
     if (!agreeTerms) {
@@ -136,6 +151,7 @@ export function SignupForm() {
   // STEP 2: Verify Email OTP
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loading) return
     setError(null)
 
     const cleanOtp = otp.trim()
@@ -162,6 +178,19 @@ export function SignupForm() {
         throw new Error(data.error || 'Invalid or expired verification code.')
       }
 
+      if (data.session) {
+        try {
+          const supabase = createClient()
+          await supabase.auth.setSession(data.session)
+        } catch {
+          // ignore
+        }
+      }
+
+      if (data.user) {
+        useAuthStore.getState().setUser(data.user)
+      }
+
       toast.success('Email verified successfully! Now create your password.')
       setStep('password')
     } catch (err: any) {
@@ -174,6 +203,7 @@ export function SignupForm() {
   // STEP 3: Create & Confirm Password
   const handleCompleteRegistration = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loading) return
     setError(null)
 
     if (password.length < 8) {
@@ -196,6 +226,7 @@ export function SignupForm() {
           action: 'complete-signup-password',
           password,
           full_name: fullName.trim(),
+          email: email.trim().toLowerCase(),
         }),
       })
 
@@ -204,9 +235,24 @@ export function SignupForm() {
         throw new Error(data.error || 'Failed to complete registration.')
       }
 
+      if (data.session) {
+        try {
+          const supabase = createClient()
+          await supabase.auth.setSession(data.session)
+        } catch {
+          // ignore
+        }
+      }
+
+      if (data.user) {
+        useAuthStore.getState().setUser(data.user)
+      }
+
       toast.success('Registration complete! Welcome to Bubble Boom.')
       await refreshCart()
-      window.location.href = safeRedirect
+
+      // Redirect to homepage ("/") using history replacement so Back does not reopen registration
+      window.location.replace('/')
     } catch (err: any) {
       setError(err.message || 'Failed to complete password setup.')
       setLoading(false)
@@ -311,7 +357,7 @@ export function SignupForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors flex items-center justify-center gap-2 mt-4"
+            className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors flex items-center justify-center gap-2 mt-4 cursor-pointer"
           >
             <span>{loading ? 'Sending Code...' : 'Send Verification Code'}</span>
             <ArrowRight className="w-4 h-4" />
@@ -333,7 +379,7 @@ export function SignupForm() {
                 setStep('details')
                 setError(null)
               }}
-              className="text-xs text-black underline hover:text-neutral-700 whitespace-nowrap font-bold"
+              className="text-xs text-black underline hover:text-neutral-700 whitespace-nowrap font-bold cursor-pointer"
             >
               Change Email
             </button>
@@ -352,7 +398,7 @@ export function SignupForm() {
                 required
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                placeholder="Enter code from email"
+                placeholder="Enter 6-digit code"
                 disabled={loading}
                 className="w-full border border-black p-3 pl-10 text-base font-mono tracking-widest placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
               />
@@ -363,7 +409,7 @@ export function SignupForm() {
           <button
             type="submit"
             disabled={loading || otp.length < 6}
-            className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors flex items-center justify-center gap-2"
+            className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
             <span>{loading ? 'Verifying Code...' : 'Verify Code'}</span>
             <ArrowRight className="w-4 h-4" />
@@ -379,7 +425,7 @@ export function SignupForm() {
                 type="button"
                 onClick={handleResendOtp}
                 disabled={loading}
-                className="text-xs text-black font-mono underline hover:text-neutral-700 flex items-center justify-center gap-1 mx-auto"
+                className="text-xs text-black font-mono underline hover:text-neutral-700 flex items-center justify-center gap-1 mx-auto cursor-pointer"
               >
                 <RefreshCw className="w-3 h-3" />
                 <span>Resend Verification Code</span>
@@ -411,7 +457,7 @@ export function SignupForm() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3.5 text-neutral-500 hover:text-black"
+                className="absolute right-3 top-3.5 text-neutral-500 hover:text-black cursor-pointer"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -443,7 +489,7 @@ export function SignupForm() {
           <button
             type="submit"
             disabled={loading || password.length < 8 || password !== confirmPassword}
-            className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors flex items-center justify-center gap-2 mt-4"
+            className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors flex items-center justify-center gap-2 mt-4 cursor-pointer"
           >
             <span>{loading ? 'Finalizing Setup...' : 'Complete Registration'}</span>
             <CheckCircle2 className="w-4 h-4" />
@@ -456,7 +502,7 @@ export function SignupForm() {
         <p className="text-xs text-neutral-600">
           Already have an account?{' '}
           <Link
-            href={`/login${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ''}`}
+            href="/login"
             className="font-bold text-black underline hover:text-neutral-700"
           >
             Sign In Here

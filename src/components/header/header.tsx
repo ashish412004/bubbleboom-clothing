@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { Search, User, Heart, ShoppingBag, Menu, X } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useCartStore } from '@/lib/cart-store'
+import { useAuthStore } from '@/lib/auth-store'
 
 interface HeaderProps {
   announcementText?: string
@@ -19,10 +20,13 @@ export function Header({
   const [mounted, setMounted] = useState(false)
   const itemCount = useCartStore((state) => state.itemCount)
   const wishlistCount = useCartStore((state) => state.wishlistCount)
+  const authUser = useAuthStore((state) => state.user)
+  const refreshUser = useAuthStore((state) => state.refreshUser)
 
   useEffect(() => {
     setMounted(true)
-  }, [])
+    refreshUser()
+  }, [refreshUser])
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
@@ -135,10 +139,20 @@ export function Header({
 
             <Link
               href="/account"
-              className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black hidden sm:inline-flex"
-              aria-label="Customer account"
+              className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black hidden sm:inline-flex items-center gap-1.5"
+              aria-label={mounted && authUser ? `Account (${authUser.name})` : 'Customer account'}
             >
-              <User size={20} strokeWidth={2} />
+              <div className="relative flex items-center justify-center">
+                <User size={20} strokeWidth={2} />
+                {mounted && authUser && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-black rounded-full ring-2 ring-white" />
+                )}
+              </div>
+              {mounted && authUser && (
+                <span className="text-[11px] uppercase tracking-wider font-extrabold max-w-[85px] truncate hidden md:inline">
+                  {authUser.name ? authUser.name.split(' ')[0] : 'Account'}
+                </span>
+              )}
             </Link>
 
             <Link
@@ -257,8 +271,17 @@ export function Header({
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center text-xs uppercase tracking-wider font-semibold text-black hover:text-neutral-600 py-1"
               >
-                <User size={16} className="mr-3" />
-                My Account
+                <div className="relative mr-3 flex items-center justify-center">
+                  <User size={16} />
+                  {mounted && authUser && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-black rounded-full ring-1 ring-white" />
+                  )}
+                </div>
+                <span>
+                  {mounted && authUser
+                    ? `My Account (${authUser.name ? authUser.name.split(' ')[0] : 'Member'})`
+                    : 'My Account'}
+                </span>
               </Link>
               <Link
                 href="/wishlist"

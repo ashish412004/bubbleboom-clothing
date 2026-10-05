@@ -39,6 +39,41 @@ export async function createClient() {
 }
 export { createClient as createServerClient }
 
+export interface CookieToSet {
+  name: string
+  value: string
+  options: any
+}
+
+export async function createServerClientWithCookieCollector() {
+  const cookieStore = await cookies()
+  const cookiesToSetLater: CookieToSet[] = []
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder'
+
+  const client = createServerClient<Database>(
+    url,
+    key,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            try {
+              cookieStore.set(name, value, options)
+            } catch {}
+            cookiesToSetLater.push({ name, value, options })
+          })
+        },
+      },
+    }
+  )
+
+  return { client, cookiesToSetLater }
+}
+
 export async function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder'

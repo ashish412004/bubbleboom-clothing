@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
+import {
+  createServerClient,
+  createServerClientWithCookieCollector,
+  createServiceClient,
+  isSupabaseConfigured,
+} from '@/lib/supabase/server'
+import { mergeGuestCartIntoUserCart } from '@/lib/cart'
+import { mergeGuestWishlistIntoUserWishlist } from '@/lib/wishlist'
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -16,20 +23,31 @@ function formatOtpError(error: any): { error: string; status: number } {
 }
 
 export async function GET() {
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json({ user: null })
+  const cookieStore = await cookies()
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServerClient()
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (!error && user) {
+        return NextResponse.json({ user })
+      }
+    } catch {
+      // fallback to cookie
+    }
   }
 
-  try {
-    const supabase = await createServerClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) {
-      return NextResponse.json({ user: null })
+  const rawAuth = cookieStore.get('bb_auth_user')?.value
+  if (rawAuth) {
+    try {
+      const user = JSON.parse(rawAuth)
+      return NextResponse.json({ user })
+    } catch {
+      // ignore
     }
-    return NextResponse.json({ user })
-  } catch {
-    return NextResponse.json({ user: null })
   }
+
+  return NextResponse.json({ user: null })
 }
 
 export async function POST(request: NextRequest) {
@@ -45,8 +63,11 @@ export async function POST(request: NextRequest) {
 
       if (isSupabaseConfigured()) {
         try {
-          const supabase = await createServerClient()
+          const { client: supabase, cookiesToSetLater } = await createServerClientWithCookieCollector()
           await supabase.auth.signOut()
+          cookiesToSetLater.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
         } catch {
           // ignore
         }
@@ -62,8 +83,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createServerClient()
+    const { client: supabase, cookiesToSetLater } = await createServerClientWithCookieCollector()
     const serviceClient = await createServiceClient()
+
+    const applySupabaseCookies = (res: NextResponse) => {
+      cookiesToSetLater.forEach(({ name, value, options }) => {
+        res.cookies.set(name, value, options)
+      })
+    }
 
     // 2. SEND SIGNUP OTP
     if (action === 'send-signup-otp') {
@@ -112,10 +139,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: formatted.error }, { status: formatted.status })
       }
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         success: true,
         message: `A 6-digit verification code has been sent to ${cleanEmail}. Please check your inbox.`,
       })
+      applySupabaseCookies(response)
+      return response
     }
 
     // 3. VERIFY SIGNUP OTP
@@ -141,6 +170,8 @@ export async function POST(request: NextRequest) {
       }
 
       const response = NextResponse.json({ success: true, user: data.user, session: data.session })
+      applySupabaseCookies(response)
+
       response.cookies.set('bb_auth_user', JSON.stringify({
         id: data.user.id,
         email: data.user.email,
@@ -159,52 +190,122 @@ export async function POST(request: NextRequest) {
     if (action === 'complete-signup-password') {
       const cleanPassword = (password || '').trim()
       const cleanName = (full_name || '').trim()
+      const cleanEmail = (email || '').trim().toLowerCase()
 
       if (!cleanPassword || cleanPassword.length < 8) {
         return NextResponse.json({ error: 'Password must be at least 8 characters long.' }, { status: 400 })
       }
 
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-      if (userError || !user) {
+      // Step 4.1: Resolve authenticated user from session, cookie, or email lookup
+      let user = (await supabase.auth.getUser()).data.user
+      if (!user) {
+        const rawAuth = cookieStore.get('bb_auth_user')?.value
+        if (rawAuth) {
+          try {
+            const parsed = JSON.parse(rawAuth)
+            if (parsed.id) {
+              const { data: adminUser } = await serviceClient.auth.admin.getUserById(parsed.id)
+              user = adminUser?.user || null
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      if (!user && cleanEmail) {
+        try {
+          const { data: { users } } = await serviceClient.auth.admin.listUsers()
+          user = users?.find((u) => u.email?.toLowerCase() === cleanEmail) || null
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!user) {
         return NextResponse.json(
-          { error: 'Session expired. Please restart the verification process.' },
+          { error: 'Verification session expired. Please restart the email verification process.' },
           { status: 401 }
         )
       }
 
       const finalName = cleanName || user.user_metadata?.full_name || 'Member'
 
-      // Update password and complete onboarding flag in Supabase Auth
-      const { data: updated, error: updateError } = await supabase.auth.updateUser({
-        password: cleanPassword,
-        data: {
-          full_name: finalName,
-          onboarding_completed: true,
-        },
-      })
+      // Step 4.2: Update password and metadata securely via Supabase Admin API
+      const { data: updatedAdmin, error: updateError } = await serviceClient.auth.admin.updateUserById(
+        user.id,
+        {
+          password: cleanPassword,
+          email_confirm: true,
+          user_metadata: {
+            ...(user.user_metadata || {}),
+            full_name: finalName,
+            onboarding_completed: true,
+          },
+        }
+      )
 
       if (updateError) {
         return NextResponse.json({ error: updateError.message }, { status: 400 })
       }
 
-      // Upsert profile securely with role 'customer'
+      let activeUser = updatedAdmin.user
+      let activeSession = null
+
+      // Step 4.3: Establish/refresh valid Supabase session
+      const userEmail = user.email || cleanEmail
+      if (userEmail) {
+        const { data: signInData } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password: cleanPassword,
+        })
+        if (signInData?.session) {
+          activeSession = signInData.session
+          activeUser = signInData.user
+        }
+      }
+
+      // Step 4.4: Upsert profile securely with role 'customer' (Never grant admin access via registration)
       try {
         await serviceClient.from('profiles').upsert({
           id: user.id,
-          email: user.email || '',
+          email: userEmail || '',
           full_name: finalName,
           role: 'customer',
-        })
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' })
       } catch (profErr) {
         console.error('Profile upsert warning:', profErr)
       }
 
-      const response = NextResponse.json({ success: true, user: updated.user })
+      // Step 4.5: Merge guest cart and guest wishlist into user's account
+      const guestSessionId =
+        cookieStore.get('bb_session_id')?.value ||
+        cookieStore.get('bubbleboom_guest_session')?.value
+
+      if (guestSessionId && user.id) {
+        try {
+          await Promise.allSettled([
+            mergeGuestCartIntoUserCart(user.id, guestSessionId),
+            mergeGuestWishlistIntoUserWishlist(user.id, guestSessionId),
+          ])
+        } catch (mergeErr) {
+          console.warn('Guest cart/wishlist merge warning:', mergeErr)
+        }
+      }
+
+      const response = NextResponse.json({
+        success: true,
+        user: activeUser,
+        session: activeSession,
+      })
+      applySupabaseCookies(response)
+
       response.cookies.set('bb_auth_user', JSON.stringify({
         id: user.id,
-        email: user.email,
+        email: userEmail,
         user_metadata: {
-          ...user.user_metadata,
+          ...(activeUser?.user_metadata || user.user_metadata || {}),
           full_name: finalName,
           onboarding_completed: true,
         },
@@ -248,10 +349,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: formatted.error }, { status: formatted.status })
       }
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         success: true,
         message: `A 6-digit login code has been sent to ${cleanEmail}. Please check your inbox.`,
       })
+      applySupabaseCookies(response)
+      return response
     }
 
     // 6. VERIFY LOGIN OTP
@@ -276,7 +379,23 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // Merge guest cart & wishlist
+      const guestSessionId =
+        cookieStore.get('bb_session_id')?.value ||
+        cookieStore.get('bubbleboom_guest_session')?.value
+
+      if (guestSessionId && data.user.id) {
+        try {
+          await Promise.allSettled([
+            mergeGuestCartIntoUserCart(data.user.id, guestSessionId),
+            mergeGuestWishlistIntoUserWishlist(data.user.id, guestSessionId),
+          ])
+        } catch {}
+      }
+
       const response = NextResponse.json({ success: true, user: data.user, session: data.session })
+      applySupabaseCookies(response)
+
       response.cookies.set('bb_auth_user', JSON.stringify({
         id: data.user.id,
         email: data.user.email,
@@ -309,7 +428,23 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid email address or password.' }, { status: 401 })
       }
 
+      // Merge guest cart & wishlist
+      const guestSessionId =
+        cookieStore.get('bb_session_id')?.value ||
+        cookieStore.get('bubbleboom_guest_session')?.value
+
+      if (guestSessionId && data.user.id) {
+        try {
+          await Promise.allSettled([
+            mergeGuestCartIntoUserCart(data.user.id, guestSessionId),
+            mergeGuestWishlistIntoUserWishlist(data.user.id, guestSessionId),
+          ])
+        } catch {}
+      }
+
       const response = NextResponse.json({ success: true, user: data.user, session: data.session })
+      applySupabaseCookies(response)
+
       response.cookies.set('bb_auth_user', JSON.stringify({
         id: data.user.id,
         email: data.user.email,
@@ -354,10 +489,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: formatted.error }, { status: formatted.status })
       }
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         success: true,
         message: `A 6-digit recovery code has been sent to ${cleanEmail}. Please check your inbox.`,
       })
+      applySupabaseCookies(response)
+      return response
     }
 
     // 9. VERIFY FORGOT PASSWORD OTP
@@ -382,7 +519,9 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      return NextResponse.json({ success: true, verified: true })
+      const response = NextResponse.json({ success: true, verified: true })
+      applySupabaseCookies(response)
+      return response
     }
 
     // 10. RESET PASSWORD (using active OTP-verified session)
@@ -409,10 +548,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: updateError.message }, { status: 400 })
       }
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         success: true,
         message: 'Password updated successfully. Please sign in with your new password.',
       })
+      applySupabaseCookies(response)
+      return response
     }
 
     return NextResponse.json({ error: 'Unknown authentication action requested.' }, { status: 400 })

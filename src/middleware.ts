@@ -12,6 +12,14 @@ export async function middleware(request: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('your-project') || supabaseUrl.includes('placeholder')) {
+    // If Supabase not configured, still check bb_auth_user cookie for redirects
+    const hasAuthCookie = Boolean(request.cookies.get('bb_auth_user')?.value)
+    if (
+      (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup') &&
+      hasAuthCookie
+    ) {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
     return response
   }
 
@@ -24,7 +32,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
+          cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
           response = NextResponse.next({
@@ -43,6 +51,19 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  const hasAuth = Boolean(user || request.cookies.get('bb_auth_user')?.value)
+
+  // Redirect already signed-in customer away from /login and /signup to homepage
+  if (
+    request.nextUrl.pathname === '/login' ||
+    request.nextUrl.pathname === '/signup'
+  ) {
+    if (hasAuth) {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+    return response
+  }
 
   // Protect admin routes
   if (request.nextUrl.pathname.startsWith('/admin')) {
@@ -71,7 +92,6 @@ export async function middleware(request: NextRequest) {
 
   // Protect account routes
   if (request.nextUrl.pathname.startsWith('/account')) {
-    const hasAuth = user || request.cookies.get('bb_auth_user')?.value
     if (!hasAuth) {
       return NextResponse.redirect(new URL('/login?next=/account', request.url))
     }
@@ -81,5 +101,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/account/:path*'],
+  matcher: ['/admin/:path*', '/account/:path*', '/login', '/signup'],
 }

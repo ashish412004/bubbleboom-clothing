@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useCartStore } from '@/lib/cart-store'
+import { useAuthStore } from '@/lib/auth-store'
 import toast from 'react-hot-toast'
 import {
   AlertCircle,
@@ -32,6 +33,24 @@ export function LoginForm() {
       : '/account'
 
   const refreshCart = useCartStore((s) => s.refreshCart)
+
+  // Redirect if already signed in
+  useEffect(() => {
+    async function checkExistingAuth() {
+      try {
+        const res = await fetch('/api/auth/session')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.user) {
+            router.replace(safeRedirect || '/')
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    checkExistingAuth()
+  }, [router, safeRedirect])
 
   const [authMode, setAuthMode] = useState<'otp' | 'password'>(
     isAdminTarget ? 'password' : 'otp'
@@ -163,6 +182,17 @@ export function LoginForm() {
         throw new Error(data.error || 'Invalid or expired login code.')
       }
 
+      if (data.session) {
+        try {
+          const supabase = createClient()
+          await supabase.auth.setSession(data.session)
+        } catch {}
+      }
+
+      if (data.user) {
+        useAuthStore.getState().setUser(data.user)
+      }
+
       toast.success('Signed in successfully!')
       await refreshCart()
       window.location.href = safeRedirect
@@ -204,6 +234,17 @@ export function LoginForm() {
       const data = await res.json()
       if (!res.ok || data.error) {
         throw new Error(data.error || 'Invalid email or password.')
+      }
+
+      if (data.session) {
+        try {
+          const supabase = createClient()
+          await supabase.auth.setSession(data.session)
+        } catch {}
+      }
+
+      if (data.user) {
+        useAuthStore.getState().setUser(data.user)
       }
 
       toast.success('Signed in successfully!')
