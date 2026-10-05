@@ -33,19 +33,30 @@ export default async function HomePage() {
       <main className="flex-1">
         {/* 1. Large Editorial Hero Section */}
         <section className="relative min-h-[75vh] sm:min-h-[85vh] bg-black text-white flex items-center justify-center overflow-hidden">
-          {/* Hero Photography Background */}
+          {/* Hero Photography Background (Responsive: Mobile & Desktop) */}
           <div className="absolute inset-0 z-0">
+            {/* Desktop Landscape Background */}
             <Image
               src="/images/brand/hero-bg.png"
-              alt="Bubble Boom Streetwear Hero Background"
+              alt="Bubble Boom Streetwear Desktop Hero Background"
               fill
               priority
               quality={90}
-              className="object-cover object-center"
+              className="hidden sm:block object-cover object-center"
+              sizes="100vw"
+            />
+            {/* Mobile Vertical 9:16 Background */}
+            <Image
+              src="/images/brand/hero-bg-mobile.jpg"
+              alt="Bubble Boom Streetwear Mobile Hero Background"
+              fill
+              priority
+              quality={90}
+              className="block sm:hidden object-cover object-center"
               sizes="100vw"
             />
             {/* Elegant dark gradient overlay for optimal text legibility */}
-            <div className="absolute inset-0 bg-black/60 bg-gradient-to-t from-black via-black/50 to-black/70" />
+            <div className="absolute inset-0 bg-black/55 bg-gradient-to-t from-black via-black/45 to-black/65" />
           </div>
 
           {/* Subtle geometric star overlay from brand monogram */}
