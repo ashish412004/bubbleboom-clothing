@@ -3,23 +3,22 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
-import { User, Lock, Mail, Phone, CheckCircle2, AlertCircle } from 'lucide-react'
+import { User, Lock, Mail, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react'
 
 interface ProfileFormProps {
   initialName: string
   initialEmail: string
-  initialPhone: string
 }
 
-export function ProfileForm({ initialName, initialEmail, initialPhone }: ProfileFormProps) {
+export function ProfileForm({ initialName, initialEmail }: ProfileFormProps) {
   const [fullName, setFullName] = useState(initialName)
-  const [phone, setPhone] = useState(initialPhone)
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [profileMsg, setProfileMsg] = useState<string | null>(null)
 
   // Password state
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loadingPassword, setLoadingPassword] = useState(false)
   const [passwordMsg, setPasswordMsg] = useState<string | null>(null)
   const [passwordErr, setPasswordErr] = useState<string | null>(null)
@@ -34,7 +33,6 @@ export function ProfileForm({ initialName, initialEmail, initialPhone }: Profile
       const { error } = await supabase.auth.updateUser({
         data: {
           full_name: fullName,
-          phone,
         },
       })
 
@@ -74,7 +72,7 @@ export function ProfileForm({ initialName, initialEmail, initialPhone }: Profile
 
       if (error) throw error
 
-      setPasswordMsg('Your password has been changed.')
+      setPasswordMsg('Your password has been changed securely.')
       setNewPassword('')
       setConfirmPassword('')
       toast.success('Password updated')
@@ -135,22 +133,6 @@ export function ProfileForm({ initialName, initialEmail, initialPhone }: Profile
             </span>
           </div>
 
-          <div>
-            <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-              Contact Phone Number
-            </label>
-            <div className="relative">
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="10-digit mobile number"
-                className="w-full border border-black p-2.5 pl-10 text-xs focus:outline-none"
-              />
-              <Phone className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
-            </div>
-          </div>
-
           <div className="pt-2">
             <button
               type="submit"
@@ -163,7 +145,7 @@ export function ProfileForm({ initialName, initialEmail, initialPhone }: Profile
         </form>
       </div>
 
-      {/* Security / Password Form */}
+      {/* Password Change Form */}
       <div className="border border-black bg-white p-6">
         <h2 className="text-base uppercase tracking-tight font-black pb-4 mb-4 border-b border-neutral-200">
           Security &amp; Password
@@ -177,52 +159,62 @@ export function ProfileForm({ initialName, initialEmail, initialPhone }: Profile
         )}
 
         {passwordErr && (
-          <div className="mb-4 p-3 bg-neutral-100 border-l-4 border-black text-xs text-black flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
+          <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-600 text-xs text-red-900 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
             <span>{passwordErr}</span>
           </div>
         )}
 
         <form onSubmit={handleUpdatePassword} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-                New Password (Min 8 Chars)
-              </label>
-              <div className="relative">
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full border border-black p-2.5 pl-10 text-xs focus:outline-none"
-                />
-                <Lock className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
-              </div>
+          <div>
+            <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
+              New Password
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
+                className="w-full border border-black p-2.5 pl-10 pr-10 text-xs focus:outline-none"
+              />
+              <Lock className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-neutral-500 hover:text-black"
+              >
+                {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
             </div>
+            <span className="text-[10px] text-neutral-400 font-mono mt-1 block">
+              Use at least 8 characters.
+            </span>
+          </div>
 
-            <div>
-              <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-                Confirm New Password
-              </label>
-              <div className="relative">
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full border border-black p-2.5 pl-10 text-xs focus:outline-none"
-                />
-                <Lock className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
-              </div>
+          <div>
+            <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
+              Confirm New Password
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter new password"
+                autoComplete="new-password"
+                className="w-full border border-black p-2.5 pl-10 text-xs focus:outline-none"
+              />
+              <Lock className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
             </div>
           </div>
 
           <div className="pt-2">
             <button
               type="submit"
-              disabled={loadingPassword || !newPassword}
-              className="bg-black text-white px-6 py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed transition-colors"
+              disabled={loadingPassword || !newPassword || !confirmPassword}
+              className="bg-black text-white px-6 py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors"
             >
               {loadingPassword ? 'Updating...' : 'Update Password'}
             </button>

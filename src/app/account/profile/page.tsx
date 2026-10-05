@@ -47,7 +47,6 @@ export default async function ProfilePage() {
               <ProfileForm
                 initialName={user.user_metadata?.full_name || ''}
                 initialEmail={user.email || ''}
-                initialPhone={user.user_metadata?.phone || ''}
               />
             </div>
           </div>

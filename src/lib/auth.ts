@@ -96,6 +96,18 @@ export async function updatePassword(newPassword: string) {
 }
 
 export async function getCurrentUser() {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServerClient()
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (!error && user) {
+        return user
+      }
+    } catch {
+      // fallback
+    }
+  }
+
   try {
     const cookieStore = await cookies()
     const rawAuth = cookieStore.get('bb_auth_user')?.value
@@ -106,20 +118,7 @@ export async function getCurrentUser() {
     // ignore
   }
 
-  if (!isSupabaseConfigured()) {
-    return null
-  }
-
-  try {
-    const supabase = await createServerClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error) {
-      return null
-    }
-    return user
-  } catch {
-    return null
-  }
+  return null
 }
 
 export async function getUserProfile(userId: string) {
