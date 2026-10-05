@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { getCurrentUser, isAdmin } from '@/lib/auth'
 import { deleteProduct, saveDevProduct } from '@/lib/products'
+import { getSafeImageUrl } from '@/lib/utils'
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
       const newImages = (images || []).map((img: any, idx: number) => ({
         id: `img-${Date.now()}-${idx}`,
         product_id: newProdId,
-        image_url: typeof img === 'string' ? img : img.image_url,
+        image_url: getSafeImageUrl(typeof img === 'string' ? img : img.image_url),
         alt_text: product.name,
         sort_order: idx,
       }))
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
     if (images && images.length > 0) {
       const imagesToInsert = images.map((img: any, idx: number) => ({
         product_id: createdProduct.id,
-        image_url: typeof img === 'string' ? img : img.image_url,
+        image_url: getSafeImageUrl(typeof img === 'string' ? img : img.image_url),
         alt_text: product.name,
         sort_order: idx,
       }))

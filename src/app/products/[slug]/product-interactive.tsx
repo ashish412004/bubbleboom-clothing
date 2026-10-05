@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Heart, ShoppingBag, Truck, Ruler, Check, X, Shield, RefreshCw } from 'lucide-react'
-import { formatPrice, formatDiscount } from '@/lib/utils'
+import { formatPrice, formatDiscount, getSafeImageUrl } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
 
@@ -45,7 +45,10 @@ export function ProductInteractive({ product }: { product: ProductDetails }) {
   const wishlistCount = useCartStore((state) => state.wishlistCount)
 
   // Images
-  const images = product.images?.length > 0 ? product.images : []
+  const images = (product.images?.length > 0 ? product.images : []).map((img) => ({
+    ...img,
+    image_url: getSafeImageUrl(img.image_url),
+  }))
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
 
   // Extract distinct colors and sizes

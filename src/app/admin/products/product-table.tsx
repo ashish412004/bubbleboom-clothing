@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Trash2, ExternalLink, Search, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react'
+import { getSafeImageUrl } from '@/lib/utils'
 
 interface ProductTableProps {
   initialProducts: any[]
@@ -207,9 +208,7 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
             <tbody className="divide-y divide-neutral-200">
               {filteredProducts.length > 0 ? (
                 filteredProducts.map((p: any) => {
-                  const firstImage =
-                    p.images?.[0]?.image_url ||
-                    'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&q=80'
+                  const firstImage = getSafeImageUrl(p.images?.[0]?.image_url)
                   const totalStock =
                     p.variants?.reduce((sum: number, v: any) => sum + (v.stock || 0), 0) || 0
                   const isUpdating = updatingId === p.id

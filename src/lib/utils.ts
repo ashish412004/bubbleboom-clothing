@@ -26,3 +26,21 @@ export function generateSlug(text: string): string {
     .replace(/-+/g, '-')
     .trim()
 }
+
+export function getSafeImageUrl(
+  url: any,
+  fallback: string = 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&q=80'
+): string {
+  if (!url || typeof url !== 'string') return fallback
+  const trimmed = url.trim()
+  if (!trimmed) return fallback
+  // Discard local Windows/disk file paths like C:\Users\...
+  if (trimmed.includes('\\') || /^[a-zA-Z]:/.test(trimmed)) {
+    return fallback
+  }
+  // Valid web path or relative public asset
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
+    return trimmed
+  }
+  return fallback
+}

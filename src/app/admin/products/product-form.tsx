@@ -93,6 +93,12 @@ export function ProductForm({ categories }: ProductFormProps) {
       return
     }
 
+    const hasDiskPath = imageUrls.some((img) => img && (img.includes('\\') || /^[a-zA-Z]:/.test(img)))
+    if (hasDiskPath) {
+      toast.error('Local disk paths (e.g. C:\\...) cannot be viewed by browsers. Please use web URLs (https://...) or store images in /images/products/...', { duration: 6000 })
+      return
+    }
+
     setLoading(true)
 
     try {

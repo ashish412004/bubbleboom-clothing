@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Heart } from 'lucide-react'
-import { formatPrice, formatDiscount } from '@/lib/utils'
+import { formatPrice, formatDiscount, getSafeImageUrl } from '@/lib/utils'
 import { useState } from 'react'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
@@ -68,7 +68,7 @@ export function ProductCard({ product }: ProductCardProps) {
         {firstImage && !imageError ? (
           <>
             <Image
-              src={firstImage.image_url}
+              src={getSafeImageUrl(firstImage.image_url)}
               alt={firstImage.alt_text || product.name}
               fill
               onError={() => setImageError(true)}
@@ -77,7 +77,7 @@ export function ProductCard({ product }: ProductCardProps) {
             />
             {secondImage && (
               <Image
-                src={secondImage.image_url}
+                src={getSafeImageUrl(secondImage.image_url)}
                 alt={secondImage.alt_text || product.name}
                 fill
                 className="object-cover object-center opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out"

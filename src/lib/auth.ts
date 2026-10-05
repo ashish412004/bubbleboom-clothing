@@ -171,6 +171,11 @@ export async function isAdmin(userId: string): Promise<boolean> {
     return process.env.NODE_ENV !== 'production'
   }
 
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)
+  if (!isUuid) {
+    return process.env.NODE_ENV !== 'production'
+  }
+
   try {
     const supabase = await createServiceClient()
 
@@ -198,10 +203,12 @@ export async function isAdmin(userId: string): Promise<boolean> {
 
     // 3. Fallback: check against ADMIN_EMAIL env variable if set
     if (process.env.ADMIN_EMAIL) {
-      const { data: userData } = await supabase.auth.admin.getUserById(userId)
-      if (userData?.user?.email === process.env.ADMIN_EMAIL) {
-        return true
-      }
+      try {
+        const { data: userData } = await supabase.auth.admin.getUserById(userId)
+        if (userData?.user?.email?.toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase()) {
+          return true
+        }
+      } catch {}
     }
 
     return false
