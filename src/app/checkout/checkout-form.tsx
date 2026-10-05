@@ -1,9 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ShieldCheck, Truck, CreditCard, Banknote, Tag, ArrowRight, Navigation } from 'lucide-react'
+import {
+  ShieldCheck,
+  CreditCard,
+  Banknote,
+  Tag,
+  ArrowRight,
+  Navigation,
+  AlertCircle,
+  Edit2,
+  CheckCircle2,
+  Loader2,
+  ShoppingBag
+} from 'lucide-react'
 import { formatPrice, getSafeImageUrl } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
@@ -16,6 +29,8 @@ interface CartItemData {
     sku: string
     color: string
     size: string
+    stock?: number
+    is_active?: boolean
     product: {
       name: string
       selling_price: number
@@ -57,6 +72,10 @@ export function CheckoutForm({
   const router = useRouter()
   const setItemCount = useCartStore((state) => state.setItemCount)
 
+  // Double click lock ref
+  const isSubmittingRef = useRef(false)
+  const addressSectionRef = useRef<HTMLDivElement>(null)
+
   // Form fields
   const [fullName, setFullName] = useState(userName)
   const [email, setEmail] = useState(userEmail)
@@ -69,6 +88,9 @@ export function CheckoutForm({
   const [paymentMethod, setPaymentMethod] = useState<'cashfree' | 'cod'>('cashfree')
   const [notes, setNotes] = useState('')
 
+  // Field validation errors
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
   // Coupon state
   const [couponCode, setCouponCode] = useState(summary.coupon_code || '')
   const [couponDiscountPaise, setCouponDiscountPaise] = useState(summary.coupon_discount_paise || 0)
@@ -76,13 +98,108 @@ export function CheckoutForm({
 
   const [pinLoading, setPinLoading] = useState(false)
   const [pinSuccessMsg, setPinSuccessMsg] = useState('')
+  const [locating, setLocating] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  // Out of stock verification
+  const isItemOutOfStock = (item: CartItemData) => {
+    const stock = (item.variant as any)?.stock
+    return typeof stock === 'number' && stock <= 0
+  }
+  const outOfStockItems = items.filter(isItemOutOfStock)
+  const hasOutOfStockItems = outOfStockItems.length > 0
+
+  // Check if address is complete for review
+  const isAddressComplete = Boolean(
+    fullName.trim().length >= 2 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
+    phone.replace(/\D/g, '').length === 10 &&
+    addressLine1.trim().length >= 5 &&
+    city.trim().length >= 2 &&
+    state.trim().length > 0 &&
+    /^[1-9][0-9]{5}$/.test(pinCode.trim())
+  )
+
+  const validateField = (field: string, val: string): string => {
+    switch (field) {
+      case 'fullName':
+        if (!val.trim()) return 'Full name is required.'
+        if (val.trim().length < 2) return 'Full name must be at least 2 characters.'
+        return ''
+      case 'email':
+        if (!val.trim()) return 'Email address is required.'
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim())) return 'Enter a valid email address (e.g. name@domain.com).'
+        return ''
+      case 'phone': {
+        const clean = val.replace(/\D/g, '')
+        if (!clean) return 'Mobile number is required.'
+        if (clean.length !== 10 || !/^[6-9]\d{9}$/.test(clean)) {
+          return 'Enter a valid 10-digit Indian mobile number (starts with 6-9).'
+        }
+        return ''
+      }
+      case 'addressLine1':
+        if (!val.trim()) return 'Street address or flat number is required.'
+        if (val.trim().length < 5) return 'Please provide more details in your address.'
+        return ''
+      case 'city':
+        if (!val.trim()) return 'City is required.'
+        return ''
+      case 'state':
+        if (!val.trim()) return 'Please select a state.'
+        return ''
+      case 'pinCode': {
+        const cleanPin = val.trim()
+        if (!cleanPin) return 'PIN code is required.'
+        if (!/^[1-9][0-9]{5}$/.test(cleanPin)) {
+          return 'Enter a valid 6-digit Indian PIN code (e.g. 110001).'
+        }
+        return ''
+      }
+      default:
+        return ''
+    }
+  }
+
+  const handleFieldChange = (field: string, val: string, setter: (v: string) => void) => {
+    setter(val)
+    if (errors[field]) {
+      setErrors((prev) => {
+        const next = { ...prev }
+        delete next[field]
+        return next
+      })
+    }
+  }
+
+  const handleBlur = (field: string, val: string) => {
+    const err = validateField(field, val)
+    setErrors((prev) => {
+      if (err) return { ...prev, [field]: err }
+      const next = { ...prev }
+      delete next[field]
+      return next
+    })
+  }
 
   const handlePinChange = async (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 6)
     setPinCode(clean)
     setPinSuccessMsg('')
+    if (errors.pinCode) {
+      setErrors((prev) => {
+        const next = { ...prev }
+        delete next.pinCode
+        return next
+      })
+    }
 
     if (clean.length === 6) {
+      if (!/^[1-9][0-9]{5}$/.test(clean)) {
+        setErrors((prev) => ({ ...prev, pinCode: 'PIN code must not start with 0.' }))
+        return
+      }
       setPinLoading(true)
       try {
         const res = await fetch(`https://api.postalpincode.in/pincode/${clean}`)
@@ -91,13 +208,25 @@ export function CheckoutForm({
           const po = data[0].PostOffice[0]
           const detectedCity = po.District || po.Block || po.Name
           const detectedState = po.State
-          if (detectedCity) setCity(detectedCity)
+          if (detectedCity) {
+            setCity(detectedCity)
+            setErrors((prev) => {
+              const next = { ...prev }
+              delete next.city
+              return next
+            })
+          }
           if (detectedState) {
             const matchedState = indianStates.find(
               (s) => s.toLowerCase() === detectedState.toLowerCase() ||
                      (detectedState.toLowerCase() === 'delhi' && s.includes('Delhi'))
             )
             setState(matchedState || detectedState)
+            setErrors((prev) => {
+              const next = { ...prev }
+              delete next.state
+              return next
+            })
           }
           setPinSuccessMsg(`✓ ${detectedCity}, ${detectedState}`)
         } else {
@@ -110,8 +239,6 @@ export function CheckoutForm({
       }
     }
   }
-
-  const [locating, setLocating] = useState(false)
 
   const handleDetectLocation = () => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
@@ -133,9 +260,19 @@ export function CheckoutForm({
           const addr = data.address
           if (addr.address_line1) {
             setAddressLine1(addr.address_line1)
+            setErrors((prev) => {
+              const next = { ...prev }
+              delete next.addressLine1
+              return next
+            })
           }
           if (addr.city) {
             setCity(addr.city)
+            setErrors((prev) => {
+              const next = { ...prev }
+              delete next.city
+              return next
+            })
           }
           if (addr.state) {
             const matchedState = indianStates.find(
@@ -145,10 +282,20 @@ export function CheckoutForm({
                 addr.state.toLowerCase().includes(s.toLowerCase())
             )
             setState(matchedState || addr.state)
+            setErrors((prev) => {
+              const next = { ...prev }
+              delete next.state
+              return next
+            })
           }
           if (addr.pin_code && addr.pin_code.length === 6) {
             setPinCode(addr.pin_code)
             setPinSuccessMsg(`✓ ${addr.city || ''}, ${addr.state || ''}`)
+            setErrors((prev) => {
+              const next = { ...prev }
+              delete next.pinCode
+              return next
+            })
           }
           toast.success(`📍 Location detected: ${addr.city || addr.state || 'Address filled'}`)
         } catch (err: any) {
@@ -172,9 +319,6 @@ export function CheckoutForm({
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     )
   }
-
-  const [loading, setLoading] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
 
   // Dynamically compute totals
   const subtotalPaise = summary.subtotal_paise
@@ -208,34 +352,48 @@ export function CheckoutForm({
     e.preventDefault()
     setErrorMessage('')
 
-    // 1. Validation
-    if (!fullName.trim()) {
-      setErrorMessage('Please enter your full name.')
-      return
-    }
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setErrorMessage('Please enter a valid email address.')
-      return
-    }
-    const cleanPhone = phone.replace(/\D/g, '')
-    if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
-      setErrorMessage('Please enter a valid 10-digit Indian mobile number.')
-      return
-    }
-    if (!addressLine1.trim()) {
-      setErrorMessage('Please enter your street address / flat details.')
-      return
-    }
-    if (!city.trim() || !state.trim()) {
-      setErrorMessage('Please provide your city and state.')
-      return
-    }
-    if (!/^[1-9][0-9]{5}$/.test(pinCode.trim())) {
-      setErrorMessage('Please enter a valid 6-digit Indian PIN code.')
+    // Prevent double submissions
+    if (isSubmittingRef.current || loading) {
       return
     }
 
+    // Check for out-of-stock items in cart
+    if (hasOutOfStockItems) {
+      setErrorMessage('One or more items in your cart are currently out of stock. Please edit your bag before continuing.')
+      toast.error('Cannot proceed: Out-of-stock items in bag.')
+      return
+    }
+
+    // Full validation
+    const newErrors: Record<string, string> = {}
+    const nameErr = validateField('fullName', fullName)
+    if (nameErr) newErrors.fullName = nameErr
+    const emailErr = validateField('email', email)
+    if (emailErr) newErrors.email = emailErr
+    const phoneErr = validateField('phone', phone)
+    if (phoneErr) newErrors.phone = phoneErr
+    const addrErr = validateField('addressLine1', addressLine1)
+    if (addrErr) newErrors.addressLine1 = addrErr
+    const pinErr = validateField('pinCode', pinCode)
+    if (pinErr) newErrors.pinCode = pinErr
+    const cityErr = validateField('city', city)
+    if (cityErr) newErrors.city = cityErr
+    const stateErr = validateField('state', state)
+    if (stateErr) newErrors.state = stateErr
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      const firstField = Object.keys(newErrors)[0]
+      setErrorMessage(newErrors[firstField])
+      toast.error('Please complete all required address fields.')
+      addressSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
+      return
+    }
+
+    isSubmittingRef.current = true
     setLoading(true)
+
+    const cleanPhone = phone.replace(/\D/g, '')
 
     try {
       const res = await fetch('/api/checkout', {
@@ -260,6 +418,7 @@ export function CheckoutForm({
 
       if (!res.ok || data.error) {
         setErrorMessage(data.error || 'Checkout failed. Please try again.')
+        isSubmittingRef.current = false
         setLoading(false)
         return
       }
@@ -276,6 +435,7 @@ export function CheckoutForm({
       if (paymentMethod === 'cashfree') {
         if (!data.payment_session_id) {
           setErrorMessage('Payment session could not be established with Cashfree. Please try again.')
+          isSubmittingRef.current = false
           setLoading(false)
           return
         }
@@ -296,17 +456,20 @@ export function CheckoutForm({
 
           if (checkoutResult?.error) {
             setErrorMessage(checkoutResult.error.message || 'Payment checkout could not be opened.')
+            isSubmittingRef.current = false
             setLoading(false)
             return
           }
         } catch (sdkErr: any) {
           console.error('Cashfree checkout initiation error:', sdkErr)
           setErrorMessage(sdkErr.message || 'Failed to open Cashfree payment gateway. Please try again.')
+          isSubmittingRef.current = false
           setLoading(false)
         }
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Network error during checkout.')
+      isSubmittingRef.current = false
       setLoading(false)
     }
   }
@@ -323,7 +486,7 @@ export function CheckoutForm({
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-10">
       {/* Left Column: Delivery & Payment Details */}
-      <div className="lg:col-span-7 space-y-8">
+      <div className="lg:col-span-7 space-y-8" ref={addressSectionRef}>
         {/* Contact Info */}
         <section className="bg-white border border-neutral-200 p-6 space-y-4">
           <h2 className="text-xs uppercase tracking-widest font-extrabold text-black pb-2 border-b border-neutral-200">
@@ -336,12 +499,20 @@ export function CheckoutForm({
               </label>
               <input
                 type="text"
-                required
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(e) => handleFieldChange('fullName', e.target.value, setFullName)}
+                onBlur={(e) => handleBlur('fullName', e.target.value)}
                 placeholder="e.g. Mihir Sharma"
-                className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
+                className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
+                  errors.fullName ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
+                }`}
               />
+              {errors.fullName && (
+                <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1 font-semibold">
+                  <AlertCircle size={12} className="shrink-0" />
+                  <span>{errors.fullName}</span>
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs uppercase tracking-wider font-bold mb-1">
@@ -349,12 +520,20 @@ export function CheckoutForm({
               </label>
               <input
                 type="email"
-                required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => handleFieldChange('email', e.target.value, setEmail)}
+                onBlur={(e) => handleBlur('email', e.target.value)}
                 placeholder="mihir@example.com"
-                className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
+                className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
+                  errors.email ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
+                }`}
               />
+              {errors.email && (
+                <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1 font-semibold">
+                  <AlertCircle size={12} className="shrink-0" />
+                  <span>{errors.email}</span>
+                </p>
+              )}
             </div>
           </div>
           <div>
@@ -362,22 +541,33 @@ export function CheckoutForm({
               Mobile Number (10 Digits) *
             </label>
             <div className="flex">
-              <span className="inline-flex items-center px-3 border border-r-0 border-neutral-300 bg-neutral-100 text-xs font-semibold text-neutral-600">
+              <span className={`inline-flex items-center px-3 border border-r-0 text-xs font-semibold ${
+                errors.phone ? 'border-red-500 bg-red-50 text-red-700' : 'border-neutral-300 bg-neutral-100 text-neutral-600'
+              }`}>
                 +91
               </span>
               <input
                 type="tel"
                 maxLength={10}
-                required
                 value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => handleFieldChange('phone', e.target.value.replace(/\D/g, ''), setPhone)}
+                onBlur={(e) => handleBlur('phone', e.target.value)}
                 placeholder="9876543210"
-                className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
+                className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
+                  errors.phone ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
+                }`}
               />
             </div>
-            <p className="text-[11px] text-neutral-400 mt-1">
-              Used for courier delivery updates and Cashfree verification OTP.
-            </p>
+            {errors.phone ? (
+              <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1 font-semibold">
+                <AlertCircle size={12} className="shrink-0" />
+                <span>{errors.phone}</span>
+              </p>
+            ) : (
+              <p className="text-[11px] text-neutral-400 mt-1">
+                Used for courier delivery updates and Cashfree verification OTP.
+              </p>
+            )}
           </div>
         </section>
 
@@ -403,12 +593,20 @@ export function CheckoutForm({
             </label>
             <input
               type="text"
-              required
               value={addressLine1}
-              onChange={(e) => setAddressLine1(e.target.value)}
+              onChange={(e) => handleFieldChange('addressLine1', e.target.value, setAddressLine1)}
+              onBlur={(e) => handleBlur('addressLine1', e.target.value)}
               placeholder="e.g. Flat 402, Block C, Green Park Residency"
-              className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
+              className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
+                errors.addressLine1 ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
+              }`}
             />
+            {errors.addressLine1 && (
+              <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1 font-semibold">
+                <AlertCircle size={12} className="shrink-0" />
+                <span>{errors.addressLine1}</span>
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-xs uppercase tracking-wider font-bold mb-1">
@@ -442,12 +640,20 @@ export function CheckoutForm({
               <input
                 type="text"
                 maxLength={6}
-                required
                 value={pinCode}
                 onChange={(e) => handlePinChange(e.target.value)}
+                onBlur={(e) => handleBlur('pinCode', e.target.value)}
                 placeholder="e.g. 110001"
-                className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
+                className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
+                  errors.pinCode ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
+                }`}
               />
+              {errors.pinCode && (
+                <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1 font-semibold">
+                  <AlertCircle size={12} className="shrink-0" />
+                  <span>{errors.pinCode}</span>
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs uppercase tracking-wider font-bold mb-1">
@@ -455,28 +661,44 @@ export function CheckoutForm({
               </label>
               <input
                 type="text"
-                required
                 value={city}
-                onChange={(e) => setCity(e.target.value)}
+                onChange={(e) => handleFieldChange('city', e.target.value, setCity)}
+                onBlur={(e) => handleBlur('city', e.target.value)}
                 placeholder="New Delhi"
-                className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
+                className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
+                  errors.city ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
+                }`}
               />
+              {errors.city && (
+                <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1 font-semibold">
+                  <AlertCircle size={12} className="shrink-0" />
+                  <span>{errors.city}</span>
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs uppercase tracking-wider font-bold mb-1">
                 State *
               </label>
               <select
-                required
                 value={state}
-                onChange={(e) => setState(e.target.value)}
-                className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
+                onChange={(e) => handleFieldChange('state', e.target.value, setState)}
+                onBlur={(e) => handleBlur('state', e.target.value)}
+                className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
+                  errors.state ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
+                }`}
               >
                 <option value="">Select State</option>
                 {indianStates.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
+              {errors.state && (
+                <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1 font-semibold">
+                  <AlertCircle size={12} className="shrink-0" />
+                  <span>{errors.state}</span>
+                </p>
+              )}
             </div>
           </div>
           <div>
@@ -491,6 +713,55 @@ export function CheckoutForm({
               className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
             />
           </div>
+        </section>
+
+        {/* Address & Delivery Review Box */}
+        <section className="bg-neutral-50 border border-neutral-300 p-5 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
+            <div className="flex items-center gap-2">
+              <CheckCircle2
+                size={18}
+                className={isAddressComplete ? 'text-emerald-600' : 'text-neutral-400'}
+              />
+              <span className="text-xs uppercase tracking-wider font-extrabold text-black">
+                Review Delivery Destination
+              </span>
+            </div>
+            {isAddressComplete && (
+              <button
+                type="button"
+                onClick={() => {
+                  addressSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
+                }}
+                className="text-[11px] font-bold text-black underline flex items-center gap-1 hover:text-neutral-600 cursor-pointer"
+              >
+                <Edit2 size={12} />
+                Edit Address
+              </button>
+            )}
+          </div>
+          {isAddressComplete ? (
+            <div className="text-xs space-y-1.5 pt-1 text-neutral-800">
+              <p className="font-extrabold text-black flex items-center gap-2">
+                <span>{fullName}</span>
+                <span className="text-neutral-400 font-normal">|</span>
+                <span className="font-mono text-neutral-700">+91 {phone.replace(/\D/g, '')}</span>
+              </p>
+              <p className="text-neutral-700 leading-relaxed">
+                {addressLine1}{addressLine2 ? `, ${addressLine2}` : ''}
+              </p>
+              <p className="font-semibold text-neutral-900">
+                {city}, {state} &mdash; <span className="font-mono font-bold">{pinCode}</span>
+              </p>
+              <p className="text-[11px] text-neutral-500 pt-1 border-t border-neutral-200">
+                Order confirmation and tracking link will be emailed to: <span className="font-bold text-black">{email}</span>
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-neutral-500 italic leading-relaxed">
+              Fill in your contact information and shipping address above. A full delivery summary will appear here for verification before payment.
+            </p>
+          )}
         </section>
 
         {/* Payment Method Selector */}
@@ -567,29 +838,41 @@ export function CheckoutForm({
         </section>
 
         {errorMessage && (
-          <div className="p-4 bg-neutral-100 border border-black text-xs font-semibold text-black">
-            {errorMessage}
+          <div className="p-4 bg-red-50 border border-red-300 text-xs font-semibold text-red-800 flex items-start gap-2">
+            <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-600" />
+            <span>{errorMessage}</span>
           </div>
         )}
       </div>
 
-      {/* Right Column: Order Summary & Placement */}
+      {/* Right Column: Order Summary & Review */}
       <div className="lg:col-span-5 space-y-6">
         <div className="bg-[#F8F8F6] border border-neutral-200 p-6 space-y-5 sticky top-28">
-          <h3 className="text-xs uppercase tracking-widest font-extrabold pb-3 border-b border-neutral-200">
-            Items in Bag ({items.length})
-          </h3>
+          <div className="flex items-center justify-between pb-3 border-b border-neutral-200">
+            <h3 className="text-xs uppercase tracking-widest font-extrabold flex items-center gap-2">
+              <ShoppingBag size={14} />
+              Review Bag Items ({items.length})
+            </h3>
+            <Link
+              href="/cart"
+              className="text-[11px] font-bold text-neutral-600 hover:text-black underline flex items-center gap-1"
+            >
+              <Edit2 size={11} />
+              Edit Cart
+            </Link>
+          </div>
 
-          {/* Line item previews */}
-          <div className="max-h-60 overflow-y-auto space-y-3 pr-1 divide-y divide-neutral-200">
+          {/* Line item reviews with size, quantity, and edit options */}
+          <div className="max-h-72 overflow-y-auto space-y-3 pr-1 divide-y divide-neutral-200">
             {items.map((item) => {
               const prod = item.variant?.product
               if (!prod) return null
               const firstImg = prod.images?.[0]?.image_url
+              const isOutOfStock = isItemOutOfStock(item)
 
               return (
-                <div key={item.id} className="pt-2 flex items-center gap-3">
-                  <div className="relative w-12 h-16 bg-neutral-100 border shrink-0 overflow-hidden">
+                <div key={item.id} className="pt-3 pb-1 flex items-start gap-3">
+                  <div className="relative w-14 h-18 bg-neutral-100 border shrink-0 overflow-hidden">
                     {firstImg ? (
                       <Image
                         src={getSafeImageUrl(firstImg)}
@@ -599,15 +882,41 @@ export function CheckoutForm({
                       />
                     ) : null}
                   </div>
-                  <div className="flex-grow text-xs">
-                    <p className="font-bold line-clamp-1">{prod.name}</p>
-                    <p className="text-neutral-500 text-[11px] uppercase">
-                      {item.variant.color} / {item.variant.size} × {item.quantity}
-                    </p>
+                  <div className="flex-grow text-xs space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-bold line-clamp-1">{prod.name}</p>
+                      <span className="text-xs font-extrabold shrink-0">
+                        {formatPrice(prod.selling_price * item.quantity)}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="bg-black text-white font-mono font-bold px-1.5 py-0.5 uppercase text-[10px]">
+                        Size: {item.variant.size}
+                      </span>
+                      <span className="bg-neutral-200 text-neutral-900 font-semibold px-1.5 py-0.5 uppercase text-[10px]">
+                        Qty: {item.quantity}
+                      </span>
+                      <span className="text-neutral-500 text-[11px] uppercase font-medium">
+                        {item.variant.color}
+                      </span>
+                    </div>
+
+                    {isOutOfStock ? (
+                      <div className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100 border border-red-300 px-1.5 py-0.5 mt-1">
+                        <AlertCircle size={10} /> OUT OF STOCK
+                      </div>
+                    ) : null}
+
+                    <div className="pt-1">
+                      <Link
+                        href="/cart"
+                        className="text-[11px] text-neutral-500 hover:text-black underline font-medium flex items-center gap-1"
+                      >
+                        <Edit2 size={10} /> Change size/qty
+                      </Link>
+                    </div>
                   </div>
-                  <span className="text-xs font-bold shrink-0">
-                    {formatPrice(prod.selling_price * item.quantity)}
-                  </span>
                 </div>
               )
             })}
@@ -626,7 +935,7 @@ export function CheckoutForm({
               <button
                 type="button"
                 onClick={handleApplyCoupon}
-                className="bg-black text-white px-3.5 py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800"
+                className="bg-black text-white px-3.5 py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 cursor-pointer"
               >
                 Apply
               </button>
@@ -676,14 +985,38 @@ export function CheckoutForm({
             </div>
           </div>
 
-          {/* Submit Button */}
+          {/* Out of Stock Warning Banner */}
+          {hasOutOfStockItems && (
+            <div className="p-3 bg-red-50 border border-red-300 text-red-800 text-xs font-medium space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-red-900">
+                <AlertCircle size={14} className="shrink-0" />
+                <span>Out of Stock Item Detected</span>
+              </div>
+              <p className="text-[11px] text-red-700">
+                One or more items in your bag are currently unavailable. Please adjust your bag in order to complete checkout.
+              </p>
+              <Link
+                href="/cart"
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-red-900 underline pt-1"
+              >
+                <Edit2 size={11} /> Return to Cart to Update Items
+              </Link>
+            </div>
+          )}
+
+          {/* Submit Button with Loading Spinner & Double-Click Guard */}
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-black text-white hover:bg-neutral-800 h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all disabled:opacity-50"
+            disabled={loading || hasOutOfStockItems}
+            className="w-full bg-black text-white hover:bg-neutral-800 h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             {loading ? (
-              'Securing Order...'
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                {paymentMethod === 'cashfree' ? 'Securing Cashfree Checkout...' : 'Confirming COD Order...'}
+              </span>
+            ) : hasOutOfStockItems ? (
+              'Remove Out-of-Stock Items'
             ) : paymentMethod === 'cashfree' ? (
               <>
                 Pay With Cashfree <ArrowRight size={15} className="ml-2" />

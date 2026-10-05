@@ -226,26 +226,26 @@ export function PaymentReturnClient({
           </div>
         </div>
 
-        {/* 4 Required Action Buttons (Requirement 9) */}
+        {/* Action Buttons */}
         <div className="pt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Link
             href="/account/orders"
-            className="border-2 border-black bg-white hover:bg-neutral-100 text-black py-3 px-3 text-[11px] font-mono uppercase tracking-wider font-bold text-center transition-colors"
+            className="border-2 border-black bg-black text-white hover:bg-neutral-800 py-3.5 px-3 text-xs font-mono uppercase tracking-wider font-bold text-center transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
           >
-            View My Orders
+            My Orders
           </Link>
 
           <Link
             href={`/account/orders/${order?.order_number || orderNumber}`}
-            className="border-2 border-black bg-white hover:bg-neutral-100 text-black py-3 px-3 text-[11px] font-mono uppercase tracking-wider font-bold text-center transition-colors"
+            className="border-2 border-black bg-white hover:bg-neutral-100 text-black py-3.5 px-3 text-xs font-mono uppercase tracking-wider font-bold text-center transition-colors"
           >
-            View This Order
+            Order Details
           </Link>
 
           <a
             href={`/api/orders/${order?.order_number || orderNumber}/invoice`}
             download
-            className="border-2 border-black bg-black text-white hover:bg-neutral-800 py-3 px-3 text-[11px] font-mono uppercase tracking-wider font-bold text-center flex items-center justify-center gap-1.5 transition-colors"
+            className="border-2 border-black bg-white hover:bg-neutral-100 text-black py-3.5 px-3 text-xs font-mono uppercase tracking-wider font-bold text-center flex items-center justify-center gap-1.5 transition-colors"
           >
             <Download size={13} />
             <span>Download Invoice</span>
@@ -253,7 +253,7 @@ export function PaymentReturnClient({
 
           <Link
             href="/shop"
-            className="border-2 border-black bg-white hover:bg-neutral-100 text-black py-3 px-3 text-[11px] font-mono uppercase tracking-wider font-bold text-center transition-colors"
+            className="border-2 border-black bg-white hover:bg-neutral-100 text-black py-3.5 px-3 text-xs font-mono uppercase tracking-wider font-bold text-center transition-colors"
           >
             Continue Shopping
           </Link>

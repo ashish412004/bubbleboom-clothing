@@ -60,7 +60,11 @@ export function ProductInteractive({ product }: { product: ProductDetails }) {
     .filter((v) => v.color === selectedColor && v.is_active)
     .map((v) => v.size)
 
-  const [selectedSize, setSelectedSize] = useState(sizesForColor[0] || '')
+  const inStockSizesForColor = product.variants
+    .filter((v) => v.color === (colors[0] || '') && v.is_active && v.stock > 0)
+    .map((v) => v.size)
+
+  const [selectedSize, setSelectedSize] = useState(inStockSizesForColor[0] || sizesForColor[0] || '')
   const [quantity, setQuantity] = useState(1)
   const [isWishlisted, setIsWishlisted] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
@@ -90,8 +94,15 @@ export function ProductInteractive({ product }: { product: ProductDetails }) {
     const newSizes = product.variants
       .filter((v) => v.color === color && v.is_active)
       .map((v) => v.size)
-    if (!newSizes.includes(selectedSize)) {
-      setSelectedSize(newSizes[0] || '')
+    const inStockNewSizes = product.variants
+      .filter((v) => v.color === color && v.is_active && v.stock > 0)
+      .map((v) => v.size)
+
+    const currentVariant = product.variants.find(
+      (v) => v.color === color && v.size === selectedSize && v.is_active && v.stock > 0
+    )
+    if (!currentVariant) {
+      setSelectedSize(inStockNewSizes[0] || newSizes[0] || '')
     }
     setQuantity(1)
   }
@@ -306,18 +317,28 @@ export function ProductInteractive({ product }: { product: ProductDetails }) {
                   type="button"
                   disabled={!hasStock}
                   onClick={() => {
+                    if (!hasStock) {
+                      toast.error(`Size ${sizeOption} is out of stock.`)
+                      return
+                    }
                     setSelectedSize(sizeOption)
                     setQuantity(1)
                   }}
-                  className={`h-11 border text-xs font-bold transition-all relative flex items-center justify-center ${
+                  className={`h-11 border text-xs font-bold transition-all relative flex flex-col items-center justify-center ${
                     !hasStock
-                      ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-not-allowed line-through'
+                      ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-not-allowed opacity-40 select-none'
                       : isSelected
-                      ? 'bg-black text-white border-black'
+                      ? 'bg-black text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
                       : 'bg-white text-black border-neutral-300 hover:border-black'
                   }`}
+                  title={!hasStock ? `Size ${sizeOption} is out of stock` : `Select Size ${sizeOption}`}
                 >
-                  {sizeOption}
+                  <span className={!hasStock ? 'line-through' : ''}>{sizeOption}</span>
+                  {!hasStock && (
+                    <span className="text-[8px] uppercase tracking-tighter text-red-600 font-extrabold leading-none mt-0.5">
+                      Sold Out
+                    </span>
+                  )}
                 </button>
               )
             })}

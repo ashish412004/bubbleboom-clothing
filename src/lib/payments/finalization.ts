@@ -100,7 +100,7 @@ export async function finalizeOrderPayment(
   // Fetch internal order
   const { data: order, error: orderErr } = await supabase
     .from('orders')
-    .select('*, order_items(*)')
+    .select('*')
     .eq('order_number', orderNumber)
     .maybeSingle()
 
@@ -114,7 +114,12 @@ export async function finalizeOrderPayment(
     }
   }
 
-  // Fetch payments separately
+  // Fetch items and payments separately
+  const { data: orderItems } = await supabase
+    .from('order_items')
+    .select('*')
+    .eq('order_id', order.id)
+
   const { data: payments } = await supabase
     .from('payments')
     .select('*')
@@ -260,7 +265,14 @@ export async function finalizeOrderPayment(
         })
 
         // Also attempt direct asynchronous delivery via Resend
-        sendOrderConfirmationEmail(customerEmail, order.order_number, customerName).catch((e) =>
+        sendOrderConfirmationEmail({
+          email: customerEmail,
+          orderId: order.order_number,
+          customerName: customerName,
+          totalAmount: order.total_amount,
+          items: (orderItems as any[]) || ((order as any)?.order_items as any[]) || [],
+          shippingAddress: order.shipping_address,
+        }).catch((e) =>
           console.warn('[finalizeOrderPayment] Direct email send error (queued in outbox):', e)
         )
       } catch (emailErr) {

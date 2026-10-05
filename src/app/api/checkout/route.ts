@@ -4,6 +4,7 @@ import { createServerClient, createServiceClient, isSupabaseConfigured } from '@
 import { createOrder, createCashfreeSessionForOrder } from '@/lib/orders'
 import { getCart, clearCart } from '@/lib/cart'
 import { releaseStockReservation } from '@/lib/inventory'
+import { sendOrderConfirmationEmail } from '@/lib/emails/resend'
 
 export async function POST(request: NextRequest) {
   try {
@@ -143,6 +144,16 @@ export async function POST(request: NextRequest) {
     } else {
       // Cash on Delivery
       await clearCart(userId, sessionId)
+
+      // Send order confirmation email for confirmed COD order
+      sendOrderConfirmationEmail({
+        email,
+        orderId: order.order_number,
+        customerName: full_name,
+        totalAmount: order.total_amount,
+        items: (order as any).order_items || [],
+        shippingAddress: order.shipping_address,
+      }).catch((e) => console.warn('[checkout] COD email send warning:', e))
 
       const response = NextResponse.json({
         order_number: order.order_number,
