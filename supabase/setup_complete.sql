@@ -546,21 +546,25 @@ ON CONFLICT (id) DO UPDATE SET
   file_size_limit = 10485760,
   allowed_mime_types = ARRAY['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif', 'image/gif'];
 
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+-- 3. Storage RLS Policies for product-images bucket
+-- Note: RLS is already enabled on storage.objects by Supabase by default.
 
 DROP POLICY IF EXISTS "Public Read Product Images" ON storage.objects;
+DROP POLICY IF EXISTS "Public Access" ON storage.objects;
 CREATE POLICY "Public Read Product Images"
 ON storage.objects FOR SELECT
 USING (bucket_id = 'product-images');
 
 DROP POLICY IF EXISTS "Admin Insert Product Images" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Upload Access" ON storage.objects;
 CREATE POLICY "Admin Insert Product Images"
 ON storage.objects FOR INSERT
 TO authenticated
 WITH CHECK (
   bucket_id = 'product-images'
   AND (
-    public.is_admin(auth.uid())
+    auth.role() = 'service_role'
+    OR public.is_admin(auth.uid())
     OR auth.jwt() ->> 'email' = (SELECT COALESCE(current_setting('app.admin_email', true), 'hhshukla241099@gmail.com'))
   )
 );
@@ -572,19 +576,22 @@ TO authenticated
 USING (
   bucket_id = 'product-images'
   AND (
-    public.is_admin(auth.uid())
+    auth.role() = 'service_role'
+    OR public.is_admin(auth.uid())
     OR auth.jwt() ->> 'email' = (SELECT COALESCE(current_setting('app.admin_email', true), 'hhshukla241099@gmail.com'))
   )
 );
 
 DROP POLICY IF EXISTS "Admin Delete Product Images" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Delete Access" ON storage.objects;
 CREATE POLICY "Admin Delete Product Images"
 ON storage.objects FOR DELETE
 TO authenticated
 USING (
   bucket_id = 'product-images'
   AND (
-    public.is_admin(auth.uid())
+    auth.role() = 'service_role'
+    OR public.is_admin(auth.uid())
     OR auth.jwt() ->> 'email' = (SELECT COALESCE(current_setting('app.admin_email', true), 'hhshukla241099@gmail.com'))
   )
 );
