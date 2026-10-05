@@ -87,8 +87,7 @@ export function LoginForm() {
 
       toast.success('Signed in successfully!')
       await refreshCart()
-      router.push(safeRedirect)
-      router.refresh()
+      window.location.href = safeRedirect
     } catch (err: any) {
       setError(err.message || 'Invalid or expired OTP.')
     } finally {
@@ -120,8 +119,7 @@ export function LoginForm() {
 
       toast.success('Signed in successfully!')
       await refreshCart()
-      router.push(safeRedirect)
-      router.refresh()
+      window.location.href = safeRedirect
     } catch (err: any) {
       setError(err.message || 'Invalid email or password.')
     } finally {

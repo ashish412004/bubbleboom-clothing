@@ -71,7 +71,8 @@ export async function middleware(request: NextRequest) {
 
   // Protect account routes
   if (request.nextUrl.pathname.startsWith('/account')) {
-    if (!user) {
+    const hasAuth = user || request.cookies.get('bb_auth_user')?.value
+    if (!hasAuth) {
       return NextResponse.redirect(new URL('/login?next=/account', request.url))
     }
   }
