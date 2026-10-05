@@ -477,6 +477,8 @@ export async function createCashfreeSessionForOrder(order: Order) {
     }
   }
 
+  siteUrl = siteUrl.replace(/\/+$/, '')
+
   // Ensure customer phone is a valid 10-digit number for Cashfree
   const rawPhone = order.guest_phone || (order.shipping_address as any)?.phone || ''
   const cleanDigits = rawPhone.replace(/\D/g, '').slice(-10)
