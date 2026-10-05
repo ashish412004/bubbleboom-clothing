@@ -453,7 +453,16 @@ export async function createCashfreeSessionForOrder(order: Order) {
     }
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || ''
+  if (!siteUrl || siteUrl.startsWith('http://localhost')) {
+    if (process.env.NEXT_PUBLIC_CASHFREE_MODE === 'production') {
+      siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://bubbleboom-clothing.vercel.app')
+    } else {
+      siteUrl = siteUrl || 'http://localhost:3000'
+    }
+  }
   const customerPhone = order.guest_phone || '9999999999'
 
   const cfRes = await createCashfreeOrder({
