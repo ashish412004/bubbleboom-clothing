@@ -4,6 +4,7 @@ import { getOrderById } from '@/lib/orders'
 import { getPaymentStatus, getOrderPayments } from '@/lib/payments/cashfree'
 import { finalizeOrderPayment } from '@/lib/payments/finalization'
 import { isSupabaseConfigured } from '@/lib/supabase/server'
+import { getCurrentUser, isAdmin } from '@/lib/auth'
 import Link from 'next/link'
 import { AlertCircle } from 'lucide-react'
 import { PaymentReturnClient } from './payment-return-client'
@@ -44,7 +45,7 @@ export default async function PaymentReturnPage({ searchParams }: PaymentReturnP
     )
   }
 
-  // 1. Fetch internal order
+  // 1. Fetch internal order (handles both order_number and UUID)
   let order = await getOrderById(orderNumber)
   if (!order) {
     return (
@@ -54,18 +55,45 @@ export default async function PaymentReturnPage({ searchParams }: PaymentReturnP
           <AlertCircle size={40} className="mx-auto text-black mb-4" />
           <h1 className="text-2xl font-black uppercase tracking-tight">Order Not Found</h1>
           <p className="text-xs text-neutral-500 mt-2 mb-6">
-            We could not locate order &quot;{orderNumber}&quot;. If money was deducted, our webhook reconciliation will update it within a few minutes.
+            We could not locate order &quot;{orderNumber}&quot;. Please verify the order number or check your account order history.
           </p>
           <Link
-            href="/track-order"
+            href="/shop"
             className="inline-block bg-black text-white px-6 py-3 text-xs uppercase tracking-widest font-bold"
           >
-            Track Order
+            Return to Store
           </Link>
         </main>
         <Footer />
       </div>
     )
+  }
+
+  // 2. Ownership verification
+  const currentUser = await getCurrentUser()
+  if (order.user_id && currentUser && order.user_id !== currentUser.id) {
+    const userIsAdmin = await isAdmin(currentUser.id)
+    if (!userIsAdmin) {
+      return (
+        <div className="flex flex-col min-h-screen bg-white text-black">
+          <Header />
+          <main className="flex-1 max-w-2xl mx-auto px-4 py-24 text-center">
+            <AlertCircle size={40} className="mx-auto text-black mb-4" />
+            <h1 className="text-2xl font-black uppercase tracking-tight">Access Restricted</h1>
+            <p className="text-xs text-neutral-500 mt-2 mb-6">
+              You are signed into an account that is not associated with this order.
+            </p>
+            <Link
+              href="/account/orders"
+              className="inline-block bg-black text-white px-6 py-3 text-xs uppercase tracking-widest font-bold"
+            >
+              My Orders
+            </Link>
+          </main>
+          <Footer />
+        </div>
+      )
+    }
   }
 
   let initialStatus: 'verifying' | 'paid' | 'failed' | 'pending' = 'verifying'

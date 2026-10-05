@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createServerClient, isSupabaseConfigured } from '@/lib/supabase/server'
+import { createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { createOrder, createCashfreeSessionForOrder } from '@/lib/orders'
 import { getCart, clearCart } from '@/lib/cart'
+import { releaseStockReservation } from '@/lib/inventory'
 
 export async function POST(request: NextRequest) {
   try {
@@ -94,29 +95,54 @@ export async function POST(request: NextRequest) {
 
     const order = orderRes.data!
 
-    // 3. Clear cart since order is created & stock is reserved
-    await clearCart(userId, sessionId)
-
-    // 4. Handle payment method
+    // 3. Handle payment method
     if (payment_method === 'cashfree') {
       const cfSessionRes = await createCashfreeSessionForOrder(order)
       if ('error' in cfSessionRes && cfSessionRes.error) {
+        // Rollback / release stock and mark internal order cancelled
+        try {
+          if (isSupabaseConfigured()) {
+            const supabase = await createServiceClient()
+            await releaseStockReservation(order.id)
+            await supabase
+              .from('orders')
+              .update({
+                status: 'cancelled',
+                cancellation_reason: `Payment gateway initiation failed: ${cfSessionRes.error}`,
+              })
+              .eq('id', order.id)
+          }
+        } catch (cleanupErr) {
+          console.error('Failed to cleanup after Cashfree initiation failure:', cleanupErr)
+        }
+
         return NextResponse.json(
           { error: `Payment gateway error: ${cfSessionRes.error}` },
           { status: 500 }
         )
       }
 
+      if (!cfSessionRes.payment_session_id) {
+        return NextResponse.json(
+          { error: 'Payment gateway did not provide a valid payment session ID.' },
+          { status: 500 }
+        )
+      }
+
+      // Order & Cashfree session created successfully! Now clear cart
+      await clearCart(userId, sessionId)
+
       const response = NextResponse.json({
         order_number: order.order_number,
         payment_session_id: cfSessionRes.payment_session_id,
         payment_method: 'cashfree',
-        redirect_url: `/payment-return?order_id=${order.order_number}&method=cashfree`,
       })
       response.cookies.delete('bb_cart')
       return response
     } else {
       // Cash on Delivery
+      await clearCart(userId, sessionId)
+
       const response = NextResponse.json({
         order_number: order.order_number,
         payment_method: 'cod',

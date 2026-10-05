@@ -3,6 +3,7 @@ import { getOrderById } from '@/lib/orders'
 import { getPaymentStatus, getOrderPayments } from '@/lib/payments/cashfree'
 import { finalizeOrderPayment } from '@/lib/payments/finalization'
 import { isSupabaseConfigured } from '@/lib/supabase/server'
+import { getCurrentUser, isAdmin } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,15 @@ export async function GET(request: NextRequest) {
     const order = await getOrderById(orderNumber)
     if (!order) {
       return NextResponse.json({ error: `Order ${orderNumber} not found.` }, { status: 404 })
+    }
+
+    // Authorization: If order belongs to an authenticated user, only that user or an admin may verify
+    const currentUser = await getCurrentUser()
+    if (order.user_id && currentUser && order.user_id !== currentUser.id) {
+      const userIsAdmin = await isAdmin(currentUser.id)
+      if (!userIsAdmin) {
+        return NextResponse.json({ error: 'Access denied.' }, { status: 403 })
+      }
     }
 
     // 2. If COD, it's already confirmed

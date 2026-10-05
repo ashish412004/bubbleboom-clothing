@@ -444,9 +444,21 @@ export async function createOrder(input: CreateOrderInput) {
  */
 export async function createCashfreeSessionForOrder(order: Order) {
   const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
-  const hasCashfree = appId && appId !== 'your-cashfree-client-id' && appId !== 'your-cashfree-app-id'
+  const hasCashfree = Boolean(
+    appId &&
+    appId !== 'your-cashfree-client-id' &&
+    appId !== 'your-cashfree-app-id' &&
+    process.env.CASHFREE_SECRET_KEY &&
+    process.env.CASHFREE_SECRET_KEY !== 'your-cashfree-secret-key'
+  )
 
-  if (!isSupabaseConfigured() || !hasCashfree) {
+  if (!hasCashfree) {
+    if (isSupabaseConfigured()) {
+      return {
+        error:
+          'Cashfree payment credentials are not configured on the server. Please set CASHFREE_APP_ID and CASHFREE_SECRET_KEY in server environment variables.',
+      }
+    }
     return {
       payment_session_id: `session_dev_${order.order_number}`,
       order_id: order.order_number,
@@ -526,6 +538,8 @@ export async function createCashfreeSessionForOrder(order: Order) {
 }
 
 export async function getOrderById(orderId: string) {
+  if (!orderId) return null
+
   if (!isSupabaseConfigured()) {
     const orders = getDevOrders()
     const found = orders.find((o) => o.id === orderId || o.order_number === orderId)
@@ -538,14 +552,37 @@ export async function getOrderById(orderId: string) {
   }
 
   const supabase = await createServiceClient()
-  const { data: order, error } = await supabase
-    .from('orders')
-    .select('*')
-    .or(`id.eq.${orderId},order_number.eq.${orderId}`)
-    .maybeSingle()
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId)
 
-  if (error || !order) {
-    if (error) console.error('Error fetching order:', error)
+  let order: any = null
+
+  // If orderId is formatted as UUID, look up by primary key first
+  if (isUuid) {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', orderId)
+      .maybeSingle()
+    if (!error && data) {
+      order = data
+    }
+  }
+
+  // If not found or orderId is an order number (e.g. BB-20261005-4774), look up by order_number
+  if (!order) {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('order_number', orderId)
+      .maybeSingle()
+    if (error) {
+      console.error('Error fetching order by order_number:', error)
+    } else {
+      order = data
+    }
+  }
+
+  if (!order) {
     return null
   }
 

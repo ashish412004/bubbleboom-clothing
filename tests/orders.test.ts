@@ -76,4 +76,15 @@ describe('Order Rules, Indian Address Verification & State Machine', () => {
       expect(isValidOrderStatusTransition('refunded', 'delivered')).toBe(false)  // Terminal
     })
   })
+
+  describe('Order Identifier Resolution', () => {
+    it('distinguishes UUID format from customer-facing Order Number', () => {
+      const isUuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      const validUuid = '7937e508-36d1-4ce3-a771-a035dec93e89'
+      const customerOrderNum = 'BB-20261005-4774'
+
+      expect(isUuidRegex.test(validUuid)).toBe(true)
+      expect(isUuidRegex.test(customerOrderNum)).toBe(false)
+    })
+  })
 })

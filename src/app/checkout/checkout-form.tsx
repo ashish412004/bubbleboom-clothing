@@ -269,7 +269,17 @@ export function CheckoutForm({
 
       if (paymentMethod === 'cod') {
         router.push(data.redirect_url || `/payment-return?order_id=${data.order_number}&method=cod`)
-      } else if (data.payment_session_id && !data.payment_session_id.startsWith('session_dev_')) {
+        return
+      }
+
+      // Cashfree Online Payment Flow
+      if (paymentMethod === 'cashfree') {
+        if (!data.payment_session_id) {
+          setErrorMessage('Payment session could not be established with Cashfree. Please try again.')
+          setLoading(false)
+          return
+        }
+
         // Launch Cashfree SDK checkout
         try {
           const cashfreeMode =
@@ -294,8 +304,6 @@ export function CheckoutForm({
           setErrorMessage(sdkErr.message || 'Failed to open Cashfree payment gateway. Please try again.')
           setLoading(false)
         }
-      } else {
-        router.push(data.redirect_url || `/payment-return?order_id=${data.order_number}&method=cashfree`)
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Network error during checkout.')
