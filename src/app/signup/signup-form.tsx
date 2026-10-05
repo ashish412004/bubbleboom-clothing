@@ -139,8 +139,8 @@ export function SignupForm() {
     setError(null)
 
     const cleanOtp = otp.trim()
-    if (cleanOtp.length !== 6) {
-      setError('Please enter the complete 6-digit code.')
+    if (cleanOtp.length < 6 || cleanOtp.length > 8) {
+      setError('Please enter the verification code sent to your email.')
       return
     }
 
@@ -341,18 +341,18 @@ export function SignupForm() {
 
           <div>
             <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-              6-Digit Email Code
+              Verification Code
             </label>
             <div className="relative">
               <input
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                maxLength={6}
+                maxLength={8}
                 required
                 value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="123456"
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                placeholder="Enter code from email"
                 disabled={loading}
                 className="w-full border border-black p-3 pl-10 text-base font-mono tracking-widest placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
               />
@@ -362,7 +362,7 @@ export function SignupForm() {
 
           <button
             type="submit"
-            disabled={loading || otp.length !== 6}
+            disabled={loading || otp.length < 6}
             className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors flex items-center justify-center gap-2"
           >
             <span>{loading ? 'Verifying Code...' : 'Verify Code'}</span>

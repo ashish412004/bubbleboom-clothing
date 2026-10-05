@@ -123,8 +123,8 @@ export async function POST(request: NextRequest) {
       const cleanEmail = (email || '').trim().toLowerCase()
       const cleanOtp = (otp || '').trim()
 
-      if (!cleanEmail || !cleanOtp || cleanOtp.length !== 6) {
-        return NextResponse.json({ error: 'Please enter the 6-digit OTP code sent to your email.' }, { status: 400 })
+      if (!cleanEmail || !cleanOtp || cleanOtp.length < 6 || cleanOtp.length > 8) {
+        return NextResponse.json({ error: 'Please enter the verification code sent to your email.' }, { status: 400 })
       }
 
       const { data, error: verifyError } = await supabase.auth.verifyOtp({
@@ -259,8 +259,8 @@ export async function POST(request: NextRequest) {
       const cleanEmail = (email || '').trim().toLowerCase()
       const cleanOtp = (otp || '').trim()
 
-      if (!cleanEmail || !cleanOtp || cleanOtp.length !== 6) {
-        return NextResponse.json({ error: 'Please enter the 6-digit OTP code sent to your email.' }, { status: 400 })
+      if (!cleanEmail || !cleanOtp || cleanOtp.length < 6 || cleanOtp.length > 8) {
+        return NextResponse.json({ error: 'Please enter the verification code sent to your email.' }, { status: 400 })
       }
 
       const { data, error: verifyError } = await supabase.auth.verifyOtp({
@@ -365,8 +365,8 @@ export async function POST(request: NextRequest) {
       const cleanEmail = (email || '').trim().toLowerCase()
       const cleanOtp = (otp || '').trim()
 
-      if (!cleanEmail || !cleanOtp || cleanOtp.length !== 6) {
-        return NextResponse.json({ error: 'Please enter the 6-digit OTP code.' }, { status: 400 })
+      if (!cleanEmail || !cleanOtp || cleanOtp.length < 6 || cleanOtp.length > 8) {
+        return NextResponse.json({ error: 'Please enter the verification code.' }, { status: 400 })
       }
 
       const { data, error: verifyError } = await supabase.auth.verifyOtp({
