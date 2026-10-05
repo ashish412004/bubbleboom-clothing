@@ -3,6 +3,7 @@ import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { ProductCard } from '@/components/product/product-card'
 import { getProductBySlug, getRelatedProducts } from '@/lib/products'
+import { getStoreSettings, StoreShippingSettings, StoreExchangeSettings } from '@/lib/settings'
 import { ProductInteractive } from './product-interactive'
 import Link from 'next/link'
 import type { Metadata } from 'next'
@@ -38,7 +39,11 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
 export default async function ProductDetailPage({ params }: ProductPageProps) {
   const { slug } = await params
-  const product = await getProductBySlug(slug)
+  const [product, shippingSettings, exchangeSettings] = await Promise.all([
+    getProductBySlug(slug),
+    getStoreSettings<StoreShippingSettings>('shipping'),
+    getStoreSettings<StoreExchangeSettings>('exchange'),
+  ])
 
   if (!product) {
     notFound()
@@ -90,7 +95,11 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
 
         {/* Main Product Container */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16">
-          <ProductInteractive product={product as any} />
+          <ProductInteractive
+            product={product as any}
+            shippingSettings={shippingSettings}
+            exchangeSettings={exchangeSettings}
+          />
         </div>
 
         {/* Related Products Section */}

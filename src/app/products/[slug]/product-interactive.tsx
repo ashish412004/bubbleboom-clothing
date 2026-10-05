@@ -7,6 +7,8 @@ import { Heart, ShoppingBag, Truck, Ruler, Check, X, Shield, RefreshCw } from 'l
 import { formatPrice, formatDiscount, getSafeImageUrl } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
+import { DeliveryExchangeCard } from '@/components/product/delivery-exchange-card'
+import type { StoreShippingSettings, StoreExchangeSettings } from '@/types/settings'
 
 interface ProductVariant {
   id: string
@@ -36,9 +38,19 @@ interface ProductDetails {
   wash_care: string | null
   images: ProductImage[]
   variants: ProductVariant[]
+  tags?: string[] | null
+  category_id?: string | null
 }
 
-export function ProductInteractive({ product }: { product: ProductDetails }) {
+export function ProductInteractive({
+  product,
+  shippingSettings,
+  exchangeSettings,
+}: {
+  product: ProductDetails
+  shippingSettings?: StoreShippingSettings
+  exchangeSettings?: StoreExchangeSettings
+}) {
   const router = useRouter()
   const incrementCart = useCartStore((state) => state.incrementCount)
   const setWishlist = useCartStore((state) => state.setWishlistCount)
@@ -69,11 +81,6 @@ export function ProductInteractive({ product }: { product: ProductDetails }) {
   const [isWishlisted, setIsWishlisted] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
   const [showSizeGuide, setShowSizeGuide] = useState(false)
-
-  // PIN code check state
-  const [pinCode, setPinCode] = useState('')
-  const [pinStatus, setPinStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle')
-  const [pinMessage, setPinMessage] = useState('')
 
   // Active accordion tabs
   const [openAccordion, setOpenAccordion] = useState<string | null>('description')
@@ -147,23 +154,6 @@ export function ProductInteractive({ product }: { product: ProductDetails }) {
     } finally {
       setIsAdding(false)
     }
-  }
-
-  const handlePinCheck = (e: React.FormEvent) => {
-    e.preventDefault()
-    const trimmed = pinCode.trim()
-    if (!/^[1-9][0-9]{5}$/.test(trimmed)) {
-      setPinStatus('invalid')
-      setPinMessage('Please enter a valid 6-digit Indian PIN code.')
-      return
-    }
-
-    setPinStatus('checking')
-    setTimeout(() => {
-      // Configured serviceability: Bubble Boom delivers all India metro & tier 1/2 PIN codes
-      setPinStatus('valid')
-      setPinMessage(`PIN ${trimmed} is serviceable! Express delivery within 3-5 business days.`)
-    }, 400)
   }
 
   const toggleWishlist = () => {
@@ -425,38 +415,12 @@ export function ProductInteractive({ product }: { product: ProductDetails }) {
           )}
         </div>
 
-        {/* PIN Code Serviceability Check */}
-        <div className="border border-neutral-200 p-4 bg-[#F8F8F6] space-y-2">
-          <div className="flex items-center space-x-2 text-xs uppercase tracking-widest font-bold text-black">
-            <Truck size={15} />
-            <span>Check Delivery Availability</span>
-          </div>
-          <form onSubmit={handlePinCheck} className="flex gap-2">
-            <input
-              type="text"
-              maxLength={6}
-              value={pinCode}
-              onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ''))}
-              placeholder="Enter 6-digit PIN"
-              className="bg-white border border-neutral-300 px-3 py-2 text-xs flex-grow font-medium focus:outline-none focus:border-black"
-            />
-            <button
-              type="submit"
-              className="bg-black text-white hover:bg-neutral-800 px-4 py-2 text-xs uppercase tracking-wider font-bold transition-colors"
-            >
-              Check
-            </button>
-          </form>
-          {pinStatus !== 'idle' && (
-            <p
-              className={`text-xs ${
-                pinStatus === 'valid' ? 'text-black font-semibold' : 'text-neutral-500'
-              }`}
-            >
-              {pinMessage}
-            </p>
-          )}
-        </div>
+        {/* Delivery & Exchange Section */}
+        <DeliveryExchangeCard
+          product={product}
+          initialShipping={shippingSettings}
+          initialExchange={exchangeSettings}
+        />
 
         {/* Product Details Accordions */}
         <div className="border-t border-neutral-200 divide-y divide-neutral-200 pt-2">
@@ -518,22 +482,26 @@ export function ProductInteractive({ product }: { product: ProductDetails }) {
             )}
           </div>
 
-          {/* Shipping & Returns */}
+          {/* Shipping & Exchange Policy */}
           <div>
             <button
               type="button"
               onClick={() => setOpenAccordion(openAccordion === 'shipping' ? null : 'shipping')}
               className="w-full py-3.5 flex items-center justify-between text-left text-xs uppercase tracking-widest font-bold hover:text-neutral-600"
             >
-              <span>Shipping &amp; 7-Day Returns</span>
+              <span>Shipping &amp; Exchange Policy</span>
               <span>{openAccordion === 'shipping' ? '—' : '+'}</span>
             </button>
             {openAccordion === 'shipping' && (
               <div className="pb-4 text-xs text-neutral-600 leading-relaxed space-y-1.5">
-                <p>• Free shipping on orders above ₹1,499.</p>
-                <p>• Standard delivery across India in 3-5 business days.</p>
-                <p>• 7-day hassle-free reverse pickup returns for unworn items with original tags.</p>
-                <p>• Cash on Delivery available at checkout.</p>
+                <p>• Free shipping on orders above ₹{Math.round((shippingSettings?.free_shipping_threshold_paise || 149900) / 100).toLocaleString('en-IN')}.</p>
+                <p>• Fast and secure dispatch across serviceable Indian PIN codes.</p>
+                <p>• Size exchange and reverse pickup as per our configured store policy.</p>
+                <div className="pt-1.5 flex gap-3 text-[11px] font-mono font-bold">
+                  <a href="/shipping-policy" className="underline hover:text-black">Shipping Policy</a>
+                  <span>•</span>
+                  <a href="/returns-refunds" className="underline hover:text-black">Returns &amp; Exchange Policy</a>
+                </div>
               </div>
             )}
           </div>
