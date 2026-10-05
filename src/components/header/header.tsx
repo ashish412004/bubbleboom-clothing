@@ -266,7 +266,7 @@ export function Header({
                 className="flex items-center text-xs uppercase tracking-wider font-semibold text-black hover:text-neutral-600 py-1"
               >
                 <Heart size={16} className="mr-3" />
-                Wishlist {wishlistCount > 0 && `(${wishlistCount})`}
+                Wishlist {mounted && wishlistCount > 0 && `(${wishlistCount})`}
               </Link>
               <Link
                 href="/track-order"
