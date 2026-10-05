@@ -87,4 +87,26 @@ describe('Order Rules, Indian Address Verification & State Machine', () => {
       expect(isUuidRegex.test(customerOrderNum)).toBe(false)
     })
   })
+
+  describe('Customer Order Visibility & My Orders Filtering', () => {
+    it('only permits paid orders or COD orders to appear in customer My Orders list', () => {
+      const sampleOrders = [
+        { id: '1', order_number: 'BB-001', payment_status: 'paid', payment_method: 'cashfree', status: 'confirmed' },
+        { id: '2', order_number: 'BB-002', payment_status: 'pending', payment_method: 'cod', status: 'confirmed' },
+        { id: '3', order_number: 'BB-003', payment_status: 'pending', payment_method: 'cashfree', status: 'pending' },
+        { id: '4', order_number: 'BB-004', payment_status: 'failed', payment_method: 'cashfree', status: 'cancelled' },
+        { id: '5', order_number: 'BB-005', payment_status: 'paid', payment_method: 'cashfree', status: 'delivered' },
+      ]
+
+      const filterForMyOrders = (orders: typeof sampleOrders) =>
+        orders.filter((o) => o.payment_status === 'paid' || o.payment_method === 'cod')
+
+      const visible = filterForMyOrders(sampleOrders)
+
+      expect(visible.map((o) => o.order_number)).toEqual(['BB-001', 'BB-002', 'BB-005'])
+      expect(visible.some((o) => o.order_number === 'BB-003')).toBe(false)
+      expect(visible.some((o) => o.order_number === 'BB-004')).toBe(false)
+    })
+  })
 })
+

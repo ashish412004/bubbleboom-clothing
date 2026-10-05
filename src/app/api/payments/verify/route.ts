@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
           order: finalRes.order || order,
         })
       } else if (['EXPIRED', 'FAILED', 'CANCELLED'].includes(cfStatus.order_status)) {
-        await finalizeOrderPayment({
+        const finalRes = await finalizeOrderPayment({
           orderNumber: order.order_number,
           cfPaymentId: latestCfPaymentId,
           providerOrderStatus: 'FAILED',
@@ -107,10 +107,43 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           status: 'failed',
           payment_method: 'cashfree',
-          order,
+          order: finalRes.order || order,
           reason: `Cashfree reports order status as ${cfStatus.order_status}`,
         })
+      } else if (cfPaymentsRes && !('error' in cfPaymentsRes) && cfPaymentsRes.payments.length > 0 && !hasSuccessfulPayment) {
+        const latestAttempt = cfPaymentsRes.payments[0]
+        const finalRes = await finalizeOrderPayment({
+          orderNumber: order.order_number,
+          cfPaymentId: latestCfPaymentId,
+          providerOrderStatus: latestAttempt.payment_status === 'USER_DROPPED' ? 'USER_DROPPED' : 'FAILED',
+          rawPaymentData: latestAttempt,
+          source: 'verify_api',
+        })
+
+        return NextResponse.json({
+          status: 'failed',
+          payment_method: 'cashfree',
+          order: finalRes.order || order,
+          reason: latestAttempt.payment_message || 'Payment attempt failed or was cancelled.',
+        })
       }
+    }
+
+    const markFailed = searchParams.get('mark_failed') === '1' || searchParams.get('mark_failed') === 'true'
+    if (markFailed) {
+      const finalRes = await finalizeOrderPayment({
+        orderNumber: order.order_number,
+        cfPaymentId: latestCfPaymentId,
+        providerOrderStatus: 'FAILED',
+        rawPaymentData: cfStatus && !('error' in cfStatus) ? cfStatus.data : {},
+        source: 'verify_api',
+      })
+      return NextResponse.json({
+        status: 'failed',
+        payment_method: 'cashfree',
+        order: finalRes.order || order,
+        reason: 'Payment was not completed.',
+      })
     }
 
     // Order is still pending / active at payment gateway

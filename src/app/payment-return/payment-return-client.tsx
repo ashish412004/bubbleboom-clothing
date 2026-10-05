@@ -54,11 +54,20 @@ export function PaymentReturnClient({
             setStatus('failed')
             setFailureReason(data.reason || 'Payment was cancelled or rejected by your bank.')
           } else {
-            // Still pending
-            setStatus('pending')
+            // Still pending or unpaid
+            if (isManual) {
+              setStatus('failed')
+              setFailureReason('No successful payment was received for this order.')
+              fetch(`/api/payments/verify?order_id=${encodeURIComponent(orderNumber)}&mark_failed=1`).catch(() => {})
+            } else {
+              setStatus('verifying')
+            }
           }
         } else if (!res.ok) {
           setFailureReason(data.error || 'Could not verify payment status.')
+          if (isManual) {
+            setStatus('failed')
+          }
         }
       } catch (err: any) {
         console.error('Payment polling error:', err)
@@ -69,7 +78,7 @@ export function PaymentReturnClient({
     [orderNumber]
   )
 
-  // Bounded Polling Effect (runs up to 6 times if in verifying or pending state)
+  // Bounded Polling Effect (runs up to 4 times, ~10s, then marks failed if unpaid)
   useEffect(() => {
     if (status === 'paid' || status === 'failed') return
 
@@ -79,9 +88,11 @@ export function PaymentReturnClient({
       return
     }
 
-    if (pollCount >= 6) {
+    if (pollCount >= 4) {
       if (status === 'verifying') {
-        setStatus('pending')
+        setStatus('failed')
+        setFailureReason('Payment was not completed. No confirmation was received from your bank or gateway.')
+        fetch(`/api/payments/verify?order_id=${encodeURIComponent(orderNumber)}&mark_failed=1`).catch(() => {})
       }
       return
     }
@@ -92,7 +103,7 @@ export function PaymentReturnClient({
     }, 2500)
 
     return () => clearTimeout(timer)
-  }, [status, pollCount, verifyPayment, initialStatus])
+  }, [status, pollCount, verifyPayment, initialStatus, orderNumber])
 
   const shippingAddr = order?.shipping_address as any
   const items = (order?.order_items as any[]) || []
@@ -261,14 +272,14 @@ export function PaymentReturnClient({
         </h1>
         <p className="text-xs text-neutral-600 mt-3 max-w-md mx-auto">
           {failureReason ||
-            'Your bank or payment gateway did not complete the transaction. No funds were debited from your account. Your cart and selected items are still held so you can retry safely.'}
+            'Your payment was not completed or was declined. No funds were debited from your account. Unconfirmed orders will not appear in My Orders. You can retry payment safely.'}
         </p>
 
         <div className="mt-6 inline-block bg-[#F8F8F6] border border-black/30 px-4 py-2 text-xs font-mono font-bold">
           Order Reference: {orderNumber}
         </div>
 
-        {/* 3 Required Buttons (Requirement 10) */}
+        {/* Action Buttons */}
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
             href="/checkout"
@@ -285,10 +296,10 @@ export function PaymentReturnClient({
           </Link>
 
           <Link
-            href="/account/orders"
+            href="/shop"
             className="w-full sm:w-auto border border-neutral-300 hover:border-black text-black px-6 py-3.5 text-xs font-mono uppercase tracking-widest font-bold transition-colors"
           >
-            View My Orders
+            Continue Shopping
           </Link>
         </div>
       </div>
@@ -315,7 +326,7 @@ export function PaymentReturnClient({
         </p>
       </div>
 
-      {/* 2 Required Buttons (Requirement 11) */}
+      {/* Action Buttons */}
       <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
         <button
           onClick={() => verifyPayment(true)}
@@ -327,10 +338,10 @@ export function PaymentReturnClient({
         </button>
 
         <Link
-          href="/account/orders"
+          href="/shop"
           className="w-full sm:w-auto border-2 border-black bg-white hover:bg-neutral-100 text-black px-6 py-3.5 text-xs font-mono uppercase tracking-widest font-bold transition-colors"
         >
-          View My Orders
+          Continue Shopping
         </Link>
       </div>
     </div>

@@ -616,19 +616,31 @@ export async function getOrdersByUserId(userId: string): Promise<Order[]> {
   if (!isSupabaseConfigured()) {
     const orders = getDevOrders()
     const userOrders = orders.filter((o) => o.user_id === userId)
-    if (userOrders.length > 0) return userOrders
-    return orders.filter((o) => !o.user_id || o.user_id === userId)
+    const candidates = userOrders.length > 0 ? userOrders : orders.filter((o) => !o.user_id || o.user_id === userId)
+    // Only return successfully paid orders or COD orders in customer My Orders
+    return candidates.filter(
+      (o) => o.payment_status === 'paid' || o.payment_method === 'cod'
+    )
   }
 
   const supabase = await createServerClient()
+  // Only fetch orders that are either paid or COD
   const { data, error } = await supabase
     .from('orders')
     .select('*')
     .eq('user_id', userId)
+    .or('payment_status.eq.paid,payment_method.eq.cod')
     .order('created_at', { ascending: false })
 
-  if (error) return []
-  return data || []
+  if (error) {
+    console.warn('[getOrdersByUserId] Supabase error:', error)
+    return []
+  }
+
+  // Ensure double-safety filter in memory
+  return (data || []).filter(
+    (o) => o.payment_status === 'paid' || o.payment_method === 'cod'
+  )
 }
 
 /**

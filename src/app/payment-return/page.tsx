@@ -142,13 +142,29 @@ export default async function PaymentReturnPage({ searchParams }: PaymentReturnP
           }
           initialStatus = 'paid'
         } else if (['EXPIRED', 'FAILED', 'CANCELLED'].includes(cfStatus.order_status)) {
-          await finalizeOrderPayment({
+          const finalRes = await finalizeOrderPayment({
             orderNumber: order.order_number,
             cfPaymentId: latestCfPaymentId,
             providerOrderStatus: 'FAILED',
             rawPaymentData: cfStatus.data,
             source: 'return_page',
           })
+          if (finalRes.order) {
+            order = finalRes.order
+          }
+          initialStatus = 'failed'
+        } else if (cfPaymentsRes && !('error' in cfPaymentsRes) && cfPaymentsRes.payments.length > 0 && !hasSuccessfulPayment) {
+          const latestAttempt = cfPaymentsRes.payments[0]
+          const finalRes = await finalizeOrderPayment({
+            orderNumber: order.order_number,
+            cfPaymentId: latestCfPaymentId,
+            providerOrderStatus: latestAttempt.payment_status === 'USER_DROPPED' ? 'USER_DROPPED' : 'FAILED',
+            rawPaymentData: latestAttempt,
+            source: 'return_page',
+          })
+          if (finalRes.order) {
+            order = finalRes.order
+          }
           initialStatus = 'failed'
         } else {
           initialStatus = 'verifying'

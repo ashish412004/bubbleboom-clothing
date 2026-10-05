@@ -1,5 +1,5 @@
 import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
-import { confirmStockReservation } from '@/lib/inventory'
+import { confirmStockReservation, releaseStockReservation } from '@/lib/inventory'
 import { recordCouponUsage } from '@/lib/coupons'
 import { sendOrderConfirmationEmail } from '@/lib/emails/resend'
 import { getDevOrders, saveDevOrder } from '@/lib/orders'
@@ -11,7 +11,7 @@ export interface FinalizationParams {
   paidAmount?: number // in Rupees or Paise
   currency?: string
   rawPaymentData?: any
-  source: 'webhook' | 'return_page' | 'reconciliation' | 'manual'
+  source: 'webhook' | 'return_page' | 'reconciliation' | 'manual' | 'verify_api'
 }
 
 export interface FinalizationResult {
@@ -68,6 +68,20 @@ export async function finalizeOrderPayment(
         orderNumber,
         order: devOrder,
         message: 'Order marked as paid (dev mode).',
+      }
+    }
+
+    if (['FAILED', 'CANCELLED', 'USER_DROPPED', 'EXPIRED'].includes(providerOrderStatus)) {
+      devOrder.payment_status = 'failed'
+      devOrder.status = 'cancelled'
+      devOrder.cancellation_reason = `Payment status is ${providerOrderStatus}`
+      saveDevOrder(devOrder)
+      return {
+        success: false,
+        paymentStatus: 'failed',
+        orderNumber,
+        order: devOrder,
+        message: `Payment status is ${providerOrderStatus} (dev mode).`,
       }
     }
 
@@ -265,6 +279,27 @@ export async function finalizeOrderPayment(
 
   // 6. FAILED / CANCELLED / EXPIRED Flow
   if (['FAILED', 'CANCELLED', 'USER_DROPPED', 'EXPIRED'].includes(providerOrderStatus)) {
+    // Release inventory reservation so stock is immediately available again
+    try {
+      await releaseStockReservation(order.id)
+    } catch (relErr) {
+      console.warn(`[finalizeOrderPayment] Error releasing stock reservation for failed order ${order.id}:`, relErr)
+    }
+
+    // Explicitly update order status so it is marked cancelled & payment failed
+    const { data: updatedOrder } = await supabase
+      .from('orders')
+      .update({
+        status: 'cancelled',
+        payment_status: 'failed',
+        cancellation_reason: `Payment ${providerOrderStatus.toLowerCase()}`,
+        cancelled_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', order.id)
+      .select('*, order_items(*)')
+      .maybeSingle()
+
     if (existingPayment && existingPayment.status !== 'paid') {
       await supabase
         .from('payments')
@@ -275,14 +310,25 @@ export async function finalizeOrderPayment(
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingPayment.id)
+    } else if (!existingPayment) {
+      await supabase.from('payments').insert({
+        order_id: order.id,
+        cashfree_order_id: orderNumber,
+        cf_payment_id: cfPaymentId ? String(cfPaymentId) : null,
+        amount: order.total_amount,
+        status: 'failed',
+        payment_method: 'cashfree',
+        currency,
+        payment_data: rawPaymentData || {},
+      })
     }
 
     return {
       success: false,
       paymentStatus: 'failed',
       orderNumber,
-      order,
-      message: `Payment status is ${providerOrderStatus}. Order remains unconfirmed.`,
+      order: updatedOrder || order,
+      message: `Payment status is ${providerOrderStatus}. Order is marked failed and cancelled.`,
     }
   }
 
