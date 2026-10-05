@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Trash2, ExternalLink, Search, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react'
+import { Trash2, ExternalLink, Search, Loader2, AlertTriangle, Eye, EyeOff, Pencil } from 'lucide-react'
 import { getSafeImageUrl } from '@/lib/utils'
 
 interface ProductTableProps {
@@ -21,6 +21,10 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmDeleteProduct, setConfirmDeleteProduct] = useState<any | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [quickEditProduct, setQuickEditProduct] = useState<any | null>(null)
+  const [quickSellingPrice, setQuickSellingPrice] = useState<string>('')
+  const [quickMrp, setQuickMrp] = useState<string>('')
+  const [isSavingPrice, setIsSavingPrice] = useState<boolean>(false)
 
   // Collect unique categories for filter
   const categories = Array.from(
@@ -94,6 +98,63 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
       toast.error(err.message || 'Error updating status')
     } finally {
       setUpdatingId(null)
+    }
+  }
+
+  const handleOpenQuickPrice = (product: any) => {
+    setQuickEditProduct(product)
+    setQuickSellingPrice(String(product.selling_price || ''))
+    setQuickMrp(String(product.mrp || ''))
+  }
+
+  const handleSaveQuickPrice = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!quickEditProduct) return
+
+    const numSelling = Number(quickSellingPrice)
+    const numMrp = Number(quickMrp)
+
+    if (isNaN(numSelling) || numSelling <= 0) {
+      toast.error('Please enter a valid selling price')
+      return
+    }
+
+    if (isNaN(numMrp) || numMrp < numSelling) {
+      toast.error('MRP must be greater than or equal to selling price')
+      return
+    }
+
+    setIsSavingPrice(true)
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: quickEditProduct.id,
+          selling_price: numSelling,
+          mrp: numMrp,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update price')
+      }
+
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === quickEditProduct.id
+            ? { ...p, selling_price: numSelling, mrp: numMrp }
+            : p
+        )
+      )
+      toast.success(`Updated prices for "${quickEditProduct.name}"`)
+      setQuickEditProduct(null)
+      router.refresh()
+    } catch (err: any) {
+      toast.error(err.message || 'Error updating price')
+    } finally {
+      setIsSavingPrice(false)
     }
   }
 
@@ -190,6 +251,78 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
         </div>
       )}
 
+      {/* Quick Edit Price Modal */}
+      {quickEditProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white border-2 border-black max-w-sm w-full p-6 space-y-4 shadow-2xl">
+            <div className="space-y-1">
+              <h3 className="text-base font-black uppercase tracking-tight">Quick Edit Price</h3>
+              <p className="text-xs text-neutral-600 font-mono">
+                Product: <span className="font-bold text-black">{quickEditProduct.name}</span>
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveQuickPrice} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-mono font-bold uppercase tracking-wider mb-1">
+                  Selling Price (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={quickSellingPrice}
+                  onChange={(e) => setQuickSellingPrice(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-sm font-mono font-bold focus:outline-none focus:border-black"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono font-bold uppercase tracking-wider mb-1">
+                  MRP (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={quickMrp}
+                  onChange={(e) => setQuickMrp(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-sm font-mono font-bold focus:outline-none focus:border-black"
+                  required
+                />
+                <p className="text-[10px] text-neutral-500 font-mono mt-1">Must be ≥ Selling Price</p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-200">
+                <button
+                  type="button"
+                  onClick={() => setQuickEditProduct(null)}
+                  disabled={isSavingPrice}
+                  className="px-4 py-2 border border-black text-xs font-mono uppercase font-bold hover:bg-neutral-100 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingPrice}
+                  className="inline-flex items-center gap-2 bg-black text-white px-5 py-2 text-xs font-mono uppercase font-bold hover:bg-neutral-800 transition-colors disabled:opacity-50"
+                >
+                  {isSavingPrice ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save Price</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Catalog Table */}
       <div className="border border-black bg-white">
         <div className="overflow-x-auto">
@@ -228,14 +361,26 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
                       </td>
                       <td className="p-3 uppercase">{p.category?.name || 'Uncategorized'}</td>
                       <td className="p-3">
-                        <span className="font-black text-black">
-                          ₹{p.selling_price?.toLocaleString('en-IN')}
-                        </span>
-                        {p.mrp > p.selling_price && (
-                          <span className="text-neutral-400 line-through ml-2">
-                            ₹{p.mrp?.toLocaleString('en-IN')}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2 group">
+                          <div>
+                            <span className="font-black text-black">
+                              ₹{p.selling_price?.toLocaleString('en-IN')}
+                            </span>
+                            {p.mrp > p.selling_price && (
+                              <span className="text-neutral-400 line-through ml-2">
+                                ₹{p.mrp?.toLocaleString('en-IN')}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenQuickPrice(p)}
+                            title="Quick edit price"
+                            className="p-1 hover:bg-neutral-200 border border-neutral-200 hover:border-black transition-colors rounded text-neutral-600 hover:text-black"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        </div>
                       </td>
                       <td className="p-3">
                         {p.variants?.length || 0} variants
@@ -268,6 +413,14 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
                       </td>
                       <td className="p-3 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/admin/products/${p.id}/edit`}
+                            title="Edit full product details"
+                            className="p-1.5 border border-neutral-200 hover:border-black hover:bg-black hover:text-white transition-colors text-black"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Link>
+
                           <Link
                             href={`/products/${p.slug}`}
                             target="_blank"

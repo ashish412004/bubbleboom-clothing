@@ -8,35 +8,52 @@ import Link from 'next/link'
 
 interface ProductFormProps {
   categories: Array<{ id: string; name: string; slug: string }>
+  initialProduct?: any
 }
 
-export function ProductForm({ categories }: ProductFormProps) {
+export function ProductForm({ categories, initialProduct }: ProductFormProps) {
   const router = useRouter()
+  const isEdit = Boolean(initialProduct?.id)
   const [loading, setLoading] = useState(false)
 
   // Basic info
-  const [name, setName] = useState('')
-  const [slug, setSlug] = useState('')
-  const [description, setDescription] = useState('')
-  const [categoryId, setCategoryId] = useState(categories[0]?.id || '')
-  const [material, setMaterial] = useState('')
-  const [fit, setFit] = useState('')
-  const [washCare, setWashCare] = useState('')
-  const [mrp, setMrp] = useState<number | ''>('')
-  const [sellingPrice, setSellingPrice] = useState<number | ''>('')
-  const [isPublished, setIsPublished] = useState(true)
+  const [name, setName] = useState(initialProduct?.name || '')
+  const [slug, setSlug] = useState(initialProduct?.slug || '')
+  const [description, setDescription] = useState(initialProduct?.description || '')
+  const [categoryId, setCategoryId] = useState(initialProduct?.category_id || categories[0]?.id || '')
+  const [material, setMaterial] = useState(initialProduct?.material || '')
+  const [fit, setFit] = useState(initialProduct?.fit || '')
+  const [washCare, setWashCare] = useState(initialProduct?.wash_care || '')
+  const [mrp, setMrp] = useState<number | ''>(initialProduct?.mrp ?? '')
+  const [sellingPrice, setSellingPrice] = useState<number | ''>(initialProduct?.selling_price ?? '')
+  const [isPublished, setIsPublished] = useState(initialProduct?.is_published ?? true)
 
   // Variants matrix
-  const [variants, setVariants] = useState<Array<{ color: string; size: string; sku: string; stock: number }>>([
-    { color: 'Black', size: 'M', sku: '', stock: 0 },
-  ])
+  const [variants, setVariants] = useState<
+    Array<{ id?: string; color: string; size: string; sku: string; stock: number; is_active?: boolean }>
+  >(
+    initialProduct?.variants && initialProduct.variants.length > 0
+      ? initialProduct.variants.map((v: any) => ({
+          id: v.id,
+          color: v.color || '',
+          size: v.size || '',
+          sku: v.sku || '',
+          stock: v.stock ?? 0,
+          is_active: v.is_active ?? true,
+        }))
+      : [{ color: 'Black', size: 'M', sku: '', stock: 0 }]
+  )
 
   // Images
-  const [imageUrls, setImageUrls] = useState<string[]>([''])
+  const [imageUrls, setImageUrls] = useState<string[]>(
+    initialProduct?.images && initialProduct.images.length > 0
+      ? initialProduct.images.map((img: any) => (typeof img === 'string' ? img : img.image_url))
+      : ['']
+  )
 
   const handleNameChange = (val: string) => {
     setName(val)
-    if (!slug || slug === name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')) {
+    if (!isEdit && (!slug || slug === name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''))) {
       setSlug(val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''))
     }
   }
@@ -78,7 +95,7 @@ export function ProductForm({ categories }: ProductFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name || !slug || !sellingPrice) {
+    if (!name || !slug || sellingPrice === '') {
       toast.error('Name, slug, and selling price are required')
       return
     }
@@ -97,11 +114,14 @@ export function ProductForm({ categories }: ProductFormProps) {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/admin/products', {
-        method: 'POST',
+      const endpoint = '/api/admin/products'
+      const method = isEdit ? 'PUT' : 'POST'
+      const res = await fetch(endpoint, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product: {
+            id: initialProduct?.id,
             name,
             slug,
             description,
@@ -109,7 +129,7 @@ export function ProductForm({ categories }: ProductFormProps) {
             material,
             fit,
             wash_care: washCare,
-            mrp: Number(mrp),
+            mrp: Number(mrp) || Number(sellingPrice),
             selling_price: Number(sellingPrice),
             is_published: isPublished,
           },
@@ -119,13 +139,13 @@ export function ProductForm({ categories }: ProductFormProps) {
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to save product')
+      if (!res.ok) throw new Error(data.error || `Failed to ${isEdit ? 'update' : 'create'} product`)
 
-      toast.success('Product and variants created successfully!')
+      toast.success(`Product ${isEdit ? 'updated' : 'created'} successfully!`)
       router.push('/admin/products')
       router.refresh()
     } catch (err: any) {
-      toast.error(err.message || 'Error creating product')
+      toast.error(err.message || 'Error saving product')
     } finally {
       setLoading(false)
     }
@@ -144,9 +164,9 @@ export function ProductForm({ categories }: ProductFormProps) {
         <button
           type="submit"
           disabled={loading}
-          className="bg-black text-white px-6 py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-400"
+          className="bg-black text-white px-6 py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-400 cursor-pointer"
         >
-          {loading ? 'Saving...' : 'Publish Product'}
+          {loading ? 'Saving...' : isEdit ? 'Update Product' : 'Publish Product'}
         </button>
       </div>
 
