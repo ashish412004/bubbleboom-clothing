@@ -1189,23 +1189,47 @@ export interface Database {
         Row: {
           id: string
           email: string
+          status: 'pending' | 'active' | 'unsubscribed'
+          confirmation_token: string | null
+          token_expires_at: string | null
+          confirmed_at: string | null
+          unsubscribe_token: string | null
+          unsubscribed_at: string | null
+          last_sent_at: string | null
           consent_given: boolean
           source: string | null
           created_at: string
+          updated_at: string | null
         }
         Insert: {
           id?: string
           email: string
+          status?: 'pending' | 'active' | 'unsubscribed'
+          confirmation_token?: string | null
+          token_expires_at?: string | null
+          confirmed_at?: string | null
+          unsubscribe_token?: string | null
+          unsubscribed_at?: string | null
+          last_sent_at?: string | null
           consent_given?: boolean
           source?: string | null
           created_at?: string
+          updated_at?: string | null
         }
         Update: {
           id?: string
           email?: string
+          status?: 'pending' | 'active' | 'unsubscribed'
+          confirmation_token?: string | null
+          token_expires_at?: string | null
+          confirmed_at?: string | null
+          unsubscribe_token?: string | null
+          unsubscribed_at?: string | null
+          last_sent_at?: string | null
           consent_given?: boolean
           source?: string | null
           created_at?: string
+          updated_at?: string | null
         }
         Relationships: []
       }

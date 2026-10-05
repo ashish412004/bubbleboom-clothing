@@ -1,37 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { subscribeNewsletter, validateEmailAddress } from '@/lib/newsletter'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, source = 'storefront_footer' } = await request.json()
+    const body = await request.json().catch(() => ({}))
+    const { email, source = 'storefront_footer' } = body
 
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 })
+    if (!email || !validateEmailAddress(email)) {
+      return NextResponse.json(
+        { error: 'Please enter a valid email address.' },
+        { status: 400 }
+      )
     }
 
-    const supabase = await createServiceClient()
-    const { error } = await supabase
-      .from('newsletter_subscribers')
-      .upsert(
-        {
-          email: email.trim().toLowerCase(),
-          consent_given: true,
-          source,
-          created_at: new Date().toISOString(),
-        },
-        { onConflict: 'email' }
-      )
+    // Determine base site URL for confirmation links
+    const origin = request.headers.get('origin') || request.nextUrl.origin
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || origin
 
-    if (error) {
-      console.error('Newsletter subscription error:', error)
-      return NextResponse.json({ error: 'Subscription failed. Please try again.' }, { status: 500 })
+    const result = await subscribeNewsletter({
+      email,
+      source,
+      siteUrl,
+    })
+
+    if (!result.success) {
+      if (result.rateLimited) {
+        return NextResponse.json(
+          { error: result.error || 'Please wait before requesting another confirmation email.' },
+          { status: 429 }
+        )
+      }
+
+      return NextResponse.json(
+        { error: result.error || 'Failed to process subscription. Please try again.' },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json(
-      { message: 'Welcome to Bubble Boom! You are now subscribed to exclusive drops.' },
+      {
+        success: true,
+        message: result.message,
+        alreadyActive: result.alreadyActive || false,
+        confirmationUrl: result.confirmationUrl,
+      },
       { status: 200 }
     )
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 })
+    console.error('Newsletter API route error:', err)
+    return NextResponse.json(
+      { error: err.message || 'An unexpected server error occurred.' },
+      { status: 500 }
+    )
   }
 }

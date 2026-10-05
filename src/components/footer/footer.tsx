@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { useState } from 'react'
-import { ArrowRight, CheckCircle2, ShieldCheck, Truck, RefreshCw } from 'lucide-react'
+import { ArrowRight, CheckCircle2, AlertCircle, ShieldCheck, Truck, RefreshCw } from 'lucide-react'
 
 export function Footer() {
   const [email, setEmail] = useState('')
@@ -12,27 +12,36 @@ export function Footer() {
 
   const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email) return
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail) return
+
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/
+    if (!emailRegex.test(trimmedEmail)) {
+      setStatus('error')
+      setMessage('Please enter a valid email address.')
+      return
+    }
 
     setStatus('loading')
+    setMessage('')
     try {
       const res = await fetch('/api/newsletter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: trimmedEmail, source: 'storefront_footer' }),
       })
       const data = await res.json()
       if (res.ok) {
         setStatus('success')
-        setMessage(data.message || 'Subscribed successfully!')
+        setMessage(data.message || 'Check your inbox to confirm your subscription!')
         setEmail('')
       } else {
         setStatus('error')
-        setMessage(data.error || 'Failed to subscribe')
+        setMessage(data.error || 'Failed to subscribe. Please try again.')
       }
     } catch {
       setStatus('error')
-      setMessage('Failed to connect. Please try again.')
+      setMessage('Unable to connect to the server. Please check your network and try again.')
     }
   }
 
@@ -215,7 +224,7 @@ export function Footer() {
               JOIN THE BOOM SQUAD
             </h4>
             <p className="text-xs text-neutral-400">
-              Subscribe to unlock early drop access, private collection previews, and special drops.
+              Get new arrivals and offers by email. Unsubscribe anytime.
             </p>
           </div>
 
@@ -233,7 +242,7 @@ export function Footer() {
               disabled={status === 'loading'}
               className="bg-white text-black hover:bg-neutral-200 px-6 py-2.5 text-xs uppercase tracking-widest font-bold flex items-center justify-center transition-colors disabled:opacity-50"
             >
-              {status === 'loading' ? 'Subscribing...' : 'Subscribe'}
+              {status === 'loading' ? 'Sending Link...' : 'Subscribe'}
               <ArrowRight size={14} className="ml-2" />
             </button>
           </form>
@@ -242,11 +251,15 @@ export function Footer() {
         {message && (
           <div
             className={`mt-3 text-xs flex items-center ${
-              status === 'success' ? 'text-neutral-300' : 'text-neutral-400'
+              status === 'success' ? 'text-white bg-neutral-900 p-2.5 border border-neutral-800' : 'text-neutral-300 bg-neutral-950 p-2.5 border border-neutral-800'
             }`}
           >
-            {status === 'success' && <CheckCircle2 size={14} className="mr-1.5" />}
-            {message}
+            {status === 'success' ? (
+              <CheckCircle2 size={16} className="text-white mr-2 shrink-0" />
+            ) : (
+              <AlertCircle size={16} className="text-neutral-400 mr-2 shrink-0" />
+            )}
+            <span>{message}</span>
           </div>
         )}
 
