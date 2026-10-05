@@ -3,13 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import {
-  ChevronLeft,
-  ChevronRight,
-  Pause,
-  Play,
-  ArrowRight,
-} from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 
 interface HeroCarouselProps {
   heroTitle?: string | null
@@ -60,9 +54,6 @@ export function HeroCarousel({
   secondaryCtaLink,
 }: HeroCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(true)
-  const [isHovered, setIsHovered] = useState(false)
-  const [isFocused, setIsFocused] = useState(false)
   const [isTabVisible, setIsTabVisible] = useState(true)
   const [isReducedMotion, setIsReducedMotion] = useState(false)
 
@@ -85,7 +76,7 @@ export function HeroCarousel({
     }
   }, [])
 
-  // Detect browser tab visibility
+  // Detect browser tab visibility to avoid background resource waste
   useEffect(() => {
     const handleVisibilityChange = () => {
       setIsTabVisible(document.visibilityState === 'visible')
@@ -108,12 +99,8 @@ export function HeroCarousel({
     setCurrentIndex(index)
   }
 
-  const togglePlayPause = () => {
-    setIsPlaying((prev) => !prev)
-  }
-
-  // Autoplay interval effect (5 seconds cycle)
-  const shouldAutoAdvance = isPlaying && !isHovered && !isFocused && isTabVisible && !isReducedMotion
+  // Autoplay interval effect (automatic cycle every 5 seconds)
+  const shouldAutoAdvance = isTabVisible && !isReducedMotion
 
   useEffect(() => {
     if (!shouldAutoAdvance) return
@@ -125,7 +112,7 @@ export function HeroCarousel({
     return () => clearInterval(interval)
   }, [shouldAutoAdvance, nextSlide])
 
-  // Touch event listeners for mobile swipe
+  // Touch event listeners for mobile swipe gestures
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0].clientX
     touchStartYRef.current = e.touches[0].clientY
@@ -160,14 +147,6 @@ export function HeroCarousel({
   return (
     <section
       className="relative min-h-[75vh] sm:min-h-[85vh] h-[80vh] sm:h-[88vh] max-h-[960px] bg-black text-white flex items-center justify-center overflow-hidden"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onFocus={() => setIsFocused(true)}
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-          setIsFocused(false)
-        }
-      }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onKeyDown={handleKeyDown}
@@ -248,85 +227,29 @@ export function HeroCarousel({
         </div>
       </div>
 
-      {/* 4. Desktop Side Arrow Controls */}
-      <button
-        type="button"
-        onClick={prevSlide}
-        aria-label="Previous slide"
-        className="hidden lg:flex items-center justify-center absolute left-6 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-black/40 hover:bg-black/80 backdrop-blur-md border border-white/20 hover:border-white text-white transition-all cursor-pointer hover:scale-105"
-      >
-        <ChevronLeft size={20} />
-      </button>
-
-      <button
-        type="button"
-        onClick={nextSlide}
-        aria-label="Next slide"
-        className="hidden lg:flex items-center justify-center absolute right-6 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-black/40 hover:bg-black/80 backdrop-blur-md border border-white/20 hover:border-white text-white transition-all cursor-pointer hover:scale-105"
-      >
-        <ChevronRight size={20} />
-      </button>
-
-      {/* 5. Navigation Dots, Prev/Next & Play/Pause Control Bar */}
+      {/* 4. Minimalist Slide Indicators (No arrows, no pause button) */}
       <div className="absolute bottom-5 sm:bottom-7 inset-x-0 z-20 flex items-center justify-center pointer-events-none">
-        <div className="inline-flex items-center gap-2 sm:gap-3 bg-black/60 backdrop-blur-md border border-white/20 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-white shadow-xl pointer-events-auto">
-          {/* Mobile Prev Button */}
-          <button
-            type="button"
-            onClick={prevSlide}
-            aria-label="Previous background banner"
-            className="lg:hidden p-1.5 hover:bg-white/20 rounded-full transition-colors text-white cursor-pointer"
-          >
-            <ChevronLeft size={16} />
-          </button>
-
-          {/* Navigation Dots */}
-          <div
-            className="flex items-center gap-1.5 px-1"
-            role="tablist"
-            aria-label="Background carousel navigation dots"
-          >
-            {HERO_SLIDES.map((slide, idx) => {
-              const isActive = idx === currentIndex
-              return (
-                <button
-                  key={slide.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-label={`Go to slide ${idx + 1}: ${slide.title}`}
-                  onClick={() => goToSlide(idx)}
-                  className={`transition-all duration-300 rounded-full cursor-pointer ${
-                    isActive ? 'w-6 sm:w-8 h-2 bg-white' : 'w-2 h-2 bg-white/40 hover:bg-white/70'
-                  }`}
-                />
-              )
-            })}
-          </div>
-
-          {/* Mobile Next Button */}
-          <button
-            type="button"
-            onClick={nextSlide}
-            aria-label="Next background banner"
-            className="lg:hidden p-1.5 hover:bg-white/20 rounded-full transition-colors text-white cursor-pointer"
-          >
-            <ChevronRight size={16} />
-          </button>
-
-          {/* Divider */}
-          <div className="w-px h-3.5 bg-white/20 mx-0.5" />
-
-          {/* Pause / Play Toggle Button */}
-          <button
-            type="button"
-            onClick={togglePlayPause}
-            aria-label={isPlaying ? 'Pause background carousel autoplay' : 'Resume background carousel autoplay'}
-            className="p-1.5 hover:bg-white/20 rounded-full transition-colors text-white cursor-pointer"
-            title={isPlaying ? 'Pause background autoplay' : 'Resume background autoplay'}
-          >
-            {isPlaying ? <Pause size={13} /> : <Play size={13} />}
-          </button>
+        <div
+          className="inline-flex items-center gap-2 bg-black/40 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-full pointer-events-auto"
+          role="tablist"
+          aria-label="Background slides"
+        >
+          {HERO_SLIDES.map((slide, idx) => {
+            const isActive = idx === currentIndex
+            return (
+              <button
+                key={slide.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                aria-label={`Go to slide ${idx + 1}`}
+                onClick={() => goToSlide(idx)}
+                className={`transition-all duration-300 rounded-full cursor-pointer ${
+                  isActive ? 'w-6 sm:w-8 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/40 hover:bg-white/80'
+                }`}
+              />
+            )
+          })}
         </div>
       </div>
     </section>
