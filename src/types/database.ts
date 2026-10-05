@@ -520,7 +520,7 @@ export interface Database {
           user_id: string | null
           guest_email: string | null
           guest_phone: string | null
-          status: 'pending' | 'confirmed' | 'packed' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'return_requested' | 'returned' | 'refunded'
+          status: 'pending' | 'confirmed' | 'unfulfilled' | 'packed' | 'pickup_scheduled' | 'shipped' | 'out_for_delivery' | 'delivered' | 'delivery_exception' | 'return_to_origin' | 'cancelled' | 'return_requested' | 'returned' | 'refunded'
           payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'partially_refunded'
           payment_method: 'cashfree' | 'cod'
           subtotal: number
@@ -536,6 +536,15 @@ export interface Database {
           cancelled_at: string | null
           tracking_number: string | null
           carrier: string | null
+          tracking_url?: string | null
+          dispatch_date?: string | null
+          estimated_delivery_min?: string | null
+          estimated_delivery_max?: string | null
+          package_weight_grams?: number | null
+          package_dimensions?: Json | null
+          status_history?: Json | null
+          shipped_email_sent_at?: string | null
+          delivered_email_sent_at?: string | null
           created_at: string
           updated_at: string
         }
@@ -545,9 +554,9 @@ export interface Database {
           user_id?: string | null
           guest_email?: string | null
           guest_phone?: string | null
-          status?: 'pending' | 'confirmed' | 'packed' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'return_requested' | 'returned' | 'refunded'
+          status?: 'pending' | 'confirmed' | 'unfulfilled' | 'packed' | 'pickup_scheduled' | 'shipped' | 'out_for_delivery' | 'delivered' | 'delivery_exception' | 'return_to_origin' | 'cancelled' | 'return_requested' | 'returned' | 'refunded'
           payment_status?: 'pending' | 'paid' | 'failed' | 'refunded' | 'partially_refunded'
-          payment_method: 'cashfree' | 'cod'
+          payment_method?: 'cashfree' | 'cod'
           subtotal: number
           discount_amount?: number
           shipping_amount?: number
@@ -561,6 +570,15 @@ export interface Database {
           cancelled_at?: string | null
           tracking_number?: string | null
           carrier?: string | null
+          tracking_url?: string | null
+          dispatch_date?: string | null
+          estimated_delivery_min?: string | null
+          estimated_delivery_max?: string | null
+          package_weight_grams?: number | null
+          package_dimensions?: Json | null
+          status_history?: Json | null
+          shipped_email_sent_at?: string | null
+          delivered_email_sent_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -570,7 +588,7 @@ export interface Database {
           user_id?: string | null
           guest_email?: string | null
           guest_phone?: string | null
-          status?: 'pending' | 'confirmed' | 'packed' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'return_requested' | 'returned' | 'refunded'
+          status?: 'pending' | 'confirmed' | 'unfulfilled' | 'packed' | 'pickup_scheduled' | 'shipped' | 'out_for_delivery' | 'delivered' | 'delivery_exception' | 'return_to_origin' | 'cancelled' | 'return_requested' | 'returned' | 'refunded'
           payment_status?: 'pending' | 'paid' | 'failed' | 'refunded' | 'partially_refunded'
           payment_method?: 'cashfree' | 'cod'
           subtotal?: number
@@ -586,6 +604,15 @@ export interface Database {
           cancelled_at?: string | null
           tracking_number?: string | null
           carrier?: string | null
+          tracking_url?: string | null
+          dispatch_date?: string | null
+          estimated_delivery_min?: string | null
+          estimated_delivery_max?: string | null
+          package_weight_grams?: number | null
+          package_dimensions?: Json | null
+          status_history?: Json | null
+          shipped_email_sent_at?: string | null
+          delivered_email_sent_at?: string | null
           created_at?: string
           updated_at?: string
         }

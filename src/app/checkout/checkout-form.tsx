@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -15,7 +15,9 @@ import {
   Edit2,
   CheckCircle2,
   Loader2,
-  ShoppingBag
+  ShoppingBag,
+  MapPin,
+  Check
 } from 'lucide-react'
 import { formatPrice, getSafeImageUrl } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
@@ -82,11 +84,61 @@ export function CheckoutForm({
   const [phone, setPhone] = useState(userPhone)
   const [addressLine1, setAddressLine1] = useState('')
   const [addressLine2, setAddressLine2] = useState('')
+  const [landmark, setLandmark] = useState('')
   const [city, setCity] = useState('')
   const [state, setState] = useState('')
   const [pinCode, setPinCode] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<'cashfree' | 'cod'>('cashfree')
   const [notes, setNotes] = useState('')
+
+  // Saved addresses
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([])
+  const [selectedSavedId, setSelectedSavedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/addresses')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.success && Array.isArray(data.addresses) && data.addresses.length > 0) {
+          setSavedAddresses(data.addresses)
+          const def = data.addresses.find((a: any) => a.is_default) || data.addresses[0]
+          if (def) {
+            setSelectedSavedId(def.id)
+            setFullName(def.full_name || userName)
+            setPhone(def.phone || userPhone)
+            setAddressLine1(def.address_line1 || '')
+            setAddressLine2(def.address_line2 || '')
+            setCity(def.city || '')
+            setState(def.state || '')
+            setPinCode(def.pin_code || '')
+          }
+        }
+      })
+      .catch(() => {})
+  }, [userName, userPhone])
+
+  const handleSelectSavedAddress = (addr: any) => {
+    setSelectedSavedId(addr.id)
+    setFullName(addr.full_name || '')
+    setPhone(addr.phone || '')
+    setAddressLine1(addr.address_line1 || '')
+    setAddressLine2(addr.address_line2 || '')
+    setCity(addr.city || '')
+    setState(addr.state || '')
+    setPinCode(addr.pin_code || '')
+    setErrors({})
+    toast.success('Saved address selected')
+  }
+
+  const handleClearToNewAddress = () => {
+    setSelectedSavedId(null)
+    setAddressLine1('')
+    setAddressLine2('')
+    setLandmark('')
+    setCity('')
+    setState('')
+    setPinCode('')
+  }
 
   // Field validation errors
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -405,6 +457,7 @@ export function CheckoutForm({
           phone: cleanPhone,
           address_line1: addressLine1.trim(),
           address_line2: addressLine2.trim() || undefined,
+          landmark: landmark.trim() || undefined,
           city: city.trim(),
           state: state.trim(),
           pin_code: pinCode.trim(),
@@ -544,14 +597,14 @@ export function CheckoutForm({
               </p>
             ) : (
               <p className="text-[11px] text-neutral-400 mt-1">
-                Used for courier delivery updates and Cashfree verification OTP.
+                Used strictly for delivery coordination by courier logistics.
               </p>
             )}
           </div>
         </section>
 
         {/* Shipping Address */}
-        <section className="bg-white border border-neutral-200 p-6 space-y-4">
+        <section ref={addressSectionRef} className="bg-white border border-neutral-200 p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-neutral-200 gap-2">
             <h2 className="text-xs uppercase tracking-widest font-extrabold text-black">
               2. Shipping Address (India Only)
@@ -566,6 +619,58 @@ export function CheckoutForm({
               <span>{locating ? 'Detecting Location...' : 'Use Current Location'}</span>
             </button>
           </div>
+
+          {/* Saved Addresses Selector */}
+          {savedAddresses.length > 0 && (
+            <div className="space-y-2 pb-3 border-b border-neutral-200">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-neutral-600 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-black" />
+                  <span>Choose From Saved Addresses</span>
+                </span>
+                {selectedSavedId && (
+                  <button
+                    type="button"
+                    onClick={handleClearToNewAddress}
+                    className="text-[11px] font-mono uppercase text-neutral-600 hover:text-black underline cursor-pointer"
+                  >
+                    + Enter New Address
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {savedAddresses.map((sa) => {
+                  const isSelected = selectedSavedId === sa.id
+                  return (
+                    <button
+                      key={sa.id}
+                      type="button"
+                      onClick={() => handleSelectSavedAddress(sa)}
+                      className={`p-3 text-left border text-xs font-mono transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-black bg-neutral-100 ring-1 ring-black'
+                          : 'border-neutral-200 hover:border-black bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-black">{sa.full_name}</span>
+                        {sa.is_default && (
+                          <span className="text-[9px] uppercase px-1.5 py-0.5 bg-black text-white font-bold">Default</span>
+                        )}
+                      </div>
+                      <p className="text-neutral-600 text-[11px] mt-1 line-clamp-1">
+                        {sa.address_line1}
+                      </p>
+                      <p className="text-neutral-500 text-[11px]">
+                        {sa.city}, {sa.state} — {sa.pin_code}
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs uppercase tracking-wider font-bold mb-1">
               House / Flat / Street / Area *
@@ -587,18 +692,34 @@ export function CheckoutForm({
               </p>
             )}
           </div>
-          <div>
-            <label className="block text-xs uppercase tracking-wider font-bold mb-1">
-              Landmark / Apartment / Suite (Optional)
-            </label>
-            <input
-              type="text"
-              value={addressLine2}
-              onChange={(e) => setAddressLine2(e.target.value)}
-              placeholder="Near Metro Station or landmark"
-              className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
-            />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs uppercase tracking-wider font-bold mb-1">
+                Apartment / Floor / Building (Optional)
+              </label>
+              <input
+                type="text"
+                value={addressLine2}
+                onChange={(e) => setAddressLine2(e.target.value)}
+                placeholder="e.g. 4th Floor"
+                className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
+              />
+            </div>
+            <div>
+              <label className="block text-xs uppercase tracking-wider font-bold mb-1">
+                Landmark (Optional)
+              </label>
+              <input
+                type="text"
+                value={landmark}
+                onChange={(e) => setLandmark(e.target.value)}
+                placeholder="e.g. Near Metro Station / Behind Mall"
+                className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
+              />
+            </div>
           </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -727,7 +848,7 @@ export function CheckoutForm({
                 <span className="font-mono text-neutral-700">+91 {phone.replace(/\D/g, '')}</span>
               </p>
               <p className="text-neutral-700 leading-relaxed">
-                {addressLine1}{addressLine2 ? `, ${addressLine2}` : ''}
+                {addressLine1}{addressLine2 ? `, ${addressLine2}` : ''}{landmark ? `, Near ${landmark}` : ''}
               </p>
               <p className="font-semibold text-neutral-900">
                 {city}, {state} &mdash; <span className="font-mono font-bold">{pinCode}</span>

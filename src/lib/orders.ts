@@ -4,6 +4,8 @@ import { getStoreSettings, StoreShippingSettings } from '@/lib/settings'
 import { validateCoupon } from '@/lib/coupons'
 import { reserveStockForCheckout, confirmStockReservation, releaseStockReservation } from '@/lib/inventory'
 import { createCashfreeOrder, getCashfreeConfig, getPaymentStatus } from '@/lib/payments/cashfree'
+import { sendOrderShippedEmail, sendOrderDeliveredEmail } from '@/lib/emails/resend'
+import { isAdmin } from '@/lib/auth'
 import { MOCK_PRODUCTS, MOCK_ORDERS } from '@/lib/mock-data'
 import fs from 'fs'
 import path from 'path'
@@ -68,6 +70,7 @@ export interface ShippingAddressInput {
   phone: string
   address_line1: string
   address_line2?: string | null
+  landmark?: string | null
   city: string
   state: string
   pin_code: string
@@ -100,13 +103,28 @@ export function validateIndianPinCode(pin: string): boolean {
   return /^[1-9][0-9]{5}$/.test(pin.trim())
 }
 
+export function validateTrackingUrl(url?: string | null): boolean {
+  if (!url || !url.trim()) return true
+  const trimmed = url.trim()
+  try {
+    const parsed = new URL(trimmed)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
 export function isValidOrderStatusTransition(currentStatus: OrderStatus, newStatus: OrderStatus): boolean {
   const allowed: Record<OrderStatus, OrderStatus[]> = {
-    pending: ['confirmed', 'cancelled'],
-    confirmed: ['packed', 'cancelled'],
-    packed: ['shipped', 'cancelled'],
-    shipped: ['out_for_delivery'],
-    out_for_delivery: ['delivered'],
+    pending: ['confirmed', 'unfulfilled', 'cancelled'],
+    confirmed: ['unfulfilled', 'packed', 'cancelled'],
+    unfulfilled: ['packed', 'cancelled'],
+    packed: ['pickup_scheduled', 'shipped', 'cancelled'],
+    pickup_scheduled: ['shipped', 'cancelled', 'delivery_exception'],
+    shipped: ['out_for_delivery', 'delivered', 'delivery_exception', 'return_to_origin'],
+    out_for_delivery: ['delivered', 'delivery_exception', 'return_to_origin'],
+    delivery_exception: ['out_for_delivery', 'shipped', 'return_to_origin', 'delivered', 'cancelled'],
+    return_to_origin: ['cancelled', 'returned'],
     delivered: ['return_requested'],
     return_requested: ['returned', 'delivered'],
     returned: ['refunded'],
@@ -778,7 +796,7 @@ export async function getOrdersByUserId(userId: string): Promise<Order[]> {
 }
 
 /**
- * Enforce valid fulfillment state transitions
+ * Enforce valid fulfillment state transitions & dispatch safeguards
  */
 export async function updateOrderStatus(
   orderId: string,
@@ -786,15 +804,65 @@ export async function updateOrderStatus(
   adminUserId?: string
 ) {
   if (!isSupabaseConfigured()) {
-    const found = MOCK_ORDERS.find((o) => o.id === orderId || o.order_number === orderId)
+    const devOrders = getDevOrders()
+    const found = devOrders.find((o) => o.id === orderId || o.order_number === orderId)
     if (!found) return { error: 'Order not found' }
+
     if (!isValidOrderStatusTransition(found.status, newStatus)) {
       return {
         error: `Transition from "${found.status}" to "${newStatus}" is not permitted.`,
       }
     }
+
+    // Dispatch guard: block dispatch of unpaid online orders
+    if (newStatus === 'shipped' || newStatus === 'out_for_delivery') {
+      if (found.payment_method === 'cashfree' && found.payment_status !== 'paid') {
+        return {
+          error: `Cannot dispatch order: Online payment is not verified (status: ${found.payment_status}). Only paid online orders or valid COD orders can be shipped.`,
+        }
+      }
+    }
+
+    const previousStatus = found.status
     found.status = newStatus
     found.updated_at = new Date().toISOString()
+
+    // Status history entry
+    found.status_history = Array.isArray(found.status_history) ? found.status_history : []
+    found.status_history.push({
+      from: previousStatus,
+      to: newStatus,
+      timestamp: new Date().toISOString(),
+      admin_id: adminUserId || null,
+    })
+
+    // Email notifications (idempotent & non-blocking)
+    const customerEmail = found.guest_email || (found.shipping_address as any)?.email
+    if (newStatus === 'shipped' && !found.shipped_email_sent_at && customerEmail) {
+      try {
+        await sendOrderShippedEmail(
+          customerEmail,
+          found.order_number,
+          found.tracking_number || 'AWB-PENDING',
+          found.carrier || 'Express Courier',
+          found.tracking_url || null
+        )
+        found.shipped_email_sent_at = new Date().toISOString()
+      } catch (emailErr) {
+        console.warn('[updateOrderStatus dev] Non-fatal email error on dispatch:', emailErr)
+      }
+    }
+
+    if (newStatus === 'delivered' && !found.delivered_email_sent_at && customerEmail) {
+      try {
+        await sendOrderDeliveredEmail(customerEmail, found.order_number)
+        found.delivered_email_sent_at = new Date().toISOString()
+      } catch (emailErr) {
+        console.warn('[updateOrderStatus dev] Non-fatal email error on delivery:', emailErr)
+      }
+    }
+
+    saveDevOrder(found)
     return { data: found }
   }
 
@@ -802,7 +870,7 @@ export async function updateOrderStatus(
 
   const { data: currentOrder, error: fetchErr } = await supabase
     .from('orders')
-    .select('status, id')
+    .select('*')
     .eq('id', orderId)
     .single()
 
@@ -814,10 +882,63 @@ export async function updateOrderStatus(
     }
   }
 
+  // Dispatch guard: block dispatch of unpaid online orders
+  if (newStatus === 'shipped' || newStatus === 'out_for_delivery') {
+    if (currentOrder.payment_method === 'cashfree' && currentOrder.payment_status !== 'paid') {
+      return {
+        error: `Cannot dispatch order: Online payment is not verified (status: ${currentOrder.payment_status}). Only paid online orders or valid COD orders can be shipped.`,
+      }
+    }
+  }
+
+  const history = Array.isArray((currentOrder as any).status_history)
+    ? [...(currentOrder as any).status_history]
+    : []
+
+  history.push({
+    from: currentOrder.status,
+    to: newStatus,
+    timestamp: new Date().toISOString(),
+    admin_id: adminUserId || null,
+  })
+
+  let shippedEmailSentAt = (currentOrder as any).shipped_email_sent_at
+  let deliveredEmailSentAt = (currentOrder as any).delivered_email_sent_at
+
+  const customerEmail = currentOrder.guest_email || (currentOrder.shipping_address as any)?.email
+
+  // Email notifications: idempotent and non-blocking
+  if (newStatus === 'shipped' && !shippedEmailSentAt && customerEmail) {
+    try {
+      await sendOrderShippedEmail(
+        customerEmail,
+        currentOrder.order_number,
+        currentOrder.tracking_number || 'AWB-PENDING',
+        currentOrder.carrier || 'Express Courier',
+        (currentOrder as any).tracking_url || null
+      )
+      shippedEmailSentAt = new Date().toISOString()
+    } catch (emailErr) {
+      console.warn('[updateOrderStatus] Non-fatal email error on dispatch:', emailErr)
+    }
+  }
+
+  if (newStatus === 'delivered' && !deliveredEmailSentAt && customerEmail) {
+    try {
+      await sendOrderDeliveredEmail(customerEmail, currentOrder.order_number)
+      deliveredEmailSentAt = new Date().toISOString()
+    } catch (emailErr) {
+      console.warn('[updateOrderStatus] Non-fatal email error on delivery:', emailErr)
+    }
+  }
+
   const { data, error } = await supabase
     .from('orders')
     .update({
       status: newStatus,
+      status_history: history as any,
+      shipped_email_sent_at: shippedEmailSentAt,
+      delivered_email_sent_at: deliveredEmailSentAt,
       updated_at: new Date().toISOString(),
     })
     .eq('id', orderId)
@@ -826,18 +947,223 @@ export async function updateOrderStatus(
 
   if (error) return { error: error.message }
 
-  // Log in audit logs
+  // Log in admin audit logs
   if (adminUserId) {
-    await supabase.from('admin_audit_logs').insert({
-      admin_id: adminUserId,
-      action: 'UPDATE_ORDER_STATUS',
-      entity: 'orders',
-      entity_id: orderId,
-      metadata: { from: currentOrder.status, to: newStatus },
-    })
+    try {
+      await supabase.from('admin_audit_logs').insert({
+        admin_id: adminUserId,
+        action: 'UPDATE_ORDER_STATUS',
+        entity: 'orders',
+        entity_id: orderId,
+        metadata: { from: currentOrder.status, to: newStatus },
+      })
+    } catch {}
   }
 
   return { data }
+}
+
+export interface UpdateFulfillmentInput {
+  orderId: string
+  courierPartner: string
+  trackingNumber: string
+  trackingUrl?: string | null
+  dispatchDate?: string | null
+  packageWeightGrams?: number | null
+  packageDimensions?: { length: number; width: number; height: number } | null
+  estimatedDeliveryMin?: string | null
+  estimatedDeliveryMax?: string | null
+  adminUserId?: string
+}
+
+/**
+ * Updates logistics, AWB tracking, weight and dimensions WITHOUT automatically marking the order as shipped.
+ */
+export async function updateFulfillmentDetails(input: UpdateFulfillmentInput) {
+  const {
+    orderId,
+    courierPartner,
+    trackingNumber,
+    trackingUrl,
+    dispatchDate,
+    packageWeightGrams,
+    packageDimensions,
+    estimatedDeliveryMin,
+    estimatedDeliveryMax,
+    adminUserId,
+  } = input
+
+  // Validate tracking URL if provided
+  if (trackingUrl && trackingUrl.trim()) {
+    const cleanUrl = trackingUrl.trim()
+    if (!validateTrackingUrl(cleanUrl)) {
+      return { error: 'Tracking URL must be a valid HTTPS web address (e.g. https://track.delhivery.com/...)' }
+    }
+  }
+
+  if (!isSupabaseConfigured()) {
+    const devOrders = getDevOrders()
+    const found = devOrders.find((o) => o.id === orderId || o.order_number === orderId)
+    if (!found) return { error: 'Order not found' }
+
+    found.carrier = courierPartner.trim()
+    found.tracking_number = trackingNumber.trim()
+    found.tracking_url = trackingUrl?.trim() || null
+    found.dispatch_date = dispatchDate || new Date().toISOString()
+    found.package_weight_grams = packageWeightGrams || null
+    found.package_dimensions = packageDimensions || null
+    found.estimated_delivery_min = estimatedDeliveryMin || null
+    found.estimated_delivery_max = estimatedDeliveryMax || null
+    found.updated_at = new Date().toISOString()
+
+    saveDevOrder(found)
+    return { data: found }
+  }
+
+  const supabase = await createServiceClient()
+
+  const { data: currentOrder, error: fetchErr } = await supabase
+    .from('orders')
+    .select('id, status, carrier, tracking_number')
+    .eq('id', orderId)
+    .single()
+
+  if (fetchErr || !currentOrder) return { error: 'Order not found' }
+
+  // Update order record (preserves current status)
+  const { data, error } = await supabase
+    .from('orders')
+    .update({
+      carrier: courierPartner.trim(),
+      tracking_number: trackingNumber.trim(),
+      tracking_url: trackingUrl?.trim() || null,
+      dispatch_date: dispatchDate || new Date().toISOString(),
+      package_weight_grams: packageWeightGrams || null,
+      package_dimensions: packageDimensions as any || null,
+      estimated_delivery_min: estimatedDeliveryMin || null,
+      estimated_delivery_max: estimatedDeliveryMax || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', orderId)
+    .select()
+    .single()
+
+  if (error) return { error: error.message }
+
+  // Also upsert/record in shipments table
+  try {
+    const { data: existingShipment } = await supabase
+      .from('shipments')
+      .select('id')
+      .eq('order_id', orderId)
+      .maybeSingle()
+
+    if (existingShipment) {
+      await supabase
+        .from('shipments')
+        .update({
+          courier: courierPartner.trim(),
+          awb: trackingNumber.trim(),
+          tracking_id: trackingNumber.trim(),
+          tracking_url: trackingUrl?.trim() || null,
+          tracking_data: {
+            package_weight_grams: packageWeightGrams,
+            package_dimensions: packageDimensions,
+            estimated_delivery_min: estimatedDeliveryMin,
+            estimated_delivery_max: estimatedDeliveryMax,
+          } as any,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingShipment.id)
+    } else {
+      await supabase
+        .from('shipments')
+        .insert({
+          order_id: orderId,
+          courier: courierPartner.trim(),
+          awb: trackingNumber.trim(),
+          tracking_id: trackingNumber.trim(),
+          tracking_url: trackingUrl?.trim() || null,
+          status: currentOrder.status,
+          tracking_data: {
+            package_weight_grams: packageWeightGrams,
+            package_dimensions: packageDimensions,
+            estimated_delivery_min: estimatedDeliveryMin,
+            estimated_delivery_max: estimatedDeliveryMax,
+          } as any,
+        })
+    }
+  } catch (shipmentErr) {
+    console.warn('[updateFulfillmentDetails] Non-fatal shipments table update:', shipmentErr)
+  }
+
+  // Admin audit log
+  if (adminUserId) {
+    try {
+      await supabase.from('admin_audit_logs').insert({
+        admin_id: adminUserId,
+        action: 'UPDATE_FULFILLMENT',
+        entity: 'orders',
+        entity_id: orderId,
+        metadata: {
+          courierPartner,
+          trackingNumber,
+          trackingUrl,
+          packageWeightGrams,
+        },
+      })
+    } catch {}
+  }
+
+  return { data }
+}
+
+/**
+ * Generates a clean, copyable text summary for pasting into courier booking dashboards (Shiprocket, Delhivery, Blue Dart, DTDC)
+ */
+export function formatCourierSummary(order: any): string {
+  const addr = (order.shipping_address as any) || {}
+  const items = (order.order_items as any[]) || []
+  const itemsFormatted = items.map((it: any) => {
+    const v = it.variant_info || {}
+    const parts = [v.size ? `Size: ${v.size}` : '', v.color ? `Color: ${v.color}` : ''].filter(Boolean).join(', ')
+    return `• ${it.quantity}x ${it.product_name || 'Apparel'} ${parts ? `(${parts})` : ''}`
+  }).join('\n')
+
+  const isCod = order.payment_method === 'cod'
+  const codAmount = isCod ? `₹${(order.total_amount || 0).toLocaleString('en-IN')}` : '₹0 (PREPAID - DO NOT COLLECT)'
+  const phone = order.guest_phone || addr.phone || 'N/A'
+
+  return `BUBBLE BOOM — COURIER DISPATCH SUMMARY
+========================================
+Order Reference : ${order.order_number}
+Order Date      : ${new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+
+RECIPIENT & DELIVERY DETAILS
+----------------------------------------
+Name            : ${addr.full_name || 'Customer'}
+Phone           : ${phone}
+Address Line 1  : ${addr.address_line1 || ''}
+${addr.address_line2 ? `Address Line 2  : ${addr.address_line2}\n` : ''}${addr.landmark ? `Landmark        : ${addr.landmark}\n` : ''}City            : ${addr.city || ''}
+State           : ${addr.state || ''}
+PIN Code        : ${addr.pin_code || ''}
+Country         : ${addr.country || 'India'}
+
+PACKAGE & SHIPMENT SPECIFICATIONS
+----------------------------------------
+Items Ordered   :
+${itemsFormatted || '• Streetwear Apparel (1 item)'}
+Package Weight  : ${order.package_weight_grams ? `${order.package_weight_grams} g` : 'Est. 450 g'}
+Dimensions      : ${order.package_dimensions ? `${order.package_dimensions.length}x${order.package_dimensions.width}x${order.package_dimensions.height} cm` : 'Standard Mailer (30x25x5 cm)'}
+Courier Assigned: ${order.carrier || 'Pending Assignment'}
+AWB / Tracking  : ${order.tracking_number || 'Pending Assignment'}
+${order.tracking_url ? `Tracking URL    : ${order.tracking_url}\n` : ''}
+PAYMENT & COLLECTION
+----------------------------------------
+Payment Method  : ${order.payment_method === 'cod' ? 'CASH ON DELIVERY (COD)' : 'ONLINE (PREPAID CASHFREE)'}
+Payment Status  : ${order.payment_status?.toUpperCase()}
+Collectable COD : ${codAmount}
+========================================`
 }
 
 export async function cancelOrder(orderId: string, reason: string, cancelledByUserId?: string) {
@@ -845,11 +1171,18 @@ export async function cancelOrder(orderId: string, reason: string, cancelledByUs
     const devOrders = getDevOrders()
     const found = devOrders.find((o) => o.id === orderId || o.order_number === orderId)
     if (!found) return { error: 'Order not found' }
-    if (!['pending', 'confirmed', 'packed', 'processing'].includes(found.status)) {
+
+    // Ownership check for customers
+    if (cancelledByUserId && found.user_id && found.user_id !== cancelledByUserId) {
+      return { error: 'You are not authorized to cancel this order.' }
+    }
+
+    if (!['pending', 'confirmed', 'unfulfilled', 'packed', 'processing'].includes(found.status)) {
       return {
-        error: `Orders with status "${found.status}" cannot be cancelled. You can request a return after delivery.`,
+        error: `Orders with status "${found.status}" cannot be cancelled. Cancellation is only allowed before parcel dispatch.`,
       }
     }
+
     found.status = 'cancelled'
     found.cancellation_reason = reason
     found.cancelled_at = new Date().toISOString()
@@ -868,9 +1201,17 @@ export async function cancelOrder(orderId: string, reason: string, cancelledByUs
 
   if (fetchErr || !order) return { error: 'Order not found' }
 
-  if (!['pending', 'confirmed', 'packed', 'processing'].includes(order.status)) {
+  // Check ownership if cancelled by a customer
+  if (cancelledByUserId && order.user_id && order.user_id !== cancelledByUserId) {
+    const adminCheck = await isAdmin(cancelledByUserId)
+    if (!adminCheck) {
+      return { error: 'You are not authorized to cancel this order.' }
+    }
+  }
+
+  if (!['pending', 'confirmed', 'unfulfilled', 'packed', 'processing'].includes(order.status)) {
     return {
-      error: `Orders with status "${order.status}" cannot be cancelled. You can request a return after delivery.`,
+      error: `Orders with status "${order.status}" cannot be cancelled. Cancellation is only allowed before parcel dispatch.`,
     }
   }
 
@@ -916,6 +1257,7 @@ export async function deleteOrder(orderId: string) {
       const supabase = await createServiceClient()
       await supabase.from('order_items').delete().eq('order_id', orderId)
       await supabase.from('payments').delete().eq('order_id', orderId)
+      await supabase.from('shipments').delete().eq('order_id', orderId)
       await supabase.from('inventory_reservations').delete().eq('order_id', orderId)
       const { error } = await supabase.from('orders').delete().eq('id', orderId)
       if (error) return { error: error.message }
@@ -928,7 +1270,8 @@ export async function deleteOrder(orderId: string) {
 }
 
 /**
- * Public track order lookup requiring both order number AND matching phone/email verification
+ * Public track order lookup requiring both order number AND matching phone/email verification.
+ * Masks customer personal delivery address for privacy.
  */
 export async function getOrderByTracking(orderNumber: string, verifier: string) {
   if (!isSupabaseConfigured()) {
@@ -958,7 +1301,18 @@ export async function getOrderByTracking(orderNumber: string, verifier: string) 
       }
     }
 
-    return { data: order }
+    // Mask sensitive address details for public lookup
+    const maskedOrder = {
+      ...order,
+      shipping_address: {
+        city: address?.city,
+        state: address?.state,
+        pin_code: address?.pin_code,
+        country: address?.country || 'India',
+      },
+    }
+
+    return { data: maskedOrder }
   }
 
   const supabase = await createServiceClient()
@@ -978,9 +1332,14 @@ export async function getOrderByTracking(orderNumber: string, verifier: string) 
       total_amount,
       tracking_number,
       carrier,
+      tracking_url,
+      dispatch_date,
+      estimated_delivery_min,
+      estimated_delivery_max,
       guest_email,
       guest_phone,
       shipping_address,
+      status_history,
       order_items (
         id,
         product_name,
@@ -1010,6 +1369,17 @@ export async function getOrderByTracking(orderNumber: string, verifier: string) 
     }
   }
 
-  return { data: order }
+  // Mask sensitive address details for public lookup
+  const maskedOrder = {
+    ...order,
+    shipping_address: {
+      city: address?.city,
+      state: address?.state,
+      pin_code: address?.pin_code,
+      country: address?.country || 'India',
+    },
+  }
+
+  return { data: maskedOrder }
 }
 

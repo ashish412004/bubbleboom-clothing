@@ -6,7 +6,7 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { OrderActions } from './order-actions'
-import { CheckCircle2, Package, Truck, Clock, ShieldCheck, ArrowLeft } from 'lucide-react'
+import { CheckCircle2, Package, Truck, Clock, ShieldCheck, ArrowLeft, ExternalLink, Mail, AlertTriangle } from 'lucide-react'
 
 interface OrderDetailPageProps {
   params: Promise<{ id: string }>
@@ -15,8 +15,9 @@ interface OrderDetailPageProps {
 export const dynamic = 'force-dynamic'
 
 const TIMELINE_STEPS = [
-  { key: 'confirmed', label: 'Order Confirmed', icon: CheckCircle2 },
-  { key: 'packed', label: 'Packed & Dispatched', icon: Package },
+  { key: 'confirmed', label: 'Confirmed', icon: CheckCircle2 },
+  { key: 'packed', label: 'Packed', icon: Package },
+  { key: 'pickup_scheduled', label: 'Pickup Ready', icon: Clock },
   { key: 'shipped', label: 'In Transit', icon: Truck },
   { key: 'out_for_delivery', label: 'Out for Delivery', icon: Clock },
   { key: 'delivered', label: 'Delivered', icon: ShieldCheck },
@@ -51,8 +52,12 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
   const shippingAddr = order.shipping_address as any
   const items = ((order as any).order_items as any[]) || []
 
-  const statusProgression = ['pending', 'confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered']
-  const currentStatusIdx = statusProgression.indexOf(order.status)
+  const statusProgression = ['pending', 'confirmed', 'packed', 'pickup_scheduled', 'shipped', 'out_for_delivery', 'delivered']
+  const normalizedStatus = order.status === 'unfulfilled' ? 'confirmed' : order.status
+  const currentStatusIdx = statusProgression.indexOf(normalizedStatus)
+  const isCancelled = order.status === 'cancelled'
+  const isException = ['delivery_exception', 'return_to_origin'].includes(order.status)
+  const hasTracking = Boolean(order.tracking_number || order.tracking_url)
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-black">
@@ -100,11 +105,25 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
 
             {/* Tracking Progress Bar (Screen only) */}
             <div className="py-8 border-b border-neutral-200 print:hidden">
-              <h3 className="text-xs uppercase font-mono tracking-widest font-bold mb-6">Delivery Progress</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xs uppercase font-mono tracking-widest font-bold">Delivery Progress</h3>
+                {isCancelled && (
+                  <span className="text-[11px] font-mono uppercase text-black font-bold bg-neutral-100 border border-black px-2 py-0.5">
+                    Order Cancelled
+                  </span>
+                )}
+                {isException && (
+                  <span className="text-[11px] font-mono uppercase text-black font-bold bg-neutral-200 border border-black px-2 py-0.5 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>{order.status.replace(/_/g, ' ')}</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
                 {TIMELINE_STEPS.map((step) => {
                   const stepIdx = statusProgression.indexOf(step.key)
-                  const isDone = currentStatusIdx >= stepIdx && order.status !== 'cancelled'
+                  const isDone = currentStatusIdx >= stepIdx && !isCancelled
                   const Icon = step.icon
 
                   return (
@@ -116,7 +135,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                       >
                         <Icon className="w-4 h-4" />
                       </div>
-                      <span className={`text-[11px] font-bold uppercase tracking-tight ${isDone ? 'text-black' : 'text-neutral-400'}`}>
+                      <span className={`text-[10px] font-bold uppercase tracking-tight ${isDone ? 'text-black' : 'text-neutral-400'}`}>
                         {step.label}
                       </span>
                     </div>
@@ -124,10 +143,49 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                 })}
               </div>
 
-              {order.tracking_number && (
-                <div className="mt-6 p-3 bg-[#F8F8F6] border border-black flex flex-col sm:flex-row justify-between text-xs font-mono">
-                  <span>Logistics Carrier: <strong>{order.carrier || 'Standard Express'}</strong></span>
-                  <span>AWB Tracking: <strong>{order.tracking_number}</strong></span>
+              {/* Honest processing status before dispatch */}
+              {!hasTracking && !isCancelled && (
+                <div className="mt-6 p-4 bg-[#F8F8F6] border border-neutral-300 text-xs font-mono text-neutral-700">
+                  <div className="font-bold text-black uppercase mb-1">Status: Order in Preparation</div>
+                  Your order is currently being picked and quality-inspected at our fulfillment center. Real-time courier tracking details will be updated here as soon as your parcel is handed over for dispatch.
+                </div>
+              )}
+
+              {/* Tracking Information Box (Visible only with tracking info) */}
+              {hasTracking && (
+                <div className="mt-6 p-4 bg-[#F8F8F6] border border-black flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs font-mono">
+                  <div className="space-y-1">
+                    <div>Carrier: <strong className="uppercase">{order.carrier || 'Express Logistics'}</strong></div>
+                    {order.tracking_number && (
+                      <div>AWB / Waybill: <strong className="font-bold text-black">{order.tracking_number}</strong></div>
+                    )}
+                    {order.dispatch_date && (
+                      <div className="text-neutral-600 text-[11px]">
+                        Dispatched: {new Date(order.dispatch_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    {order.tracking_url ? (
+                      <a
+                        href={order.tracking_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 bg-black text-white px-4 py-2 text-xs uppercase font-bold tracking-wider hover:bg-neutral-800 transition-colors"
+                      >
+                        <span>Track Shipment</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    ) : (
+                      <Link
+                        href={`/track-order?order_id=${order.order_number}`}
+                        className="inline-flex items-center gap-1.5 bg-black text-white px-4 py-2 text-xs uppercase font-bold tracking-wider hover:bg-neutral-800 transition-colors"
+                      >
+                        <span>Track Shipment</span>
+                      </Link>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -217,6 +275,23 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                   <span>₹{order.total_amount?.toLocaleString('en-IN')}</span>
                 </div>
               </div>
+            </div>
+
+            {/* Need Help with this order section */}
+            <div className="mt-8 pt-6 border-t border-neutral-200 p-5 bg-[#F8F8F6] border border-black flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:hidden">
+              <div>
+                <h4 className="text-xs uppercase font-mono tracking-wider font-bold">Need help with this order?</h4>
+                <p className="text-xs text-neutral-600 mt-0.5">
+                  Reference Order <span className="font-mono font-bold text-black">{order.order_number}</span> when writing to our customer care team.
+                </p>
+              </div>
+              <a
+                href={`mailto:bubbleboomstore2026@gmail.com?subject=Support%20Request%20for%20Order%20${order.order_number}`}
+                className="inline-flex items-center gap-2 bg-black text-white px-4 py-2.5 text-xs uppercase font-mono font-bold tracking-wider hover:bg-neutral-800 transition-colors shrink-0"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                <span>bubbleboomstore2026@gmail.com</span>
+              </a>
             </div>
           </div>
         </div>

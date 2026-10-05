@@ -14,16 +14,16 @@ export default function ShippingPolicyPage() {
 
       <main className="flex-1 py-12">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Draft Notification Badge */}
-          <div className="mb-8 p-3 bg-neutral-100 border-l-4 border-black text-xs font-mono">
-            <span className="font-bold uppercase block text-black mb-0.5">[DRAFT POLICY - SUBJECT TO FINAL OWNER APPROVAL]</span>
-            This document outlines the standard operational shipping framework for Bubble Boom within India.
+          {/* Official Policy Banner */}
+          <div className="mb-8 p-4 bg-[#F8F8F6] border-2 border-black text-xs font-mono">
+            <span className="font-black uppercase block text-black mb-1">Official Shipping &amp; Delivery Terms</span>
+            All orders placed on Bubble Boom are dispatched with verified domestic courier partners (including Delhivery, BlueDart, DTDC, and Shiprocket networks) across India.
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-black uppercase tracking-tight mb-2">
             Shipping &amp; Delivery Policy
           </h1>
-          <p className="text-xs font-mono text-neutral-500 mb-8">Last Updated: October 2026</p>
+          <p className="text-xs font-mono text-neutral-500 mb-8">Official Policy • Effective October 2026</p>
 
           <div className="prose prose-neutral max-w-none space-y-6 text-sm text-neutral-800 leading-relaxed border-t border-neutral-300 pt-6">
             <section>
@@ -94,6 +94,18 @@ export default function ShippingPolicyPage() {
                 </Link>{' '}
                 by providing your order reference number and verified email/phone number.
               </p>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-black uppercase tracking-tight text-black mb-2">6. Delivery Assistance &amp; Support</h2>
+              <p>
+                For delivery escalations, incorrect address corrections before dispatch, or shipment questions, contact our support desk:
+              </p>
+              <div className="bg-[#F8F8F6] p-4 border border-black text-xs font-mono my-2 space-y-1">
+                <div>Support Email: <a href="mailto:bubbleboomstore2026@gmail.com" className="font-bold underline text-black">bubbleboomstore2026@gmail.com</a></div>
+                <div>Support Hours: Monday – Saturday, 10:00 AM – 7:00 PM IST</div>
+                <div>Response Time: Within 24 business hours</div>
+              </div>
             </section>
           </div>
         </div>

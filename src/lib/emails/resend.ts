@@ -163,11 +163,16 @@ export async function sendOrderShippedEmail(
   email: string,
   orderId: string,
   trackingNumber: string,
-  carrier: string
+  carrier: string,
+  trackingUrl?: string | null
 ) {
   if (!resend) {
     return { data: { id: `sim_${Date.now()}` } }
   }
+
+  const directTrackLink = trackingUrl && trackingUrl.startsWith('https://')
+    ? trackingUrl
+    : `${siteUrl}/track-order?order_id=${orderId}`
 
   try {
     const { data, error } = await resend.emails.send({
@@ -175,15 +180,31 @@ export async function sendOrderShippedEmail(
       to: email,
       subject: `Order Shipped: ${orderId} | BUBBLE BOOM`,
       html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #000; padding: 24px; color: #000;">
-          <h1 style="font-size: 24px; font-weight: 900; margin: 0 0 16px 0;">BUBBLE BOOM</h1>
-          <p>Your order <strong>${orderId}</strong> has been shipped!</p>
-          <p><strong>Carrier:</strong> ${carrier}</p>
-          <p><strong>Tracking Number:</strong> ${trackingNumber}</p>
-          <div style="margin: 20px 0;">
-            <a href="${siteUrl}/track-order?order_id=${orderId}" style="display: inline-block; background: #000; color: #fff; padding: 10px 20px; text-decoration: none; font-size: 12px; font-weight: bold;">TRACK SHIPMENT</a>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; border: 2px solid #000; padding: 28px; color: #000; background: #fff;">
+          <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 16px; margin-bottom: 24px;">
+            <h1 style="font-size: 28px; font-weight: 900; letter-spacing: -1px; margin: 0;">BUBBLE BOOM</h1>
+            <p style="font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #555; margin: 4px 0 0 0; font-weight: bold;">Shipment Dispatched</p>
           </div>
-          <p>Thank you for shopping with Bubble Boom!</p>
+          <p style="font-size: 14px; margin-bottom: 6px;">Good news! Your order <strong>${orderId}</strong> has been handed over to our logistics partner and is in transit.</p>
+          
+          <div style="background: #f8f8f6; border: 1px solid #000; padding: 14px; margin: 18px 0; font-size: 12px; line-height: 1.6;">
+            <div><strong>Logistics Partner:</strong> ${carrier}</div>
+            <div><strong>AWB / Waybill Number:</strong> ${trackingNumber}</div>
+            <div><strong>Order Reference:</strong> ${orderId}</div>
+          </div>
+
+          <div style="margin: 24px 0; text-align: center;">
+            <a href="${directTrackLink}" style="display: inline-block; background: #000; color: #fff; padding: 12px 24px; text-decoration: none; font-size: 12px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; margin-right: 8px;">
+              Track Shipment
+            </a>
+            <a href="${siteUrl}/account/orders/${orderId}" style="display: inline-block; background: #fff; color: #000; border: 1px solid #000; padding: 11px 20px; text-decoration: none; font-size: 12px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">
+              View Order Details
+            </a>
+          </div>
+
+          <div style="border-top: 1px solid #eee; padding-top: 16px; font-size: 11px; color: #777; text-align: center; line-height: 1.5;">
+            <p style="margin: 4px 0;">Need help with your delivery? Contact us at <a href="mailto:bubbleboomstore2026@gmail.com" style="color: #000; font-weight: bold;">bubbleboomstore2026@gmail.com</a></p>
+          </div>
         </div>
       `,
     })
@@ -214,11 +235,23 @@ export async function sendOrderDeliveredEmail(
       to: email,
       subject: `Order Delivered: ${orderId} | BUBBLE BOOM`,
       html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #000; padding: 24px; color: #000;">
-          <h1 style="font-size: 24px; font-weight: 900; margin: 0 0 16px 0;">BUBBLE BOOM</h1>
-          <p>Your order <strong>${orderId}</strong> has been delivered!</p>
-          <p>We hope you love your new Bubble Boom pieces. If you need any assistance, our 7-day return policy is active.</p>
-          <p>Thank you for shopping with us!</p>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; border: 2px solid #000; padding: 28px; color: #000; background: #fff;">
+          <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 16px; margin-bottom: 24px;">
+            <h1 style="font-size: 28px; font-weight: 900; letter-spacing: -1px; margin: 0;">BUBBLE BOOM</h1>
+            <p style="font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #555; margin: 4px 0 0 0; font-weight: bold;">Delivery Confirmed</p>
+          </div>
+          <p style="font-size: 14px;">Your order <strong>${orderId}</strong> has been successfully delivered!</p>
+          <p style="font-size: 13px; color: #333; line-height: 1.6;">We hope you love your new Bubble Boom pieces. If you need any size exchanges or returns, our 7-day policy is active starting today.</p>
+          
+          <div style="margin: 24px 0; text-align: center;">
+            <a href="${siteUrl}/account/orders/${orderId}" style="display: inline-block; background: #000; color: #fff; padding: 12px 24px; text-decoration: none; font-size: 12px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">
+              View Order / Request Return
+            </a>
+          </div>
+
+          <div style="border-top: 1px solid #eee; padding-top: 16px; font-size: 11px; color: #777; text-align: center; line-height: 1.5;">
+            <p style="margin: 4px 0;">Questions? We're here to help at <a href="mailto:bubbleboomstore2026@gmail.com" style="color: #000; font-weight: bold;">bubbleboomstore2026@gmail.com</a></p>
+          </div>
         </div>
       `,
     })

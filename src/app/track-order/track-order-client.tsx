@@ -14,10 +14,14 @@ interface TrackedOrder {
   total_amount: number
   tracking_number?: string | null
   courier_partner?: string | null
+  carrier?: string | null
+  tracking_url?: string | null
+  dispatch_date?: string | null
   shipping_address?: {
     city?: string
     state?: string
     pin_code?: string
+    country?: string
   }
   order_items: Array<{
     id: string
@@ -34,9 +38,10 @@ interface TrackedOrder {
 
 const ORDER_STEPS = [
   { key: 'confirmed', label: 'Order Confirmed', icon: CheckCircle2, desc: 'Payment verified & order queued' },
-  { key: 'packed', label: 'Packed & Dispatched', icon: Package, desc: 'Quality checked & packed in Bubble Boom mailer' },
-  { key: 'shipped', label: 'In Transit', icon: Truck, desc: 'With logistics carrier' },
-  { key: 'out_for_delivery', label: 'Out for Delivery', icon: Clock, desc: 'Arriving today at your doorstep' },
+  { key: 'packed', label: 'Packed', icon: Package, desc: 'Quality checked & packed in Bubble Boom mailer' },
+  { key: 'pickup_scheduled', label: 'Pickup Scheduled', icon: Clock, desc: 'Manifest created, awaiting courier handover' },
+  { key: 'shipped', label: 'In Transit', icon: Truck, desc: 'Dispatched with logistics carrier partner' },
+  { key: 'out_for_delivery', label: 'Out for Delivery', icon: Clock, desc: 'Arriving today at your destination' },
   { key: 'delivered', label: 'Delivered', icon: ShieldCheck, desc: 'Handed over successfully' },
 ]
 
@@ -74,8 +79,9 @@ export function TrackOrderClient() {
   }
 
   const getStepStatus = (stepIndex: number, currentStatus: string) => {
-    const statusOrder = ['pending', 'confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered']
-    const currentIndex = statusOrder.indexOf(currentStatus)
+    const statusOrder = ['pending', 'confirmed', 'packed', 'pickup_scheduled', 'shipped', 'out_for_delivery', 'delivered']
+    const normalized = currentStatus === 'unfulfilled' ? 'confirmed' : currentStatus
+    const currentIndex = statusOrder.indexOf(normalized)
     const targetIndex = statusOrder.indexOf(ORDER_STEPS[stepIndex].key)
 
     if (currentStatus === 'cancelled') return 'cancelled'
@@ -162,16 +168,32 @@ export function TrackOrderClient() {
           </div>
 
           {/* Courier Info if Shipped */}
-          {order.tracking_number && (
-            <div className="mt-6 p-4 bg-[#F8F8F6] border border-black flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {order.tracking_number ? (
+            <div className="mt-6 p-4 bg-[#F8F8F6] border border-black flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500">Logistics Partner</span>
-                <p className="text-sm font-bold uppercase">{order.courier_partner || 'Express Courier Network'}</p>
+                <p className="text-sm font-bold uppercase">{order.carrier || order.courier_partner || 'Express Courier'}</p>
+                <div className="text-xs font-mono mt-0.5">
+                  AWB: <strong>{order.tracking_number}</strong>
+                </div>
               </div>
-              <div>
-                <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500">Waybill / AWB Number</span>
-                <p className="text-sm font-mono font-bold">{order.tracking_number}</p>
-              </div>
+
+              {order.tracking_url && (
+                <a
+                  href={order.tracking_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 bg-black text-white px-4 py-2 text-xs uppercase font-bold tracking-wider hover:bg-neutral-800 transition-colors shrink-0"
+                >
+                  <span>Track on Courier Site</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </div>
+          ) : (
+            <div className="mt-6 p-4 bg-[#F8F8F6] border border-neutral-300 text-xs font-mono text-neutral-700">
+              <div className="font-bold text-black uppercase mb-1">Status: Pre-Dispatch Preparation</div>
+              Your order is being picked and packed at our fulfillment warehouse. Live tracking waybill details will be displayed here immediately once handed to the courier partner.
             </div>
           )}
 
@@ -245,6 +267,20 @@ export function TrackOrderClient() {
               <span className="uppercase">Order Total</span>
               <span className="font-mono">₹{order.total_amount.toLocaleString('en-IN')}</span>
             </div>
+          </div>
+
+          {/* Need help support block */}
+          <div className="mt-8 p-4 bg-[#F8F8F6] border border-black flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <div className="text-xs font-bold uppercase font-mono">Need Assistance?</div>
+              <p className="text-[11px] text-neutral-600 mt-0.5">Reference order {order.order_number} for delivery inquiries.</p>
+            </div>
+            <a
+              href={`mailto:bubbleboomstore2026@gmail.com?subject=Inquiry%20for%20Order%20${order.order_number}`}
+              className="text-xs font-mono font-bold text-black underline"
+            >
+              bubbleboomstore2026@gmail.com
+            </a>
           </div>
         </div>
       )}

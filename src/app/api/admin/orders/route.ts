@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { updateOrderStatus, cancelOrder, deleteOrder } from '@/lib/orders'
+import { updateOrderStatus, updateFulfillmentDetails, cancelOrder, deleteOrder } from '@/lib/orders'
 import { executeRefund } from '@/lib/returns'
 import { getCurrentUser, isAdmin } from '@/lib/auth'
 
@@ -40,30 +40,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: 'Order deleted' })
     }
 
-    if (action === 'ASSIGN_TRACKING') {
-      const { data, error } = await supabase
-        .from('orders')
-        .update({
-          tracking_number: trackingNumber,
-          carrier: courierPartner,
-          status: 'shipped',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', orderId)
-        .select()
-        .single()
-
-      if (error) throw error
-
-      await supabase.from('admin_audit_logs').insert({
-        admin_id: user.id,
-        action: 'ASSIGN_TRACKING',
-        entity: 'orders',
-        entity_id: orderId,
-        metadata: { courierPartner, trackingNumber },
+    if (action === 'UPDATE_FULFILLMENT' || action === 'ASSIGN_TRACKING') {
+      const res = await updateFulfillmentDetails({
+        orderId,
+        courierPartner: courierPartner || body.carrier || 'Delhivery Express',
+        trackingNumber: trackingNumber || body.awb || '',
+        trackingUrl: body.trackingUrl || null,
+        dispatchDate: body.dispatchDate || null,
+        packageWeightGrams: body.packageWeightGrams ? Number(body.packageWeightGrams) : null,
+        packageDimensions: body.packageDimensions || null,
+        estimatedDeliveryMin: body.estimatedDeliveryMin || null,
+        estimatedDeliveryMax: body.estimatedDeliveryMax || null,
+        adminUserId: user.id,
       })
 
-      return NextResponse.json({ success: true, order: data })
+      if (res.error) {
+        return NextResponse.json({ error: res.error }, { status: 400 })
+      }
+
+      return NextResponse.json({ success: true, order: res.data })
     }
 
     if (action === 'PROCESS_REFUND') {
