@@ -2,7 +2,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { getOrderById } from '@/lib/orders'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Download, CreditCard } from 'lucide-react'
 import { AdminOrderManager } from './admin-order-manager'
 
 export const dynamic = 'force-dynamic'
@@ -25,7 +25,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <Link
           href="/admin/orders"
           className="inline-flex items-center gap-2 text-xs font-mono uppercase font-bold hover:underline"
@@ -33,7 +33,17 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
           <ArrowLeft className="w-4 h-4" />
           <span>Back to All Orders</span>
         </Link>
-        <span className="text-xs font-mono text-neutral-500">Internal Order ID: {order.id}</span>
+        <div className="flex items-center gap-3">
+          <a
+            href={`/api/orders/${order.order_number}/invoice`}
+            download
+            className="inline-flex items-center gap-1.5 bg-black text-white hover:bg-neutral-800 px-3 py-1.5 text-xs font-mono uppercase font-bold transition-colors cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Download Invoice PDF</span>
+          </a>
+          <span className="text-xs font-mono text-neutral-500">Internal Order ID: {order.id}</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -116,6 +126,50 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
             <p>{shippingAddr?.city}, {shippingAddr?.state} — {shippingAddr?.pin_code}</p>
             <p className="font-mono text-neutral-500 mt-2">Phone: {shippingAddr?.phone || order.guest_phone}</p>
             <p className="font-mono text-neutral-500">Email: {order.guest_email || 'Not provided'}</p>
+          </div>
+
+          {/* Payment & Gateway References */}
+          <div className="border border-black bg-white p-6 text-xs">
+            <h3 className="text-xs uppercase font-mono font-bold tracking-widest mb-3 flex items-center gap-2">
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>Payment Gateway Records &amp; Attempts</span>
+            </h3>
+            {payments.length === 0 ? (
+              <p className="text-neutral-500 font-mono">
+                No external payment attempts recorded yet. Method: {order.payment_method.toUpperCase()}
+              </p>
+            ) : (
+              <div className="divide-y divide-neutral-200">
+                {payments.map((p) => (
+                  <div key={p.id} className="py-2.5 space-y-1 font-mono">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold">
+                        Cashfree Order: {p.cashfree_order_id || order.order_number}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 text-[10px] uppercase font-bold ${
+                          p.status === 'paid'
+                            ? 'bg-black text-white'
+                            : p.status === 'failed'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-neutral-100 text-neutral-700'
+                        }`}
+                      >
+                        {p.status}
+                      </span>
+                    </div>
+                    {p.cf_payment_id && (
+                      <p className="text-neutral-600">
+                        Cashfree Payment ID: <span className="text-black font-bold">{p.cf_payment_id}</span>
+                      </p>
+                    )}
+                    <p className="text-neutral-500 text-[11px]">
+                      Amount: ₹{p.amount} {p.currency || 'INR'} • Updated: {new Date(p.updated_at || p.created_at).toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

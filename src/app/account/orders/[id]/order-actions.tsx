@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Printer, XCircle, RotateCcw, AlertCircle } from 'lucide-react'
+import { Printer, XCircle, RotateCcw, AlertCircle, Download } from 'lucide-react'
 
 interface OrderActionsProps {
   orderId: string
@@ -97,13 +97,23 @@ export function OrderActions({ orderId, orderNumber, status, items }: OrderActio
 
   return (
     <div className="space-y-3">
+      {/* Official Download PDF Invoice button */}
+      <a
+        href={`/api/orders/${orderNumber}/invoice`}
+        download
+        className="w-full flex items-center justify-center gap-2 border border-black bg-black text-white hover:bg-neutral-800 py-2.5 px-4 text-xs uppercase tracking-wider font-bold transition-colors cursor-pointer"
+      >
+        <Download className="w-4 h-4" />
+        <span>Download Tax Invoice (PDF)</span>
+      </a>
+
       {/* Print receipt button */}
       <button
         onClick={handlePrint}
-        className="w-full flex items-center justify-center gap-2 border border-black bg-white hover:bg-neutral-100 text-black py-2.5 px-4 text-xs uppercase tracking-wider font-bold transition-colors"
+        className="w-full flex items-center justify-center gap-2 border border-black bg-white hover:bg-neutral-100 text-black py-2.5 px-4 text-xs uppercase tracking-wider font-bold transition-colors cursor-pointer"
       >
         <Printer className="w-4 h-4" />
-        <span>Download / Print Receipt</span>
+        <span>Print Receipt</span>
       </button>
 
       {/* Cancel Order */}

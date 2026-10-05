@@ -463,7 +463,11 @@ export async function createCashfreeSessionForOrder(order: Order) {
       siteUrl = siteUrl || 'http://localhost:3000'
     }
   }
-  const customerPhone = order.guest_phone || '9999999999'
+
+  // Ensure customer phone is a valid 10-digit number for Cashfree
+  const rawPhone = order.guest_phone || (order.shipping_address as any)?.phone || ''
+  const cleanDigits = rawPhone.replace(/\D/g, '').slice(-10)
+  const customerPhone = cleanDigits.length === 10 ? cleanDigits : '9876543210'
 
   const cfRes = await createCashfreeOrder({
     order_id: order.order_number,
@@ -485,17 +489,38 @@ export async function createCashfreeSessionForOrder(order: Order) {
     return { error: cfRes.error }
   }
 
-  // Record payment record in pending state
+  // Record payment record in pending state (idempotent upsert/update)
   const supabase = await createServiceClient()
-  await supabase.from('payments').insert({
-    order_id: order.id,
-    cashfree_order_id: order.order_number,
-    amount: order.total_amount,
-    status: 'pending',
-    payment_method: 'cashfree',
-    currency: 'INR',
-    payment_data: cfRes as any,
-  })
+  const { data: existingPayment } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('order_id', order.id)
+    .maybeSingle()
+
+  if (existingPayment) {
+    await supabase
+      .from('payments')
+      .update({
+        cashfree_order_id: order.order_number,
+        amount: order.total_amount,
+        status: 'pending',
+        payment_method: 'cashfree',
+        currency: 'INR',
+        payment_data: cfRes as any,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existingPayment.id)
+  } else {
+    await supabase.from('payments').insert({
+      order_id: order.id,
+      cashfree_order_id: order.order_number,
+      amount: order.total_amount,
+      status: 'pending',
+      payment_method: 'cashfree',
+      currency: 'INR',
+      payment_data: cfRes as any,
+    })
+  }
 
   return { payment_session_id: cfRes.payment_session_id, order_id: cfRes.order_id }
 }

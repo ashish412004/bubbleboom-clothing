@@ -7,6 +7,7 @@ import { ShieldCheck, Truck, CreditCard, Banknote, Tag, ArrowRight, Navigation }
 import { formatPrice, getSafeImageUrl } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
+import { load as loadCashfree } from '@cashfreepayments/cashfree-js'
 
 interface CartItemData {
   id: string
@@ -203,29 +204,6 @@ export function CheckoutForm({
     }
   }
 
-  const loadCashfreeSdk = (): Promise<any> => {
-    return new Promise((resolve, reject) => {
-      const mode = (process.env.NEXT_PUBLIC_CASHFREE_MODE as 'sandbox' | 'production') || 'sandbox'
-      if (window.Cashfree) {
-        const cashfree = window.Cashfree({ mode })
-        resolve(cashfree)
-        return
-      }
-      const script = document.createElement('script')
-      script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js'
-      script.onload = () => {
-        if (window.Cashfree) {
-          const cashfree = window.Cashfree({ mode })
-          resolve(cashfree)
-        } else {
-          reject(new Error('Cashfree SDK failed to initialize'))
-        }
-      }
-      script.onerror = () => reject(new Error('Failed to load Cashfree SDK'))
-      document.body.appendChild(script)
-    })
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMessage('')
@@ -286,23 +264,35 @@ export function CheckoutForm({
         return
       }
 
-      // Order created successfully!
-      setItemCount(0) // Clear client cart counter
+      // Order created successfully! Clear cart counter
+      setItemCount(0)
 
       if (paymentMethod === 'cod') {
         router.push(data.redirect_url || `/payment-return?order_id=${data.order_number}&method=cod`)
       } else if (data.payment_session_id && !data.payment_session_id.startsWith('session_dev_')) {
         // Launch Cashfree SDK checkout
         try {
-          const cashfree = await loadCashfreeSdk()
-          cashfree.checkout({
+          const cashfreeMode =
+            (process.env.NEXT_PUBLIC_CASHFREE_MODE as 'sandbox' | 'production') || 'production'
+          const cashfree = await loadCashfree({ mode: cashfreeMode })
+          if (!cashfree) {
+            throw new Error('Cashfree payment SDK could not be loaded. Please check your network connection.')
+          }
+
+          const checkoutResult = await cashfree.checkout({
             paymentSessionId: data.payment_session_id,
             redirectTarget: '_self',
           })
+
+          if (checkoutResult?.error) {
+            setErrorMessage(checkoutResult.error.message || 'Payment checkout could not be opened.')
+            setLoading(false)
+            return
+          }
         } catch (sdkErr: any) {
-          console.error('SDK launch error:', sdkErr)
-          // Fallback redirect to return page
-          router.push(`/payment-return?order_id=${data.order_number}&session_id=${data.payment_session_id}`)
+          console.error('Cashfree checkout initiation error:', sdkErr)
+          setErrorMessage(sdkErr.message || 'Failed to open Cashfree payment gateway. Please try again.')
+          setLoading(false)
         }
       } else {
         router.push(data.redirect_url || `/payment-return?order_id=${data.order_number}&method=cashfree`)

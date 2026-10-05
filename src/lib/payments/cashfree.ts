@@ -125,9 +125,10 @@ export async function verifyCashfreeWebhook(
  * Fetch verified authoritative payment status from Cashfree
  */
 export async function getPaymentStatus(orderId: string) {
-  const appId = process.env.CASHFREE_APP_ID
+  const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
   const secretKey = process.env.CASHFREE_SECRET_KEY
-  const apiBaseUrl = process.env.CASHFREE_API_URL || 'https://sandbox.cashfree.com/pg'
+  const isProduction = process.env.NEXT_PUBLIC_CASHFREE_MODE === 'production'
+  const apiBaseUrl = process.env.CASHFREE_API_URL || (isProduction ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg')
 
   if (!appId || !secretKey) {
     return { error: 'Cashfree credentials not configured' }
@@ -158,10 +159,48 @@ export async function getPaymentStatus(orderId: string) {
       order_currency: data.order_currency,
       order_status: data.order_status,
       payment_session_id: data.payment_session_id,
+      data,
     }
   } catch (error: any) {
     console.error('Cashfree API error:', error)
     return { error: error.message || 'Failed to connect to Cashfree' }
+  }
+}
+
+/**
+ * Fetch detailed payment attempts for a Cashfree order (returns cf_payment_id, payment methods, etc.)
+ */
+export async function getOrderPayments(orderId: string) {
+  const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
+  const secretKey = process.env.CASHFREE_SECRET_KEY
+  const isProduction = process.env.NEXT_PUBLIC_CASHFREE_MODE === 'production'
+  const apiBaseUrl = process.env.CASHFREE_API_URL || (isProduction ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg')
+
+  if (!appId || !secretKey) {
+    return { error: 'Cashfree credentials not configured' }
+  }
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/orders/${orderId}/payments`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-version': '2023-08-01',
+        'x-client-id': appId,
+        'x-client-secret': secretKey,
+      },
+      cache: 'no-store',
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      return { error: data.message || 'Failed to fetch payment attempts' }
+    }
+
+    return { payments: Array.isArray(data) ? data : [] }
+  } catch (error: any) {
+    return { error: error.message || 'Failed to fetch payment attempts' }
   }
 }
 

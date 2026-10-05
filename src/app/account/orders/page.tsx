@@ -5,7 +5,7 @@ import { getOrdersByUserId } from '@/lib/orders'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { AccountNav } from '@/components/account/account-nav'
-import { ArrowRight, Package } from 'lucide-react'
+import { ArrowRight, Package, Download } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,22 +91,47 @@ export default async function OrdersPage() {
                       </div>
 
                       <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="text-xs text-neutral-600 font-mono">
-                          Payment: {ord.payment_method.toUpperCase()} • {ord.payment_status.toUpperCase()}
+                        <div className="text-xs text-neutral-600 font-mono flex flex-wrap items-center gap-2">
+                          <span>Payment: <strong>{ord.payment_method.toUpperCase()}</strong></span>
+                          <span
+                            className={`px-2 py-0.5 text-[10px] font-bold uppercase ${
+                              ord.payment_status === 'paid'
+                                ? 'bg-black text-white'
+                                : ord.payment_status === 'failed'
+                                ? 'bg-red-100 text-red-800 border border-red-300'
+                                : 'bg-neutral-100 text-neutral-700'
+                            }`}
+                          >
+                            {ord.payment_status === 'paid' ? 'PAID ✓' : ord.payment_status.toUpperCase()}
+                          </span>
                           {ord.tracking_number && (
-                            <span className="block sm:inline sm:ml-3 text-black font-bold">
+                            <span className="block sm:inline sm:ml-2 text-black font-bold">
                               AWB: {ord.tracking_number}
                             </span>
                           )}
                         </div>
 
-                        <Link
-                          href={`/account/orders/${ord.order_number}`}
-                          className="inline-flex items-center justify-center gap-2 bg-black text-white px-4 py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 transition-colors"
-                        >
-                          <span>Track &amp; View Details</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          {(ord.payment_status === 'paid' || ord.payment_method === 'cod') && (
+                            <a
+                              href={`/api/orders/${ord.order_number}/invoice`}
+                              download
+                              className="inline-flex items-center justify-center gap-1.5 border border-black bg-white hover:bg-neutral-100 text-black px-3 py-2 text-xs uppercase tracking-wider font-bold transition-colors cursor-pointer"
+                              title="Download Tax Invoice"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Invoice</span>
+                            </a>
+                          )}
+
+                          <Link
+                            href={`/account/orders/${ord.order_number}`}
+                            className="inline-flex items-center justify-center gap-2 bg-black text-white px-4 py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 transition-colors"
+                          >
+                            <span>Track &amp; View Details</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                        </div>
                       </div>
                     </div>
                   ))}
