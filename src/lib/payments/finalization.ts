@@ -41,37 +41,50 @@ export async function finalizeOrderPayment(
   } = params
 
   const isDevMode = !isSupabaseConfigured()
+  const baseOrderNumber = orderNumber.replace(/-R\d+$/i, '')
 
   // 1. Handle in-memory dev mode
   if (isDevMode) {
     const devOrders = getDevOrders()
     const devOrder = devOrders.find(
-      (o) => o.order_number === orderNumber || o.id === orderNumber
+      (o) => o.order_number === orderNumber || o.order_number === baseOrderNumber || o.id === orderNumber || o.id === baseOrderNumber
     )
 
     if (!devOrder) {
       return {
         success: false,
         paymentStatus: 'failed',
-        orderNumber,
+        orderNumber: baseOrderNumber,
         message: `Order ${orderNumber} not found in development store.`,
       }
     }
 
     if (providerOrderStatus === 'PAID') {
       devOrder.payment_status = 'paid'
-      devOrder.status = devOrder.status === 'pending' ? 'confirmed' : devOrder.status
+      devOrder.status = 'confirmed'
+      devOrder.cancellation_reason = null
+      devOrder.cancelled_at = null
       saveDevOrder(devOrder)
       return {
         success: true,
         paymentStatus: 'paid',
-        orderNumber,
+        orderNumber: baseOrderNumber,
         order: devOrder,
         message: 'Order marked as paid (dev mode).',
       }
     }
 
     if (['FAILED', 'CANCELLED', 'USER_DROPPED', 'EXPIRED'].includes(providerOrderStatus)) {
+      if (devOrder.payment_status === 'paid') {
+        return {
+          success: true,
+          paymentStatus: 'paid',
+          orderNumber: baseOrderNumber,
+          order: devOrder,
+          alreadyFinalized: true,
+          message: 'Order is already marked as paid. Ignoring late cancellation event.',
+        }
+      }
       devOrder.payment_status = 'failed'
       devOrder.status = 'cancelled'
       devOrder.cancellation_reason = `Payment status is ${providerOrderStatus}`
@@ -79,7 +92,7 @@ export async function finalizeOrderPayment(
       return {
         success: false,
         paymentStatus: 'failed',
-        orderNumber,
+        orderNumber: baseOrderNumber,
         order: devOrder,
         message: `Payment status is ${providerOrderStatus} (dev mode).`,
       }
@@ -97,19 +110,45 @@ export async function finalizeOrderPayment(
   // 2. Production / Supabase Database Flow
   const supabase = await createServiceClient()
 
-  // Fetch internal order
-  const { data: order, error: orderErr } = await supabase
+  // Fetch internal order (resolves base order number or lookup via payments table)
+  let { data: order, error: orderErr } = await supabase
     .from('orders')
     .select('*')
-    .eq('order_number', orderNumber)
+    .eq('order_number', baseOrderNumber)
     .maybeSingle()
 
-  if (orderErr || !order) {
+  if (!order && baseOrderNumber !== orderNumber) {
+    const { data: directOrder } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('order_number', orderNumber)
+      .maybeSingle()
+    if (directOrder) order = directOrder
+  }
+
+  if (!order) {
+    // Try matching payment row for retry gateway order reference
+    const { data: matchedPayment } = await supabase
+      .from('payments')
+      .select('order_id')
+      .eq('cashfree_order_id', orderNumber)
+      .maybeSingle()
+    if (matchedPayment?.order_id) {
+      const { data: orderFromPayment } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', matchedPayment.order_id)
+        .maybeSingle()
+      if (orderFromPayment) order = orderFromPayment
+    }
+  }
+
+  if (!order) {
     console.error(`[finalizeOrderPayment] Order not found: ${orderNumber}`, orderErr)
     return {
       success: false,
       paymentStatus: 'failed',
-      orderNumber,
+      orderNumber: baseOrderNumber,
       message: `Internal order ${orderNumber} not found.`,
     }
   }
@@ -190,17 +229,18 @@ export async function finalizeOrderPayment(
       console.error(`[finalizeOrderPayment] Error confirming stock reservation for order ${order.id}:`, invErr)
     }
 
-    // B. Update order status: confirmed & paid
-    const updatedOrderStatus = order.status === 'pending' ? 'confirmed' : order.status
+    // B. Update order status: confirmed & paid (clears any prior cancellation on late success)
     const { data: updatedOrder, error: updateErr } = await supabase
       .from('orders')
       .update({
-        status: updatedOrderStatus,
+        status: 'confirmed',
         payment_status: 'paid',
+        cancellation_reason: null,
+        cancelled_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', order.id)
-      .select('*, order_items(*)')
+      .select('*')
       .single()
 
     if (updateErr) {
@@ -283,7 +323,7 @@ export async function finalizeOrderPayment(
     return {
       success: true,
       paymentStatus: 'paid',
-      orderNumber,
+      orderNumber: baseOrderNumber,
       order: updatedOrder || order,
       message: 'Payment verified and order confirmed successfully.',
     }
@@ -291,6 +331,18 @@ export async function finalizeOrderPayment(
 
   // 6. FAILED / CANCELLED / EXPIRED Flow
   if (['FAILED', 'CANCELLED', 'USER_DROPPED', 'EXPIRED'].includes(providerOrderStatus)) {
+    // If order is already paid, NEVER downgrade!
+    if ((order as any).payment_status === 'paid') {
+      return {
+        success: true,
+        paymentStatus: 'paid',
+        orderNumber: baseOrderNumber,
+        order,
+        alreadyFinalized: true,
+        message: `Order ${baseOrderNumber} is already verified and paid. Ignoring late failure event.`,
+      }
+    }
+
     // Release inventory reservation so stock is immediately available again
     try {
       await releaseStockReservation(order.id)
@@ -338,7 +390,7 @@ export async function finalizeOrderPayment(
     return {
       success: false,
       paymentStatus: 'failed',
-      orderNumber,
+      orderNumber: baseOrderNumber,
       order: updatedOrder || order,
       message: `Payment status is ${providerOrderStatus}. Order is marked failed and cancelled.`,
     }
@@ -348,7 +400,7 @@ export async function finalizeOrderPayment(
   return {
     success: true,
     paymentStatus: 'pending',
-    orderNumber,
+    orderNumber: baseOrderNumber,
     order,
     message: 'Payment is awaiting confirmation from bank or gateway.',
   }

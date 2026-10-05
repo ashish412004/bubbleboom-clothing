@@ -112,25 +112,35 @@ export default async function OrdersPage() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {(ord.payment_status === 'paid' || ord.payment_method === 'cod') && (
-                            <a
-                              href={`/api/orders/${ord.order_number}/invoice`}
-                              download
-                              className="inline-flex items-center justify-center gap-1.5 border border-black bg-white hover:bg-neutral-100 text-black px-3 py-2 text-xs uppercase tracking-wider font-bold transition-colors cursor-pointer"
-                              title="Download Tax Invoice"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Invoice</span>
-                            </a>
-                          )}
+                          {(ord.payment_status === 'paid' || ord.payment_method === 'cod') ? (
+                            <>
+                              <a
+                                href={`/api/orders/${ord.order_number}/invoice`}
+                                download
+                                className="inline-flex items-center justify-center gap-1.5 border border-black bg-white hover:bg-neutral-100 text-black px-3 py-2 text-xs uppercase tracking-wider font-bold transition-colors cursor-pointer"
+                                title="Download Tax Invoice"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Invoice</span>
+                              </a>
 
-                          <Link
-                            href={`/account/orders/${ord.order_number}`}
-                            className="inline-flex items-center justify-center gap-2 bg-black text-white px-4 py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 transition-colors"
-                          >
-                            <span>Track &amp; View Details</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </Link>
+                              <Link
+                                href={`/account/orders/${ord.order_number}`}
+                                className="inline-flex items-center justify-center gap-2 bg-black text-white px-4 py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 transition-colors"
+                              >
+                                <span>Track &amp; View Details</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </Link>
+                            </>
+                          ) : (
+                            <Link
+                              href={`/orders/${ord.order_number}/payment`}
+                              className="inline-flex items-center justify-center gap-2 bg-black text-white px-4 py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 transition-colors"
+                            >
+                              <span>Complete Payment</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </Link>
+                          )}
                         </div>
                       </div>
                     </div>

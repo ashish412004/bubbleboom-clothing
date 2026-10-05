@@ -45,7 +45,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
   // Only paid orders and COD orders are visible in customer account views
   const isPaidOrCod = order.payment_status === 'paid' || order.payment_method === 'cod'
   if (!isPaidOrCod && !userIsAdmin) {
-    redirect(`/payment-return?order_id=${order.order_number}`)
+    redirect(`/orders/${order.order_number}/payment`)
   }
 
   const shippingAddr = order.shipping_address as any

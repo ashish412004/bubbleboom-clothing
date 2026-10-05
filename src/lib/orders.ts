@@ -3,7 +3,7 @@ import { Database } from '@/types/database'
 import { getStoreSettings, StoreShippingSettings } from '@/lib/settings'
 import { validateCoupon } from '@/lib/coupons'
 import { reserveStockForCheckout, confirmStockReservation, releaseStockReservation } from '@/lib/inventory'
-import { createCashfreeOrder, getCashfreeConfig } from '@/lib/payments/cashfree'
+import { createCashfreeOrder, getCashfreeConfig, getPaymentStatus } from '@/lib/payments/cashfree'
 import { MOCK_PRODUCTS, MOCK_ORDERS } from '@/lib/mock-data'
 import fs from 'fs'
 import path from 'path'
@@ -495,7 +495,7 @@ export async function createCashfreeSessionForOrder(order: Order) {
       customer_phone: customerPhone,
     },
     order_meta: {
-      return_url: `${siteUrl}/payment-return?order_id=${order.order_number}`,
+      return_url: `${siteUrl}/orders/${order.order_number}/payment?order_id=${order.order_number}`,
       notify_url: `${siteUrl}/api/webhooks/cashfree`,
     },
   })
@@ -541,6 +541,123 @@ export async function createCashfreeSessionForOrder(order: Order) {
     payment_session_id: cfRes.payment_session_id,
     order_id: cfRes.order_id,
     cf_mode: config.mode,
+  }
+}
+
+/**
+ * Reuses an active Cashfree payment session or renews/replaces it
+ * for retrying payment against an existing internal order.
+ */
+export async function getOrRenewCashfreeSessionForOrder(order: any) {
+  const config = getCashfreeConfig()
+  const isDev = !isSupabaseConfigured()
+
+  if (isDev) {
+    return {
+      success: true,
+      payment_session_id: `session_dev_retry_${order.order_number}_${Date.now()}`,
+      order_id: order.order_number,
+      cf_mode: 'sandbox',
+    }
+  }
+
+  // 1. Check if Cashfree already has an active order and payment session
+  const cfStatus = await getPaymentStatus(order.order_number)
+  if (cfStatus && !('error' in cfStatus)) {
+    if (cfStatus.order_status === 'PAID') {
+      return {
+        error: 'This order is already marked as paid. Payment retry is not allowed.',
+        alreadyPaid: true,
+      }
+    }
+
+    if (cfStatus.order_status === 'ACTIVE' && cfStatus.payment_session_id) {
+      // The session is still active and valid for payment!
+      return {
+        success: true,
+        payment_session_id: cfStatus.payment_session_id,
+        order_id: order.order_number,
+        cf_mode: config.mode,
+        reused: true,
+      }
+    }
+  }
+
+  // 2. If Cashfree order is closed/expired or cannot be reused, create a linked replacement gateway attempt
+  const supabase = await createServiceClient()
+  const { data: existingPayments } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('order_id', order.id)
+
+  const retryNumber = (existingPayments?.length || 0) + 1
+  const gatewayOrderRef = `${order.order_number}-R${retryNumber}`
+
+  let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || ''
+  if (!siteUrl || siteUrl.startsWith('http://localhost')) {
+    if (config.isProduction) {
+      siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://bubbleboom-clothing.vercel.app')
+    } else {
+      siteUrl = siteUrl || 'http://localhost:3000'
+    }
+  }
+  siteUrl = siteUrl.replace(/\/+$/, '')
+
+  const rawPhone = order.guest_phone || (order.shipping_address as any)?.phone || ''
+  const cleanDigits = rawPhone.replace(/\D/g, '').slice(-10)
+  const customerPhone = cleanDigits.length === 10 ? cleanDigits : '9876543210'
+
+  const cfRes = await createCashfreeOrder({
+    order_id: gatewayOrderRef,
+    order_amount: order.total_amount,
+    order_currency: 'INR',
+    customer_details: {
+      customer_id: order.user_id || `guest_${order.order_number}`,
+      customer_name: (order.shipping_address as any)?.full_name || 'Customer',
+      customer_email: order.guest_email || 'customer@bubbleboom.in',
+      customer_phone: customerPhone,
+    },
+    order_meta: {
+      return_url: `${siteUrl}/orders/${order.order_number}/payment?order_id=${order.order_number}`,
+      notify_url: `${siteUrl}/api/webhooks/cashfree`,
+    },
+  })
+
+  if ('error' in cfRes) {
+    return { error: cfRes.error }
+  }
+
+  // Insert a new payment attempt row in payments table, maintaining history
+  await supabase.from('payments').insert({
+    order_id: order.id,
+    cashfree_order_id: gatewayOrderRef,
+    amount: order.total_amount,
+    status: 'pending',
+    payment_method: 'cashfree',
+    currency: 'INR',
+    payment_data: cfRes as any,
+  })
+
+  // Ensure internal order status is set back to pending
+  await supabase
+    .from('orders')
+    .update({
+      status: 'pending',
+      payment_status: 'pending',
+      cancellation_reason: null,
+      cancelled_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', order.id)
+
+  return {
+    success: true,
+    payment_session_id: cfRes.payment_session_id,
+    order_id: gatewayOrderRef,
+    cf_mode: config.mode,
+    renewed: true,
   }
 }
 

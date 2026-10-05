@@ -427,11 +427,14 @@ export function CheckoutForm({
       setItemCount(0)
 
       if (paymentMethod === 'cod') {
-        router.push(data.redirect_url || `/payment-return?order_id=${data.order_number}&method=cod`)
+        router.push(data.redirect_url || `/orders/${data.order_number}/payment?order_id=${data.order_number}&method=cod`)
         return
       }
 
-      // Cashfree Online Payment Flow
+      // Cashfree Online Payment Flow:
+      // Navigate to the persistent order payment and recovery page.
+      // This guarantees that if the customer cancels, closes checkout, or uses browser back,
+      // they land on the dedicated recovery page for this SAME order with all items preserved.
       if (paymentMethod === 'cashfree') {
         if (!data.payment_session_id) {
           setErrorMessage('Payment session could not be established with Cashfree. Please try again.')
@@ -440,32 +443,8 @@ export function CheckoutForm({
           return
         }
 
-        // Launch Cashfree SDK checkout
-        try {
-          const modeVal = (data.cf_mode || process.env.NEXT_PUBLIC_CASHFREE_MODE || '').trim().toLowerCase()
-          const cashfreeMode: 'sandbox' | 'production' = modeVal === 'sandbox' ? 'sandbox' : 'production'
-          const cashfree = await loadCashfree({ mode: cashfreeMode })
-          if (!cashfree) {
-            throw new Error('Cashfree payment SDK could not be loaded. Please check your network connection.')
-          }
-
-          const checkoutResult = await cashfree.checkout({
-            paymentSessionId: data.payment_session_id,
-            redirectTarget: '_self',
-          })
-
-          if (checkoutResult?.error) {
-            setErrorMessage(checkoutResult.error.message || 'Payment checkout could not be opened.')
-            isSubmittingRef.current = false
-            setLoading(false)
-            return
-          }
-        } catch (sdkErr: any) {
-          console.error('Cashfree checkout initiation error:', sdkErr)
-          setErrorMessage(sdkErr.message || 'Failed to open Cashfree payment gateway. Please try again.')
-          isSubmittingRef.current = false
-          setLoading(false)
-        }
+        router.push(`/orders/${data.order_number}/payment?session_id=${encodeURIComponent(data.payment_session_id)}&auto=1`)
+        return
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Network error during checkout.')
