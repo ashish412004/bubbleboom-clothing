@@ -106,8 +106,9 @@ export function CheckoutForm({
 
   const loadCashfreeSdk = (): Promise<any> => {
     return new Promise((resolve, reject) => {
+      const mode = (process.env.NEXT_PUBLIC_CASHFREE_MODE as 'sandbox' | 'production') || 'sandbox'
       if (window.Cashfree) {
-        const cashfree = window.Cashfree({ mode: 'sandbox' })
+        const cashfree = window.Cashfree({ mode })
         resolve(cashfree)
         return
       }
@@ -115,7 +116,7 @@ export function CheckoutForm({
       script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js'
       script.onload = () => {
         if (window.Cashfree) {
-          const cashfree = window.Cashfree({ mode: 'sandbox' })
+          const cashfree = window.Cashfree({ mode })
           resolve(cashfree)
         } else {
           reject(new Error('Cashfree SDK failed to initialize'))

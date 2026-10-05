@@ -443,7 +443,10 @@ export async function createOrder(input: CreateOrderInput) {
  * Initialize Cashfree payment session for an order
  */
 export async function createCashfreeSessionForOrder(order: Order) {
-  if (!isSupabaseConfigured() || !process.env.CASHFREE_CLIENT_ID || process.env.CASHFREE_CLIENT_ID === 'your-cashfree-client-id') {
+  const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
+  const hasCashfree = appId && appId !== 'your-cashfree-client-id' && appId !== 'your-cashfree-app-id'
+
+  if (!isSupabaseConfigured() || !hasCashfree) {
     return {
       payment_session_id: `session_dev_${order.order_number}`,
       order_id: order.order_number,

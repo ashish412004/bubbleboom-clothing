@@ -26,12 +26,13 @@ export interface CashfreePaymentResponse {
 export async function createCashfreeOrder(
   orderRequest: CashfreeOrderRequest
 ): Promise<CashfreePaymentResponse | { error: string }> {
-  const appId = process.env.CASHFREE_APP_ID
+  const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
   const secretKey = process.env.CASHFREE_SECRET_KEY
-  const apiBaseUrl = process.env.CASHFREE_API_URL || 'https://sandbox.cashfree.com/pg'
+  const isProduction = process.env.NEXT_PUBLIC_CASHFREE_MODE === 'production'
+  const apiBaseUrl = process.env.CASHFREE_API_URL || (isProduction ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg')
 
   if (!appId || !secretKey) {
-    return { error: 'Cashfree credentials not configured. Please set CASHFREE_APP_ID and CASHFREE_SECRET_KEY.' }
+    return { error: 'Cashfree credentials not configured. Please set CASHFREE_APP_ID (or CASHFREE_CLIENT_ID) and CASHFREE_SECRET_KEY.' }
   }
 
   try {
