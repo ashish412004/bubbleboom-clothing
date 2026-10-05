@@ -1,6 +1,7 @@
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { ProductCard } from '@/components/product/product-card'
+import { HeroCarousel } from '@/components/home/hero-carousel'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight, Sparkles, Compass } from 'lucide-react'
@@ -31,77 +32,15 @@ export default async function HomePage() {
       />
 
       <main className="flex-1">
-        {/* 1. Large Editorial Hero Section */}
-        <section className="relative min-h-[75vh] sm:min-h-[85vh] bg-black text-white flex items-center justify-center overflow-hidden">
-          {/* Hero Photography Background (Responsive: Mobile & Desktop) */}
-          <div className="absolute inset-0 z-0">
-            {/* Desktop Landscape Background */}
-            <Image
-              src="/images/brand/hero-bg.png"
-              alt="Bubble Boom Streetwear Desktop Hero Background"
-              fill
-              priority
-              quality={90}
-              className="hidden sm:block object-cover object-center"
-              sizes="100vw"
-            />
-            {/* Mobile Vertical 9:16 Background */}
-            <Image
-              src="/images/brand/hero-bg-mobile.jpg"
-              alt="Bubble Boom Streetwear Mobile Hero Background"
-              fill
-              priority
-              quality={90}
-              className="block sm:hidden object-cover object-center"
-              sizes="100vw"
-            />
-            {/* Elegant dark gradient overlay for optimal text legibility */}
-            <div className="absolute inset-0 bg-black/55 bg-gradient-to-t from-black via-black/45 to-black/65" />
-          </div>
-
-          {/* Subtle geometric star overlay from brand monogram */}
-          <div className="absolute inset-0 opacity-20 pointer-events-none z-[1]">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full border border-neutral-600/40" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] rounded-full border border-neutral-600/30" />
-          </div>
-
-          <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center flex flex-col items-center">
-            {/* Monogram Badge */}
-            <div className="mb-6 inline-flex items-center space-x-2 border border-neutral-800 bg-neutral-950/80 px-4 py-1.5 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              <span className="text-[11px] uppercase tracking-widest font-bold text-neutral-300">
-                BUBBLE BOOM ORIGINALS
-              </span>
-            </div>
-
-            {/* Hero Main Heading */}
-            <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-extrabold tracking-tighter uppercase leading-[0.9] mb-6">
-              {generalSettings.hero_title || 'WEAR THE BOOM.'}
-            </h1>
-
-            {/* Description */}
-            <p className="text-base sm:text-xl md:text-2xl text-neutral-300 max-w-2xl font-normal leading-relaxed mb-10">
-              {generalSettings.hero_description || 'Every style. Every mood. Make it yours.'}
-            </p>
-
-            {/* CTAs */}
-            <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-              <Link
-                href="/shop"
-                className="w-full sm:w-auto bg-white text-black hover:bg-neutral-200 px-8 py-4 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all hover:scale-105"
-              >
-                {generalSettings.hero_cta_primary || 'SHOP NOW'}
-                <ArrowRight size={16} className="ml-2" />
-              </Link>
-              <Link
-                href="/collections"
-                className="w-full sm:w-auto border border-white text-white hover:bg-white hover:text-black px-8 py-4 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all"
-              >
-                {generalSettings.hero_cta_secondary || 'EXPLORE COLLECTIONS'}
-              </Link>
-            </div>
-          </div>
-        </section>
+        {/* 1. Automatic Background Carousel Hero Section */}
+        <HeroCarousel
+          heroTitle={generalSettings.hero_title}
+          heroDescription={generalSettings.hero_description}
+          primaryCtaText={generalSettings.hero_cta_primary}
+          primaryCtaLink="/shop"
+          secondaryCtaText={generalSettings.hero_cta_secondary}
+          secondaryCtaLink="/collections"
+        />
 
         {/* 2. Shop By Category */}
         <section className="py-16 sm:py-24 border-b border-neutral-200">

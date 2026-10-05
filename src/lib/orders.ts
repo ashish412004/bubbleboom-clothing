@@ -13,19 +13,36 @@ function getDevOrdersFilePath() {
   return path.join(dir, 'bb_dev_orders.json')
 }
 
+let inMemoryDevOrders: any[] = []
+
 export function getDevOrders(): any[] {
+  let diskOrders: any[] = []
   try {
     const file = getDevOrdersFilePath()
     if (fs.existsSync(file)) {
       const content = fs.readFileSync(file, 'utf-8')
-      const diskOrders = JSON.parse(content)
-      return [...diskOrders, ...MOCK_ORDERS]
+      diskOrders = JSON.parse(content)
     }
   } catch {}
-  return MOCK_ORDERS
+
+  const orderMap = new Map<string, any>()
+  for (const o of MOCK_ORDERS) {
+    if (o?.id) orderMap.set(o.id, o)
+  }
+  for (const o of diskOrders) {
+    if (o?.id) orderMap.set(o.id, o)
+  }
+  for (const o of inMemoryDevOrders) {
+    if (o?.id) orderMap.set(o.id, o)
+  }
+  return Array.from(orderMap.values())
 }
 
 export function saveDevOrder(order: any) {
+  inMemoryDevOrders = [
+    order,
+    ...inMemoryDevOrders.filter((o: any) => o.id !== order.id && o.order_number !== order.order_number),
+  ]
   try {
     const file = getDevOrdersFilePath()
     let current: any[] = []
@@ -37,7 +54,7 @@ export function saveDevOrder(order: any) {
     current = [order, ...current.filter((o: any) => o.id !== order.id && o.order_number !== order.order_number)]
     fs.writeFileSync(file, JSON.stringify(current, null, 2), 'utf-8')
   } catch (e) {
-    console.error('Failed to save dev order to disk:', e)
+    // silent
   }
 }
 
@@ -886,6 +903,8 @@ export async function deleteOrder(orderId: string) {
       fs.writeFileSync(file, JSON.stringify(filtered, null, 2), 'utf-8')
     }
   } catch {}
+
+  inMemoryDevOrders = inMemoryDevOrders.filter((o: any) => o.id !== orderId && o.order_number !== orderId)
 
   const mIdx = MOCK_ORDERS.findIndex((o) => o.id === orderId || o.order_number === orderId)
   if (mIdx >= 0) {
