@@ -3,7 +3,18 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Plus, Trash2, MapPin, Check, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, MapPin, Check, AlertCircle, Navigation } from 'lucide-react'
+
+const indianStates = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+]
 
 interface Address {
   id: string
@@ -36,6 +47,67 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
   const [pinLoading, setPinLoading] = useState(false)
   const [pinSuccessMsg, setPinSuccessMsg] = useState('')
   const [isDefault, setIsDefault] = useState(initialAddresses.length === 0)
+  const [locating, setLocating] = useState(false)
+
+  const handleDetectLocation = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser.')
+      return
+    }
+
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords
+          const res = await fetch(`/api/location/reverse?lat=${latitude}&lon=${longitude}`)
+          const data = await res.json()
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Failed to resolve location address.')
+          }
+
+          const addr = data.address
+          if (addr.address_line1) {
+            setLine1(addr.address_line1)
+          }
+          if (addr.city) {
+            setCity(addr.city)
+          }
+          if (addr.state) {
+            const matchedState = indianStates.find(
+              (s) =>
+                s.toLowerCase() === addr.state.toLowerCase() ||
+                s.toLowerCase().includes(addr.state.toLowerCase()) ||
+                addr.state.toLowerCase().includes(s.toLowerCase())
+            )
+            setState(matchedState || addr.state)
+          }
+          if (addr.pin_code && addr.pin_code.length === 6) {
+            setPinCode(addr.pin_code)
+            setPinSuccessMsg(`✓ ${addr.city || ''}, ${addr.state || ''}`)
+          }
+          toast.success(`📍 Location detected: ${addr.city || addr.state || 'Address filled'}`)
+        } catch (err: any) {
+          toast.error(err.message || 'Could not fetch address for this location.')
+        } finally {
+          setLocating(false)
+        }
+      },
+      (geoErr) => {
+        setLocating(false)
+        let msg = 'Could not access location.'
+        if (geoErr.code === 1) {
+          msg = 'Location permission denied. Please allow location access in your browser settings.'
+        } else if (geoErr.code === 2) {
+          msg = 'Location position unavailable.'
+        } else if (geoErr.code === 3) {
+          msg = 'Location request timed out.'
+        }
+        toast.error(msg)
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    )
+  }
 
   const handlePinChange = async (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 6)
@@ -148,7 +220,18 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
       {/* Add Address Form Modal / Box */}
       {showAddForm && (
         <div className="border-2 border-black p-6 bg-[#F8F8F6] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] mb-6">
-          <h3 className="text-sm font-black uppercase tracking-tight mb-4">Add Shipping Destination</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-4 border-b border-black/10 gap-2">
+            <h3 className="text-sm font-black uppercase tracking-tight">Add Shipping Destination</h3>
+            <button
+              type="button"
+              onClick={handleDetectLocation}
+              disabled={locating}
+              className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider font-bold bg-white hover:bg-black hover:text-white text-black border border-black px-3 py-1.5 transition-colors disabled:opacity-50 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none"
+            >
+              <Navigation className={`w-3.5 h-3.5 ${locating ? 'animate-spin' : ''}`} />
+              <span>{locating ? 'Detecting Location...' : 'Use Current Location'}</span>
+            </button>
+          </div>
 
           {error && (
             <div className="mb-4 p-3 bg-white border-l-4 border-black text-xs text-black flex items-start gap-2">

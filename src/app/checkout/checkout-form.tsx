@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { ShieldCheck, Truck, CreditCard, Banknote, Tag, ArrowRight } from 'lucide-react'
+import { ShieldCheck, Truck, CreditCard, Banknote, Tag, ArrowRight, Navigation } from 'lucide-react'
 import { formatPrice, getSafeImageUrl } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
@@ -108,6 +108,68 @@ export function CheckoutForm({
         setPinLoading(false)
       }
     }
+  }
+
+  const [locating, setLocating] = useState(false)
+
+  const handleDetectLocation = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser.')
+      return
+    }
+
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords
+          const res = await fetch(`/api/location/reverse?lat=${latitude}&lon=${longitude}`)
+          const data = await res.json()
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Failed to resolve location address.')
+          }
+
+          const addr = data.address
+          if (addr.address_line1) {
+            setAddressLine1(addr.address_line1)
+          }
+          if (addr.city) {
+            setCity(addr.city)
+          }
+          if (addr.state) {
+            const matchedState = indianStates.find(
+              (s) =>
+                s.toLowerCase() === addr.state.toLowerCase() ||
+                s.toLowerCase().includes(addr.state.toLowerCase()) ||
+                addr.state.toLowerCase().includes(s.toLowerCase())
+            )
+            setState(matchedState || addr.state)
+          }
+          if (addr.pin_code && addr.pin_code.length === 6) {
+            setPinCode(addr.pin_code)
+            setPinSuccessMsg(`✓ ${addr.city || ''}, ${addr.state || ''}`)
+          }
+          toast.success(`📍 Location detected: ${addr.city || addr.state || 'Address filled'}`)
+        } catch (err: any) {
+          toast.error(err.message || 'Could not fetch address for this location.')
+        } finally {
+          setLocating(false)
+        }
+      },
+      (geoErr) => {
+        setLocating(false)
+        let msg = 'Could not access location.'
+        if (geoErr.code === 1) {
+          msg = 'Location permission denied. Please allow location access in your browser settings.'
+        } else if (geoErr.code === 2) {
+          msg = 'Location position unavailable.'
+        } else if (geoErr.code === 3) {
+          msg = 'Location request timed out.'
+        }
+        toast.error(msg)
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    )
   }
 
   const [loading, setLoading] = useState(false)
@@ -323,9 +385,20 @@ export function CheckoutForm({
 
         {/* Shipping Address */}
         <section className="bg-white border border-neutral-200 p-6 space-y-4">
-          <h2 className="text-xs uppercase tracking-widest font-extrabold text-black pb-2 border-b border-neutral-200">
-            2. Shipping Address (India Only)
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-neutral-200 gap-2">
+            <h2 className="text-xs uppercase tracking-widest font-extrabold text-black">
+              2. Shipping Address (India Only)
+            </h2>
+            <button
+              type="button"
+              onClick={handleDetectLocation}
+              disabled={locating}
+              className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider font-bold bg-neutral-100 hover:bg-black hover:text-white text-black border border-black px-3 py-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              <Navigation className={`w-3.5 h-3.5 ${locating ? 'animate-spin' : ''}`} />
+              <span>{locating ? 'Detecting Location...' : 'Use Current Location'}</span>
+            </button>
+          </div>
           <div>
             <label className="block text-xs uppercase tracking-wider font-bold mb-1">
               House / Flat / Street / Area *
