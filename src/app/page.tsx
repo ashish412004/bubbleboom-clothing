@@ -33,10 +33,25 @@ export default async function HomePage() {
       <main className="flex-1">
         {/* 1. Large Editorial Hero Section */}
         <section className="relative min-h-[75vh] sm:min-h-[85vh] bg-black text-white flex items-center justify-center overflow-hidden">
+          {/* Hero Photography Background */}
+          <div className="absolute inset-0 z-0">
+            <Image
+              src="/images/brand/hero-bg.png"
+              alt="Bubble Boom Streetwear Hero Background"
+              fill
+              priority
+              quality={90}
+              className="object-cover object-center"
+              sizes="100vw"
+            />
+            {/* Elegant dark gradient overlay for optimal text legibility */}
+            <div className="absolute inset-0 bg-black/60 bg-gradient-to-t from-black via-black/50 to-black/70" />
+          </div>
+
           {/* Subtle geometric star overlay from brand monogram */}
-          <div className="absolute inset-0 opacity-15 pointer-events-none">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full border border-neutral-700/60" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] rounded-full border border-neutral-700/40" />
+          <div className="absolute inset-0 opacity-20 pointer-events-none z-[1]">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full border border-neutral-600/40" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] rounded-full border border-neutral-600/30" />
           </div>
 
           <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center flex flex-col items-center">
