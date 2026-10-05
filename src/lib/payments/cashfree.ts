@@ -23,18 +23,55 @@ export interface CashfreePaymentResponse {
   order_token?: string
 }
 
+export function getCashfreeConfig() {
+  const appId = (process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID || '').trim()
+  const secretKey = (process.env.CASHFREE_SECRET_KEY || '').trim()
+
+  // Detect whether keys are explicitly production keys
+  const isKeyProd =
+    secretKey.includes('_prod_') ||
+    (!secretKey.includes('_test_') && !appId.toLowerCase().startsWith('test_') && appId.length > 0)
+
+  const envVal = (
+    process.env.NEXT_PUBLIC_CASHFREE_MODE ||
+    process.env.CASHFREE_ENVIRONMENT ||
+    ''
+  ).trim().toLowerCase()
+
+  const isExplicitSandbox = envVal === 'sandbox'
+
+  // If explicit sandbox is requested AND key is NOT a production key, use sandbox; otherwise default to production
+  const isProduction =
+    isExplicitSandbox && !secretKey.includes('_prod_')
+      ? false
+      : Boolean(isKeyProd || envVal === 'production' || true)
+
+  let apiBaseUrl = (process.env.CASHFREE_API_URL || '').trim()
+  if (apiBaseUrl) {
+    if (isProduction && apiBaseUrl.includes('sandbox.cashfree.com')) {
+      console.warn('Overriding sandbox CASHFREE_API_URL to production endpoint because production credentials are in use.')
+      apiBaseUrl = 'https://api.cashfree.com/pg'
+    } else if (!isProduction && apiBaseUrl.includes('api.cashfree.com') && !apiBaseUrl.includes('sandbox')) {
+      apiBaseUrl = 'https://sandbox.cashfree.com/pg'
+    }
+  } else {
+    apiBaseUrl = isProduction ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg'
+  }
+
+  const mode: 'production' | 'sandbox' = isProduction ? 'production' : 'sandbox'
+  return { appId, secretKey, isProduction, apiBaseUrl, mode }
+}
+
 export async function createCashfreeOrder(
   orderRequest: CashfreeOrderRequest
 ): Promise<CashfreePaymentResponse | { error: string }> {
-  const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
-  const secretKey = process.env.CASHFREE_SECRET_KEY
-  const isProduction =
-    process.env.NEXT_PUBLIC_CASHFREE_MODE?.toLowerCase() === 'production' ||
-    process.env.CASHFREE_ENVIRONMENT?.toLowerCase() === 'production'
-  const apiBaseUrl = process.env.CASHFREE_API_URL || (isProduction ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg')
+  const { appId, secretKey, apiBaseUrl } = getCashfreeConfig()
 
   if (!appId || !secretKey) {
-    return { error: 'Cashfree credentials not configured. Please set CASHFREE_APP_ID (or CASHFREE_CLIENT_ID) and CASHFREE_SECRET_KEY.' }
+    return {
+      error:
+        'Cashfree credentials not configured. Please set CASHFREE_APP_ID (or CASHFREE_CLIENT_ID) and CASHFREE_SECRET_KEY.',
+    }
   }
 
   try {
@@ -127,12 +164,7 @@ export async function verifyCashfreeWebhook(
  * Fetch verified authoritative payment status from Cashfree
  */
 export async function getPaymentStatus(orderId: string) {
-  const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
-  const secretKey = process.env.CASHFREE_SECRET_KEY
-  const isProduction =
-    process.env.NEXT_PUBLIC_CASHFREE_MODE?.toLowerCase() === 'production' ||
-    process.env.CASHFREE_ENVIRONMENT?.toLowerCase() === 'production'
-  const apiBaseUrl = process.env.CASHFREE_API_URL || (isProduction ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg')
+  const { appId, secretKey, apiBaseUrl } = getCashfreeConfig()
 
   if (!appId || !secretKey) {
     return { error: 'Cashfree credentials not configured' }
@@ -175,12 +207,7 @@ export async function getPaymentStatus(orderId: string) {
  * Fetch detailed payment attempts for a Cashfree order (returns cf_payment_id, payment methods, etc.)
  */
 export async function getOrderPayments(orderId: string) {
-  const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
-  const secretKey = process.env.CASHFREE_SECRET_KEY
-  const isProduction =
-    process.env.NEXT_PUBLIC_CASHFREE_MODE?.toLowerCase() === 'production' ||
-    process.env.CASHFREE_ENVIRONMENT?.toLowerCase() === 'production'
-  const apiBaseUrl = process.env.CASHFREE_API_URL || (isProduction ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg')
+  const { appId, secretKey, apiBaseUrl } = getCashfreeConfig()
 
   if (!appId || !secretKey) {
     return { error: 'Cashfree credentials not configured' }

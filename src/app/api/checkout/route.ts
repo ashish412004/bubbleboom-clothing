@@ -136,6 +136,7 @@ export async function POST(request: NextRequest) {
         order_number: order.order_number,
         payment_session_id: cfSessionRes.payment_session_id,
         payment_method: 'cashfree',
+        cf_mode: cfSessionRes.cf_mode || 'production',
       })
       response.cookies.delete('bb_cart')
       return response

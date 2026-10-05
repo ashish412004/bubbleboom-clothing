@@ -3,7 +3,7 @@ import { Database } from '@/types/database'
 import { getStoreSettings, StoreShippingSettings } from '@/lib/settings'
 import { validateCoupon } from '@/lib/coupons'
 import { reserveStockForCheckout, confirmStockReservation, releaseStockReservation } from '@/lib/inventory'
-import { createCashfreeOrder } from '@/lib/payments/cashfree'
+import { createCashfreeOrder, getCashfreeConfig } from '@/lib/payments/cashfree'
 import { MOCK_PRODUCTS, MOCK_ORDERS } from '@/lib/mock-data'
 import fs from 'fs'
 import path from 'path'
@@ -443,13 +443,13 @@ export async function createOrder(input: CreateOrderInput) {
  * Initialize Cashfree payment session for an order
  */
 export async function createCashfreeSessionForOrder(order: Order) {
-  const appId = process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID
+  const config = getCashfreeConfig()
   const hasCashfree = Boolean(
-    appId &&
-    appId !== 'your-cashfree-client-id' &&
-    appId !== 'your-cashfree-app-id' &&
-    process.env.CASHFREE_SECRET_KEY &&
-    process.env.CASHFREE_SECRET_KEY !== 'your-cashfree-secret-key'
+    config.appId &&
+    config.appId !== 'your-cashfree-client-id' &&
+    config.appId !== 'your-cashfree-app-id' &&
+    config.secretKey &&
+    config.secretKey !== 'your-cashfree-secret-key'
   )
 
   if (!hasCashfree) {
@@ -462,15 +462,13 @@ export async function createCashfreeSessionForOrder(order: Order) {
     return {
       payment_session_id: `session_dev_${order.order_number}`,
       order_id: order.order_number,
+      cf_mode: 'sandbox',
     }
   }
 
   let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || ''
   if (!siteUrl || siteUrl.startsWith('http://localhost')) {
-    if (
-      process.env.NEXT_PUBLIC_CASHFREE_MODE?.toLowerCase() === 'production' ||
-      process.env.CASHFREE_ENVIRONMENT?.toLowerCase() === 'production'
-    ) {
+    if (config.isProduction) {
       siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
         ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
         : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://bubbleboom-clothing.vercel.app')
@@ -537,7 +535,11 @@ export async function createCashfreeSessionForOrder(order: Order) {
     })
   }
 
-  return { payment_session_id: cfRes.payment_session_id, order_id: cfRes.order_id }
+  return {
+    payment_session_id: cfRes.payment_session_id,
+    order_id: cfRes.order_id,
+    cf_mode: config.mode,
+  }
 }
 
 export async function getOrderById(orderId: string) {

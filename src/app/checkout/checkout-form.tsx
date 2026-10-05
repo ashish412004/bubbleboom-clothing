@@ -282,7 +282,7 @@ export function CheckoutForm({
 
         // Launch Cashfree SDK checkout
         try {
-          const modeVal = (process.env.NEXT_PUBLIC_CASHFREE_MODE || '').trim().toLowerCase()
+          const modeVal = (data.cf_mode || process.env.NEXT_PUBLIC_CASHFREE_MODE || '').trim().toLowerCase()
           const cashfreeMode: 'sandbox' | 'production' = modeVal === 'sandbox' ? 'sandbox' : 'production'
           const cashfree = await loadCashfree({ mode: cashfreeMode })
           if (!cashfree) {
