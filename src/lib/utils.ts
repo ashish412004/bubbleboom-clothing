@@ -38,6 +38,15 @@ export function getSafeImageUrl(
   if (trimmed.includes('\\') || /^[a-zA-Z]:/.test(trimmed)) {
     return fallback
   }
+  // Discard obvious web pages or non-image URLs (e.g. Amazon / Flipkart product pages)
+  if (
+    trimmed.includes('/dp/') ||
+    trimmed.includes('/gp/product/') ||
+    trimmed.includes('/p/') && trimmed.includes('flipkart.com') ||
+    /\.(html?|php)(\?.*)?$/i.test(trimmed)
+  ) {
+    return fallback
+  }
   // Valid web path or relative public asset
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
     return trimmed
