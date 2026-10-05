@@ -1,7 +1,7 @@
+import { Suspense } from 'react'
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { TrackOrderClient } from './track-order-client'
-import Link from 'next/link'
 
 export const metadata = {
   title: 'Track Order | BUBBLE BOOM',
@@ -28,7 +28,13 @@ export default function TrackOrderPage() {
         </section>
 
         {/* Content */}
-        <TrackOrderClient />
+        <Suspense fallback={
+          <div className="max-w-3xl mx-auto py-12 px-4 sm:px-6 text-center text-xs font-mono">
+            Loading order tracking portal...
+          </div>
+        }>
+          <TrackOrderClient />
+        </Suspense>
       </main>
 
       <Footer />

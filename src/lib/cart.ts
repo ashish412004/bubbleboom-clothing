@@ -28,6 +28,8 @@ export interface CartItemWithDetails {
       images: Array<{
         image_url: string
         alt_text: string | null
+        color?: string | null
+        sort_order?: number
       }>
     }
   }
@@ -202,7 +204,9 @@ export async function getCart(userId?: string, sessionId?: string): Promise<Cart
           is_active,
           images:product_images (
             image_url,
-            alt_text
+            alt_text,
+            color,
+            sort_order
           )
         )
       )

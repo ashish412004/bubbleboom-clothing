@@ -34,8 +34,9 @@ export async function POST(req: NextRequest) {
         id: `img-${Date.now()}-${idx}`,
         product_id: newProdId,
         image_url: getSafeImageUrl(typeof img === 'string' ? img : img.image_url),
-        alt_text: product.name,
-        sort_order: idx,
+        color: typeof img === 'object' && img.color ? img.color.trim() : null,
+        alt_text: typeof img === 'object' && img.alt_text ? img.alt_text : product.name,
+        sort_order: typeof img === 'object' && typeof img.sort_order === 'number' ? img.sort_order : idx,
       }))
 
       const createdProduct = {
@@ -114,20 +115,27 @@ export async function POST(req: NextRequest) {
           const storagePath = (typeof img === 'object' && img.storage_path)
             ? img.storage_path
             : extractStoragePath(safeUrl)
+          const color = typeof img === 'object' && img.color ? img.color.trim() : null
           return {
             product_id: createdProduct.id,
             image_url: safeUrl,
             storage_path: storagePath || null,
-            alt_text: product.name,
-            sort_order: idx,
+            color: color || null,
+            alt_text: (typeof img === 'object' && img.alt_text) ? img.alt_text : product.name,
+            sort_order: (typeof img === 'object' && typeof img.sort_order === 'number') ? img.sort_order : idx,
           }
         })
         .filter((item: any) => item.image_url)
 
       if (imagesToInsert.length > 0) {
         let { error: imgErr } = await supabase.from('product_images').insert(imagesToInsert)
-        if (imgErr && imgErr.message?.includes('storage_path')) {
-          const fallbackImages = imagesToInsert.map(({ storage_path, ...rest }: any) => rest)
+        if (imgErr && (imgErr.message?.includes('color') || imgErr.message?.includes('storage_path'))) {
+          const fallbackImages = imagesToInsert.map(({ color, storage_path, ...rest }: any) => {
+            const fb: any = { ...rest }
+            if (!imgErr?.message?.includes('storage_path')) fb.storage_path = storage_path
+            if (!imgErr?.message?.includes('color')) fb.color = color
+            return fb
+          })
           const fallbackRes = await supabase.from('product_images').insert(fallbackImages)
           imgErr = fallbackRes.error
         }
@@ -237,12 +245,14 @@ export async function PUT(req: NextRequest) {
           const storagePath = (typeof img === 'object' && img.storage_path)
             ? img.storage_path
             : extractStoragePath(safeUrl)
+          const color = typeof img === 'object' && img.color ? img.color.trim() : null
           return {
             product_id: product.id,
             image_url: safeUrl,
             storage_path: storagePath || null,
-            alt_text: product.name,
-            sort_order: idx,
+            color: color || null,
+            alt_text: (typeof img === 'object' && img.alt_text) ? img.alt_text : product.name,
+            sort_order: (typeof img === 'object' && typeof img.sort_order === 'number') ? img.sort_order : idx,
           }
         })
         .filter((item: any) => item.image_url)
@@ -257,8 +267,13 @@ export async function PUT(req: NextRequest) {
 
         // Insert new sequence first
         let { error: insertErr } = await supabase.from('product_images').insert(validImages)
-        if (insertErr && insertErr.message?.includes('storage_path')) {
-          const fallbackImages = validImages.map(({ storage_path, ...rest }: any) => rest)
+        if (insertErr && (insertErr.message?.includes('color') || insertErr.message?.includes('storage_path'))) {
+          const fallbackImages = validImages.map(({ color, storage_path, ...rest }: any) => {
+            const fb: any = { ...rest }
+            if (!insertErr?.message?.includes('storage_path')) fb.storage_path = storage_path
+            if (!insertErr?.message?.includes('color')) fb.color = color
+            return fb
+          })
           const fallbackRes = await supabase.from('product_images').insert(fallbackImages)
           insertErr = fallbackRes.error
         }

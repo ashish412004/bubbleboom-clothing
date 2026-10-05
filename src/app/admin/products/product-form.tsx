@@ -59,11 +59,31 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
   )
 
   // Images
-  const [imageUrls, setImageUrls] = useState<string[]>(
-    initialProduct?.images && initialProduct.images.length > 0
-      ? initialProduct.images.map((img: any) => (typeof img === 'string' ? img : img.image_url)).filter(Boolean)
-      : []
-  )
+  interface AdminProductImage {
+    id?: string
+    image_url: string
+    storage_path?: string | null
+    color: string // '' for unassigned
+    alt_text?: string
+    sort_order?: number
+  }
+
+  const [images, setImages] = useState<AdminProductImage[]>(() => {
+    if (initialProduct?.images && initialProduct.images.length > 0) {
+      return initialProduct.images
+        .map((img: any, idx: number) => ({
+          id: typeof img === 'object' ? img.id : undefined,
+          image_url: typeof img === 'string' ? img : img.image_url,
+          storage_path: typeof img === 'object' ? img.storage_path : null,
+          color: typeof img === 'object' && img.color ? img.color.trim() : '',
+          alt_text: typeof img === 'object' ? img.alt_text : '',
+          sort_order: typeof img === 'object' && typeof img.sort_order === 'number' ? img.sort_order : idx,
+        }))
+        .filter((img: AdminProductImage) => Boolean(img.image_url))
+    }
+    return []
+  })
+  const [selectedColorFilter, setSelectedColorFilter] = useState<string>('all')
   const [uploadingImages, setUploadingImages] = useState(false)
   const [uploadProgressText, setUploadProgressText] = useState('')
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -168,16 +188,25 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
     const toastId = toast.loading(`Uploading ${fileArray.length} photo(s)...`)
 
     try {
-      const newUrls: string[] = []
+      const newItems: AdminProductImage[] = []
+      const defaultColor =
+        selectedColorFilter !== 'all' && selectedColorFilter !== 'unassigned'
+          ? selectedColorFilter
+          : distinctColors[0] || ''
+
       for (let i = 0; i < fileArray.length; i++) {
         setUploadProgressText(`Uploading photo ${i + 1} of ${fileArray.length}...`)
         const uploadedUrl = await uploadSingleFile(fileArray[i])
-        newUrls.push(uploadedUrl)
+        newItems.push({
+          image_url: uploadedUrl,
+          color: defaultColor,
+          sort_order: images.length + i,
+        })
       }
 
-      if (newUrls.length > 0) {
-        setImageUrls((prev) => [...prev.filter(Boolean), ...newUrls])
-        toast.success(`Uploaded ${newUrls.length} photo(s) to storage!`, { id: toastId })
+      if (newItems.length > 0) {
+        setImages((prev) => [...prev, ...newItems])
+        toast.success(`Uploaded ${newItems.length} photo(s) to storage!`, { id: toastId })
       }
     } catch (err: any) {
       const errorMsg = err.message || 'Image upload failed. Please try again.'
@@ -207,9 +236,9 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
     try {
       const newUrl = await uploadSingleFile(file)
       // Only update image list once new upload succeeds; previous image is retained until now!
-      setImageUrls((prev) => {
+      setImages((prev) => {
         const next = [...prev]
-        next[index] = newUrl
+        next[index] = { ...next[index], image_url: newUrl }
         return next
       })
       toast.success('Photo replaced successfully!', { id: toastId })
@@ -246,27 +275,58 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
       toast.error('Local disk paths (e.g. C:\\...) cannot be entered as URLs. Please use the Upload button above!')
       return
     }
-    setImageUrls((prev) => [...prev.filter(Boolean), trimmed])
+    const defaultColor =
+      selectedColorFilter !== 'all' && selectedColorFilter !== 'unassigned'
+        ? selectedColorFilter
+        : distinctColors[0] || ''
+
+    setImages((prev) => [
+      ...prev,
+      {
+        image_url: trimmed,
+        color: defaultColor,
+        sort_order: prev.length,
+      },
+    ])
     setManualUrlInput('')
     setShowManualUrl(false)
     toast.success('Image URL added')
   }
 
   const removeImage = (index: number) => {
-    setImageUrls((prev) => prev.filter((_, i) => i !== index))
+    setImages((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const makePrimary = (index: number) => {
-    setImageUrls((prev) => {
-      if (index === 0) return prev
+  const updateImageColor = (index: number, newColor: string) => {
+    setImages((prev) => {
       const next = [...prev]
-      const [item] = next.splice(index, 1)
-      return [item, ...next]
+      next[index] = { ...next[index], color: newColor }
+      return next
     })
   }
 
+  const makePrimary = (index: number) => {
+    setImages((prev) => {
+      const target = prev[index]
+      if (!target) return prev
+      const without = prev.filter((_, i) => i !== index)
+      if (!target.color) {
+        return [target, ...without]
+      }
+      const firstIndexOfColor = without.findIndex(
+        (img) => img.color.trim().toLowerCase() === target.color.trim().toLowerCase()
+      )
+      if (firstIndexOfColor === -1) {
+        return [target, ...without]
+      }
+      without.splice(firstIndexOfColor, 0, target)
+      return without
+    })
+    toast.success('Set as primary cover photo!')
+  }
+
   const moveImage = (index: number, direction: 'prev' | 'next') => {
-    setImageUrls((prev) => {
+    setImages((prev) => {
       const targetIdx = direction === 'prev' ? index - 1 : index + 1
       if (targetIdx < 0 || targetIdx >= prev.length) return prev
       const next = [...prev]
@@ -275,6 +335,10 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
       return next
     })
   }
+
+  const distinctColors = Array.from(
+    new Set(variants.map((v) => v.color.trim()).filter(Boolean))
+  )
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -288,8 +352,10 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
       return
     }
 
-    const validImages = imageUrls.filter(Boolean)
-    const hasDiskPath = validImages.some((img) => img && (img.includes('\\') || /^[a-zA-Z]:/.test(img)))
+    const validImages = images.filter((img) => Boolean(img.image_url))
+    const hasDiskPath = validImages.some(
+      (img) => img.image_url && (img.image_url.includes('\\') || /^[a-zA-Z]:/.test(img.image_url))
+    )
     if (hasDiskPath) {
       toast.error('Local disk paths cannot be viewed by browsers. Please use the Upload Photos button to upload directly from your computer!', { duration: 6000 })
       return
@@ -318,7 +384,14 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
             is_published: isPublished,
           },
           variants,
-          images: imageUrls.filter(Boolean),
+          images: validImages.map((img, idx) => ({
+            id: img.id,
+            image_url: img.image_url,
+            storage_path: img.storage_path || null,
+            color: img.color ? img.color.trim() : null,
+            alt_text: img.alt_text || name,
+            sort_order: idx,
+          })),
         }),
       })
 
@@ -729,116 +802,236 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
 
         {/* Photo Gallery Grid Preview */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono uppercase font-bold text-neutral-600">
-              Attached Photos ({imageUrls.filter(Boolean).length})
-            </span>
-            {imageUrls.filter(Boolean).length > 0 && (
-              <span className="text-[10px] font-mono text-neutral-500">
-                First photo is used as main catalog cover
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+            <div>
+              <span className="text-xs font-mono uppercase font-bold text-neutral-800">
+                Attached Photos ({images.length})
               </span>
-            )}
+              <p className="text-[10px] font-mono text-neutral-500">
+                Assign each photo to a colour variant (e.g. Black, Gray) to sync with customer colour selection.
+              </p>
+            </div>
           </div>
 
-          {imageUrls.filter(Boolean).length === 0 ? (
+          {/* Unmapped Images Warning Banner */}
+          {images.some((img) => !img.color || img.color.trim() === '') && (
+            <div className="mb-4 border border-amber-400 bg-amber-50 p-3.5 text-xs font-mono text-amber-950 flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-bold uppercase tracking-wider">
+                  {images.filter((img) => !img.color || img.color.trim() === '').length} photo(s) are unmapped!
+                </p>
+                <p className="text-[11px] text-amber-900 leading-relaxed">
+                  These photos are not assigned to any colour. Use the &quot;Assigned Colour&quot; dropdown on each photo card below to link them to your variants so customer galleries synchronize correctly.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Colour Filter Tabs */}
+          {images.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-neutral-200 pb-3 mb-4 text-xs font-mono">
+              <span className="text-[10px] uppercase font-bold text-neutral-400 mr-1">View by colour:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedColorFilter('all')}
+                className={`px-2.5 py-1 text-xs uppercase font-bold border transition-colors ${
+                  selectedColorFilter === 'all'
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-neutral-700 border-neutral-300 hover:border-black'
+                }`}
+              >
+                All ({images.length})
+              </button>
+              {distinctColors.map((color) => {
+                const count = images.filter((img) => img.color?.trim().toLowerCase() === color.toLowerCase()).length
+                return (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setSelectedColorFilter(color)}
+                    className={`px-2.5 py-1 text-xs uppercase font-bold border transition-colors ${
+                      selectedColorFilter === color
+                        ? 'bg-black text-white border-black'
+                        : 'bg-white text-neutral-700 border-neutral-300 hover:border-black'
+                    }`}
+                  >
+                    {color} ({count})
+                  </button>
+                )
+              })}
+              {images.some((img) => !img.color || img.color.trim() === '') && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedColorFilter('unassigned')}
+                  className={`px-2.5 py-1 text-xs uppercase font-bold border transition-colors ${
+                    selectedColorFilter === 'unassigned'
+                      ? 'bg-amber-500 text-black border-amber-600'
+                      : 'bg-amber-100 text-amber-900 border-amber-300 hover:border-amber-500'
+                  }`}
+                >
+                  ⚠️ Unmapped ({images.filter((img) => !img.color || img.color.trim() === '').length})
+                </button>
+              )}
+            </div>
+          )}
+
+          {images.length === 0 ? (
             <div className="border border-neutral-200 bg-neutral-50 p-6 text-center text-xs font-mono text-neutral-500">
               No photos added yet. Click &quot;Select Photos from Device&quot; above to upload product images.
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {imageUrls.filter(Boolean).map((url, idx) => (
-                <div
-                  key={`${url}-${idx}`}
-                  className="group relative border border-black bg-white flex flex-col overflow-hidden shadow-sm"
-                >
-                  {/* Image container */}
-                  <div className="relative aspect-square w-full bg-neutral-100 overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={url}
-                      alt={`Product photo ${idx + 1}`}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src =
-                          'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&q=80'
-                      }}
-                    />
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {images
+                .map((img, globalIdx) => ({ img, globalIdx }))
+                .filter(({ img }) => {
+                  if (selectedColorFilter === 'all') return true
+                  if (selectedColorFilter === 'unassigned') return !img.color || img.color.trim() === ''
+                  return img.color?.trim().toLowerCase() === selectedColorFilter.toLowerCase()
+                })
+                .map(({ img, globalIdx }) => {
+                  const isColorPrimary =
+                    Boolean(img.color) &&
+                    images.findIndex(
+                      (other) => other.color?.trim().toLowerCase() === img.color.trim().toLowerCase()
+                    ) === globalIdx
 
-                    {/* Replacing Overlay */}
-                    {replacingIndex === idx && (
-                      <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center text-white z-10 gap-1.5 p-2 text-center">
-                        <Loader2 className="w-5 h-5 animate-spin text-white" />
-                        <span className="text-[10px] font-mono uppercase font-bold tracking-wider">Replacing...</span>
-                      </div>
-                    )}
-
-                    {/* Badge */}
-                    <div className="absolute top-2 left-2">
-                      {idx === 0 ? (
-                        <span className="bg-black text-white text-[10px] font-mono font-bold px-2 py-0.5 tracking-wider">
-                          COVER
-                        </span>
-                      ) : (
-                        <span className="bg-white/90 text-black border border-black text-[10px] font-mono font-bold px-1.5 py-0.2">
-                          #{idx + 1}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Actions Bar */}
-                  <div className="p-2 bg-[#F8F8F6] border-t border-black flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1">
-                      {idx !== 0 && (
-                        <button
-                          type="button"
-                          onClick={() => makePrimary(idx)}
-                          title="Set as Primary Cover"
-                          className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black cursor-pointer"
-                        >
-                          <Star className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => triggerReplace(idx)}
-                        disabled={replacingIndex !== null || uploadingImages}
-                        title="Replace Photo with New Upload"
-                        className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black cursor-pointer disabled:opacity-30"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${replacingIndex === idx ? 'animate-spin' : ''}`} />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={idx === 0}
-                        onClick={() => moveImage(idx, 'prev')}
-                        title="Move Left"
-                        className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black disabled:opacity-30 cursor-pointer"
-                      >
-                        <ChevronLeft className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={idx === imageUrls.filter(Boolean).length - 1}
-                        onClick={() => moveImage(idx, 'next')}
-                        title="Move Right"
-                        className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black disabled:opacity-30 cursor-pointer"
-                      >
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => removeImage(idx)}
-                      title="Remove Photo"
-                      className="p-1 hover:bg-red-50 text-neutral-600 hover:text-red-600 cursor-pointer"
+                  return (
+                    <div
+                      key={`${img.image_url}-${globalIdx}`}
+                      className="group relative border border-black bg-white flex flex-col overflow-hidden shadow-sm"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                      {/* Image container */}
+                      <div className="relative aspect-square w-full bg-neutral-100 overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={img.image_url}
+                          alt={img.alt_text || `Product photo ${globalIdx + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            ;(e.target as HTMLImageElement).src =
+                              'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&q=80'
+                          }}
+                        />
+
+                        {/* Replacing Overlay */}
+                        {replacingIndex === globalIdx && (
+                          <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center text-white z-10 gap-1.5 p-2 text-center">
+                            <Loader2 className="w-5 h-5 animate-spin text-white" />
+                            <span className="text-[10px] font-mono uppercase font-bold tracking-wider">Replacing...</span>
+                          </div>
+                        )}
+
+                        {/* Status Badges */}
+                        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
+                          {globalIdx === 0 && (
+                            <span className="bg-black text-white text-[9px] font-mono font-black px-1.5 py-0.5 tracking-wider">
+                              CATALOG COVER
+                            </span>
+                          )}
+                          {img.color ? (
+                            <span className="bg-black/90 text-white text-[9px] font-mono font-bold px-1.5 py-0.5 tracking-wider">
+                              {img.color.toUpperCase()}
+                            </span>
+                          ) : (
+                            <span className="bg-amber-500 text-black text-[9px] font-mono font-black px-1.5 py-0.5 tracking-wider shadow-sm">
+                              ⚠️ UNMAPPED
+                            </span>
+                          )}
+                          {isColorPrimary && (
+                            <span className="bg-emerald-600 text-white text-[9px] font-mono font-black px-1.5 py-0.5 tracking-wider">
+                              PRIMARY FOR {img.color.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Card Content & Assignment */}
+                      <div className="p-2.5 bg-[#F8F8F6] border-t border-black space-y-2">
+                        {/* Assigned Colour Dropdown */}
+                        <div>
+                          <label className="block text-[9px] uppercase font-mono font-bold text-neutral-500 mb-0.5">
+                            Assigned Colour:
+                          </label>
+                          <select
+                            value={img.color || ''}
+                            onChange={(e) => updateImageColor(globalIdx, e.target.value)}
+                            className={`w-full text-xs font-mono font-bold border p-1.5 focus:outline-none transition-colors ${
+                              !img.color
+                                ? 'border-amber-500 bg-amber-50 text-amber-950 font-bold'
+                                : 'border-black bg-white text-black'
+                            }`}
+                          >
+                            <option value="">⚠️ (Unmapped / General)</option>
+                            {distinctColors.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Actions Bar */}
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-neutral-200">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => makePrimary(globalIdx)}
+                              title={
+                                img.color
+                                  ? `Make primary photo for ${img.color}`
+                                  : 'Make overall catalog cover'
+                              }
+                              className={`p-1 rounded text-neutral-700 hover:text-black cursor-pointer ${
+                                isColorPrimary || globalIdx === 0
+                                  ? 'bg-neutral-200 text-black font-bold'
+                                  : 'hover:bg-neutral-200'
+                              }`}
+                            >
+                              <Star className={`w-3.5 h-3.5 ${isColorPrimary || globalIdx === 0 ? 'fill-black' : ''}`} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => triggerReplace(globalIdx)}
+                              disabled={replacingIndex !== null || uploadingImages}
+                              title="Replace Photo with New Upload"
+                              className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black cursor-pointer disabled:opacity-30"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${replacingIndex === globalIdx ? 'animate-spin' : ''}`} />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={globalIdx === 0}
+                              onClick={() => moveImage(globalIdx, 'prev')}
+                              title="Move Left / Earlier"
+                              className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black disabled:opacity-30 cursor-pointer"
+                            >
+                              <ChevronLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={globalIdx === images.length - 1}
+                              onClick={() => moveImage(globalIdx, 'next')}
+                              title="Move Right / Later"
+                              className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black disabled:opacity-30 cursor-pointer"
+                            >
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => removeImage(globalIdx)}
+                            title="Remove Photo"
+                            className="p-1 hover:bg-red-50 text-neutral-600 hover:text-red-600 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
             </div>
           )}
         </div>

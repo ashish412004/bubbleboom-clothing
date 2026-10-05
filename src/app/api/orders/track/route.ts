@@ -1,18 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getOrderByTracking } from '@/lib/orders'
+import { getCurrentUser } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
   try {
     const { orderNumber, verifier } = await req.json()
 
-    if (!orderNumber || !verifier) {
+    if (!orderNumber || !orderNumber.trim()) {
       return NextResponse.json(
-        { error: 'Both Order Number and Email/Phone Number are required.' },
+        { error: 'Order Number is required.' },
         { status: 400 }
       )
     }
 
-    const result = await getOrderByTracking(orderNumber, verifier)
+    const user = await getCurrentUser()
+
+    if (!user && (!verifier || !verifier.trim())) {
+      return NextResponse.json(
+        { error: 'Email or phone number is required to track this order.' },
+        { status: 400 }
+      )
+    }
+
+    const result = await getOrderByTracking(orderNumber, verifier || '', user?.id)
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 404 })

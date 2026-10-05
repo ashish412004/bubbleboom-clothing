@@ -194,6 +194,11 @@ export async function createOrder(input: CreateOrderInput) {
       const itemTotalPaise = sellingPricePaise * item.quantity
       subtotalPaise += itemTotalPaise
 
+      const prodImages = (foundProduct.images || []) as Array<{ image_url: string; color?: string | null }>
+      const variantColor = (foundVariant.color || '').trim().toLowerCase()
+      const colorImg = prodImages.find((img) => img.color && img.color.trim().toLowerCase() === variantColor) || prodImages[0]
+      const imageUrl = colorImg?.image_url || null
+
       itemSnapshots.push({
         id: `oi_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         order_id: '',
@@ -204,6 +209,7 @@ export async function createOrder(input: CreateOrderInput) {
           sku: foundVariant.sku,
           color: foundVariant.color,
           size: foundVariant.size,
+          image_url: imageUrl,
         },
         quantity: item.quantity,
         mrp: foundProduct.mrp,
@@ -299,7 +305,13 @@ export async function createOrder(input: CreateOrderInput) {
         mrp,
         selling_price,
         is_published,
-        is_active
+        is_active,
+        images:product_images (
+          image_url,
+          alt_text,
+          color,
+          sort_order
+        )
       )
     `)
     .in('id', variantIds)
@@ -338,6 +350,13 @@ export async function createOrder(input: CreateOrderInput) {
     const itemTotalPaise = sellingPricePaise * item.quantity
     subtotalPaise += itemTotalPaise
 
+    const prodImages = ((prod.images || []) as Array<{ image_url: string; color?: string | null; sort_order?: number }>)
+      .slice()
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    const variantColor = (v.color || '').trim().toLowerCase()
+    const colorImg = prodImages.find((img) => img.color && img.color.trim().toLowerCase() === variantColor) || prodImages[0]
+    const imageUrl = colorImg?.image_url || null
+
     itemSnapshots.push({
       variant_id: v.id,
       product_id: prod.id,
@@ -346,6 +365,7 @@ export async function createOrder(input: CreateOrderInput) {
         sku: v.sku,
         color: v.color,
         size: v.size,
+        image_url: imageUrl,
       },
       quantity: item.quantity,
       mrp: prod.mrp,
@@ -945,7 +965,7 @@ export async function updateOrderStatus(
     }
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('orders')
     .update({
       status: newStatus,
@@ -957,6 +977,21 @@ export async function updateOrderStatus(
     .eq('id', orderId)
     .select()
     .single()
+
+  if (error && (error.message.includes('column') || error.message.includes('schema cache'))) {
+    console.warn('[updateOrderStatus] Extended status columns missing, falling back to core status:', error.message)
+    const fallbackRes = await supabase
+      .from('orders')
+      .update({
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .select()
+      .single()
+    data = fallbackRes.data
+    error = fallbackRes.error
+  }
 
   if (error) return { error: error.message }
 
@@ -1043,8 +1078,8 @@ export async function updateFulfillmentDetails(input: UpdateFulfillmentInput) {
 
   if (fetchErr || !currentOrder) return { error: 'Order not found' }
 
-  // Update order record (preserves current status)
-  const { data, error } = await supabase
+  // 1. Attempt full update with all logistics fields
+  let { data, error } = await supabase
     .from('orders')
     .update({
       carrier: courierPartner.trim(),
@@ -1052,7 +1087,7 @@ export async function updateFulfillmentDetails(input: UpdateFulfillmentInput) {
       tracking_url: trackingUrl?.trim() || null,
       dispatch_date: dispatchDate || new Date().toISOString(),
       package_weight_grams: packageWeightGrams || null,
-      package_dimensions: packageDimensions as any || null,
+      package_dimensions: (packageDimensions as any) || null,
       estimated_delivery_min: estimatedDeliveryMin || null,
       estimated_delivery_max: estimatedDeliveryMax || null,
       updated_at: new Date().toISOString(),
@@ -1061,7 +1096,57 @@ export async function updateFulfillmentDetails(input: UpdateFulfillmentInput) {
     .select()
     .single()
 
+  // Graceful fallback if any extended columns (like dispatch_date) do not exist in the orders table yet
+  if (error && (error.message.includes('column') || error.message.includes('schema cache'))) {
+    console.warn('[updateFulfillmentDetails] Extended logistics columns missing or unindexed, falling back:', error.message)
+
+    // Try intermediate payload with tracking_url
+    let fallbackRes = await supabase
+      .from('orders')
+      .update({
+        carrier: courierPartner.trim(),
+        tracking_number: trackingNumber.trim(),
+        tracking_url: trackingUrl?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .select()
+      .single()
+
+    if (fallbackRes.error && (fallbackRes.error.message.includes('column') || fallbackRes.error.message.includes('schema cache'))) {
+      // Fall back to baseline carrier & tracking_number only
+      fallbackRes = await supabase
+        .from('orders')
+        .update({
+          carrier: courierPartner.trim(),
+          tracking_number: trackingNumber.trim(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId)
+        .select()
+        .single()
+    }
+
+    data = fallbackRes.data
+    error = fallbackRes.error
+  }
+
   if (error) return { error: error.message }
+
+  // Merge the input logistics fields into data so the admin UI receives the complete state
+  const mergedOrder = data
+    ? {
+        ...data,
+        carrier: courierPartner.trim(),
+        tracking_number: trackingNumber.trim(),
+        tracking_url: trackingUrl?.trim() || (data as any)?.tracking_url,
+        dispatch_date: dispatchDate || (data as any)?.dispatch_date,
+        package_weight_grams: packageWeightGrams ?? (data as any)?.package_weight_grams,
+        package_dimensions: packageDimensions || (data as any)?.package_dimensions,
+        estimated_delivery_min: estimatedDeliveryMin || (data as any)?.estimated_delivery_min,
+        estimated_delivery_max: estimatedDeliveryMax || (data as any)?.estimated_delivery_max,
+      }
+    : data
 
   // Also upsert/record in shipments table
   try {
@@ -1128,7 +1213,7 @@ export async function updateFulfillmentDetails(input: UpdateFulfillmentInput) {
     } catch {}
   }
 
-  return { data }
+  return { data: mergedOrder }
 }
 
 /**
@@ -1284,40 +1369,101 @@ export async function deleteOrder(orderId: string) {
 }
 
 /**
- * Public track order lookup requiring both order number AND matching phone/email verification.
+ * Automatically builds direct courier tracking link for common Indian logistics carriers
+ * when direct tracking_url is not manually entered by admin.
+ */
+export function getCourierTrackingUrl(
+  carrier?: string | null,
+  awb?: string | null,
+  existingUrl?: string | null
+): string | null {
+  if (existingUrl && existingUrl.trim().startsWith('http')) {
+    return existingUrl.trim()
+  }
+  if (!awb || !awb.trim()) return null
+
+  const cleanAwb = encodeURIComponent(awb.trim())
+  const cleanCarrier = (carrier || '').trim().toLowerCase()
+
+  if (cleanCarrier.includes('delhivery')) {
+    return `https://www.delhivery.com/track/package/${cleanAwb}`
+  }
+  if (cleanCarrier.includes('blue') && cleanCarrier.includes('dart')) {
+    return `https://www.bluedart.com/tracking?trackFor=0&trackNo=${cleanAwb}`
+  }
+  if (cleanCarrier.includes('dtdc')) {
+    return `https://www.dtdc.in/tracking/shipment-tracking.asp?trackingNo=${cleanAwb}`
+  }
+  if (cleanCarrier.includes('shiprocket')) {
+    return `https://shiprocket.co/tracking/${cleanAwb}`
+  }
+  if (cleanCarrier.includes('post') || cleanCarrier.includes('india post')) {
+    return `https://www.indiapost.gov.in/_layouts/15/dpt.cept.tracking/trackconsignment.aspx`
+  }
+  if (cleanCarrier.includes('shadowfax')) {
+    return `https://tracker.shadowfax.in/#/${cleanAwb}`
+  }
+  if (cleanCarrier.includes('ekart')) {
+    return `https://ekartlogistics.com/shipmenttrack/${cleanAwb}`
+  }
+  if (cleanCarrier.includes('xpressbees')) {
+    return `https://www.xpressbees.com/track?awb=${cleanAwb}`
+  }
+  return null
+}
+
+/**
+ * Public track order lookup requiring order number and matching phone or email verification.
+ * Also supports authenticated user lookup directly.
  * Masks customer personal delivery address for privacy.
  */
-export async function getOrderByTracking(orderNumber: string, verifier: string) {
-  if (!isSupabaseConfigured()) {
-    const cleanOrder = orderNumber.trim()
-    const cleanVerifier = verifier.trim().toLowerCase()
-    const cleanPhone = verifier.replace(/\D/g, '')
+export async function getOrderByTracking(
+  orderNumber: string,
+  verifier: string,
+  currentUserId?: string | null
+) {
+  const cleanOrder = (orderNumber || '').trim().replace(/^#/, '').trim()
+  if (!cleanOrder) {
+    return { error: 'Please enter a valid order number.' }
+  }
 
+  const cleanVerifier = (verifier || '').trim().toLowerCase()
+  const cleanPhone = (verifier || '').replace(/\D/g, '')
+
+  if (!isSupabaseConfigured()) {
     const orders = getDevOrders()
     const order = orders.find(
-      (o) => o.order_number === cleanOrder || o.id === cleanOrder
+      (o) =>
+        o.order_number?.toLowerCase() === cleanOrder.toLowerCase() ||
+        o.id === cleanOrder
     )
 
     if (!order) {
       return { error: 'Order not found. Please verify the order number.' }
     }
 
-    const address = order.shipping_address as any
-    const orderEmail = (order.guest_email || address?.email || '').toLowerCase()
-    const orderPhone = (order.guest_phone || address?.phone || '').replace(/\D/g, '')
+    const address = (order.shipping_address as any) || {}
+    const billing = (order.billing_address as any) || {}
+    const orderEmail = (order.guest_email || address?.email || billing?.email || '').toLowerCase().trim()
+    const phoneNumbers = [
+      (order.guest_phone || '').replace(/\D/g, ''),
+      (address?.phone || '').replace(/\D/g, ''),
+      (billing?.phone || '').replace(/\D/g, ''),
+    ].filter(Boolean)
 
     const matchesEmail = cleanVerifier.includes('@') && orderEmail && orderEmail === cleanVerifier
-    const matchesPhone = cleanPhone.length >= 10 && orderPhone && orderPhone.endsWith(cleanPhone.slice(-10))
+    const matchesPhone = cleanPhone.length >= 10 && phoneNumbers.some((p) => p.endsWith(cleanPhone.slice(-10)))
+    const isOwner = Boolean(currentUserId && order.user_id && currentUserId === order.user_id)
 
-    if (!matchesEmail && !matchesPhone) {
+    if (!matchesEmail && !matchesPhone && !isOwner) {
       return {
         error: 'The email or phone number does not match this order. Please verify your details.',
       }
     }
 
-    // Mask sensitive address details for public lookup
     const maskedOrder = {
       ...order,
+      tracking_url: getCourierTrackingUrl(order.carrier, order.tracking_number, order.tracking_url),
       shipping_address: {
         city: address?.city,
         state: address?.state,
@@ -1330,11 +1476,9 @@ export async function getOrderByTracking(orderNumber: string, verifier: string) 
   }
 
   const supabase = await createServiceClient()
-  const cleanOrder = orderNumber.trim()
-  const cleanVerifier = verifier.trim().toLowerCase()
-  const cleanPhone = verifier.replace(/\D/g, '')
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanOrder)
 
-  const { data: order, error } = await supabase
+  let query = supabase
     .from('orders')
     .select(`
       id,
@@ -1350,9 +1494,15 @@ export async function getOrderByTracking(orderNumber: string, verifier: string) 
       dispatch_date,
       estimated_delivery_min,
       estimated_delivery_max,
+      package_weight_grams,
+      package_dimensions,
+      cancellation_reason,
+      cancelled_at,
+      user_id,
       guest_email,
       guest_phone,
       shipping_address,
+      billing_address,
       status_history,
       order_items (
         id,
@@ -1362,22 +1512,103 @@ export async function getOrderByTracking(orderNumber: string, verifier: string) 
         total_amount
       )
     `)
-    .eq('order_number', cleanOrder)
-    .maybeSingle()
+
+  if (isUuid) {
+    query = query.or(`order_number.ilike.${cleanOrder},id.eq.${cleanOrder}`)
+  } else {
+    query = query.ilike('order_number', cleanOrder)
+  }
+
+  let { data: order, error } = await query.maybeSingle()
+
+  if (error && (error.message.includes('column') || error.message.includes('schema cache'))) {
+    let fallbackQuery = supabase
+      .from('orders')
+      .select(`
+        id,
+        order_number,
+        created_at,
+        status,
+        payment_status,
+        payment_method,
+        total_amount,
+        tracking_number,
+        carrier,
+        user_id,
+        guest_email,
+        guest_phone,
+        shipping_address,
+        billing_address,
+        cancellation_reason,
+        order_items (
+          id,
+          product_name,
+          quantity,
+          variant_info,
+          total_amount
+        )
+      `)
+
+    if (isUuid) {
+      fallbackQuery = fallbackQuery.or(`order_number.ilike.${cleanOrder},id.eq.${cleanOrder}`)
+    } else {
+      fallbackQuery = fallbackQuery.ilike('order_number', cleanOrder)
+    }
+
+    const fallbackRes = await fallbackQuery.maybeSingle()
+    order = fallbackRes.data as any
+    error = fallbackRes.error
+  }
 
   if (error || !order) {
     return { error: 'Order not found. Please verify the order number.' }
   }
 
-  // Verify against guest_email, guest_phone, or shipping_address fields
-  const address = order.shipping_address as any
-  const orderEmail = (order.guest_email || address?.email || '').toLowerCase()
-  const orderPhone = (order.guest_phone || address?.phone || '').replace(/\D/g, '')
+  // Verification checks:
+  const address = (order.shipping_address as any) || {}
+  const billing = (order.billing_address as any) || {}
+  const orderEmail = (order.guest_email || address?.email || billing?.email || '').toLowerCase().trim()
 
-  const matchesEmail = cleanVerifier.includes('@') && orderEmail && orderEmail === cleanVerifier
-  const matchesPhone = cleanPhone.length >= 10 && orderPhone && orderPhone.endsWith(cleanPhone.slice(-10))
+  let profileEmail = ''
+  let profilePhone = ''
+  if (order.user_id) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email, phone')
+      .eq('id', order.user_id)
+      .maybeSingle()
+    if (profile) {
+      profileEmail = (profile.email || '').toLowerCase().trim()
+      profilePhone = (profile.phone || '').replace(/\D/g, '')
+    }
+  }
 
-  if (!matchesEmail && !matchesPhone) {
+  const emailsToCheck = [orderEmail, profileEmail].filter(Boolean)
+  const phoneNumbersToCheck = [
+    (order.guest_phone || '').replace(/\D/g, ''),
+    (address?.phone || '').replace(/\D/g, ''),
+    (billing?.phone || '').replace(/\D/g, ''),
+    profilePhone,
+  ].filter(Boolean)
+
+  let matchesEmail = false
+  if (cleanVerifier.includes('@')) {
+    matchesEmail = emailsToCheck.some((em) => em === cleanVerifier)
+  }
+
+  let matchesPhone = false
+  if (cleanPhone.length >= 10) {
+    const targetDigits = cleanPhone.slice(-10)
+    matchesPhone = phoneNumbersToCheck.some((p) => p.endsWith(targetDigits))
+  }
+
+  // If current logged-in user is the owner or an admin, auto-verify!
+  let isAuthorized = Boolean(currentUserId && order.user_id && currentUserId === order.user_id)
+  if (!isAuthorized && currentUserId) {
+    isAuthorized = await isAdmin(currentUserId)
+  }
+
+  if (!matchesEmail && !matchesPhone && !isAuthorized) {
     return {
       error: 'The email or phone number does not match this order. Please verify your details.',
     }
@@ -1386,6 +1617,7 @@ export async function getOrderByTracking(orderNumber: string, verifier: string) 
   // Mask sensitive address details for public lookup
   const maskedOrder = {
     ...order,
+    tracking_url: getCourierTrackingUrl(order.carrier, order.tracking_number, order.tracking_url),
     shipping_address: {
       city: address?.city,
       state: address?.state,

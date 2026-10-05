@@ -285,6 +285,7 @@ export interface Database {
           product_id: string
           image_url: string
           storage_path: string | null
+          color: string | null
           alt_text: string | null
           sort_order: number
           created_at: string
@@ -294,6 +295,7 @@ export interface Database {
           product_id: string
           image_url: string
           storage_path?: string | null
+          color?: string | null
           alt_text?: string | null
           sort_order?: number
           created_at?: string
@@ -303,6 +305,7 @@ export interface Database {
           product_id?: string
           image_url?: string
           storage_path?: string | null
+          color?: string | null
           alt_text?: string | null
           sort_order?: number
           created_at?: string

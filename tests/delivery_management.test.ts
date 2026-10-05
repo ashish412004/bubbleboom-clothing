@@ -179,6 +179,41 @@ describe('Delivery Management & Fulfillment Flow', () => {
       expect(res.error).toBeDefined()
       expect(res.error).toContain('Tracking URL must be a valid HTTPS web address')
     })
+
+    it('saves logistics details and preserves all metadata fields correctly', async () => {
+      const sampleOrder = {
+        id: 'ord-awb-test-6',
+        order_number: 'BB-AWB-006',
+        status: 'confirmed',
+        payment_method: 'cashfree',
+        payment_status: 'paid',
+      }
+      saveDevOrder(sampleOrder)
+
+      const res = await updateFulfillmentDetails({
+        orderId: 'ord-awb-test-6',
+        courierPartner: 'Delhivery Express',
+        trackingNumber: '84595266',
+        trackingUrl: 'https://track.delhivery.com/tracking?awb=DEL-89922001',
+        packageWeightGrams: 450,
+        packageDimensions: { length: 30, width: 25, height: 5 },
+        dispatchDate: '2026-10-07T00:00:00.000Z',
+        estimatedDeliveryMin: '2026-10-09',
+        estimatedDeliveryMax: '2026-10-13',
+        adminUserId: 'admin-001',
+      })
+
+      expect(res.error).toBeUndefined()
+      expect(res.data?.carrier).toBe('Delhivery Express')
+      expect(res.data?.tracking_number).toBe('84595266')
+      expect(res.data?.tracking_url).toBe('https://track.delhivery.com/tracking?awb=DEL-89922001')
+      expect(res.data?.package_weight_grams).toBe(450)
+      expect(res.data?.package_dimensions).toEqual({ length: 30, width: 25, height: 5 })
+      expect(res.data?.dispatch_date).toBe('2026-10-07T00:00:00.000Z')
+      expect(res.data?.estimated_delivery_min).toBe('2026-10-09')
+      expect(res.data?.estimated_delivery_max).toBe('2026-10-13')
+      expect(res.data?.status).toBe('confirmed')
+    })
   })
 
   describe('3. Copyable Courier Manifest Formatting', () => {
@@ -371,6 +406,43 @@ describe('Delivery Management & Fulfillment Flow', () => {
 
       const wrongPhoneRes = await getOrderByTracking('BB-TRACK-002', '9111111111')
       expect(wrongPhoneRes.error).toContain('does not match this order')
+    })
+
+    it('handles case-insensitivity, leading hash, and whitespace in order numbers', async () => {
+      const order = {
+        id: 'ord-track-case-3',
+        order_number: 'BB-20261005-9988',
+        guest_email: 'case@gmail.com',
+        guest_phone: '9876543210',
+        status: 'shipped',
+        carrier: 'Delhivery Express',
+        tracking_number: 'DEL-887766',
+        shipping_address: { city: 'Delhi', pin_code: '110001' },
+      }
+      saveDevOrder(order)
+
+      // lowercase with hash and spaces
+      const res = await getOrderByTracking('#bb-20261005-9988 ', 'case@gmail.com')
+      expect(res.error).toBeUndefined()
+      expect(res.data?.order_number).toBe('BB-20261005-9988')
+      // Auto-generated courier tracking url
+      expect(res.data?.tracking_url).toContain('delhivery.com/track/package/DEL-887766')
+    })
+
+    it('allows verified order owners to view tracking directly', async () => {
+      const order = {
+        id: 'ord-track-owner-4',
+        order_number: 'BB-OWNER-004',
+        user_id: 'user-logged-in-123',
+        status: 'out_for_delivery',
+        shipping_address: { city: 'Bengaluru', pin_code: '560001' },
+      }
+      saveDevOrder(order)
+
+      const res = await getOrderByTracking('BB-OWNER-004', '', 'user-logged-in-123')
+      expect(res.error).toBeUndefined()
+      expect(res.data?.order_number).toBe('BB-OWNER-004')
+      expect(res.data?.status).toBe('out_for_delivery')
     })
   })
 

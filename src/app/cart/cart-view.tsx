@@ -219,7 +219,10 @@ export function CartView({
           {items.map((item) => {
             const prod = item.variant?.product
             if (!prod) return null
-            const img = prod.images?.[0]
+            const variantColor = item.variant?.color?.trim().toLowerCase()
+            const img = (prod.images as any[])?.find(
+              (i) => i.color && i.color.trim().toLowerCase() === variantColor
+            ) || prod.images?.[0]
             const lineSubtotal = Math.round(prod.selling_price * item.quantity)
 
             return (

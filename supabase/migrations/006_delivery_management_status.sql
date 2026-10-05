@@ -31,3 +31,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS package_dimensions JSONB;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS status_history JSONB DEFAULT '[]'::JSONB;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_email_sent_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_email_sent_at TIMESTAMP WITH TIME ZONE;
+
+-- Notify PostgREST to immediately refresh its schema cache
+NOTIFY pgrst, 'reload schema';
+

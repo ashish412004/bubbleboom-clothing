@@ -1,7 +1,7 @@
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { getCurrentUser, isAdmin } from '@/lib/auth'
-import { getOrderById } from '@/lib/orders'
+import { getOrderById, getCourierTrackingUrl } from '@/lib/orders'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -166,25 +166,31 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                     )}
                   </div>
 
-                  <div>
-                    {order.tracking_url ? (
-                      <a
-                        href={order.tracking_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 bg-black text-white px-4 py-2 text-xs uppercase font-bold tracking-wider hover:bg-neutral-800 transition-colors"
-                      >
-                        <span>Track Shipment</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    ) : (
-                      <Link
-                        href={`/track-order?order_id=${order.order_number}`}
-                        className="inline-flex items-center gap-1.5 bg-black text-white px-4 py-2 text-xs uppercase font-bold tracking-wider hover:bg-neutral-800 transition-colors"
-                      >
-                        <span>Track Shipment</span>
-                      </Link>
-                    )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(() => {
+                      const directUrl = getCourierTrackingUrl(order.carrier, order.tracking_number, order.tracking_url)
+                      return (
+                        <>
+                          {directUrl && (
+                            <a
+                              href={directUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 bg-black text-white px-3.5 py-2 text-xs uppercase font-bold tracking-wider hover:bg-neutral-800 transition-colors"
+                            >
+                              <span>Courier Site</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                          <Link
+                            href={`/track-order?order_id=${order.order_number}`}
+                            className="inline-flex items-center gap-1.5 border border-black bg-white text-black px-3.5 py-2 text-xs uppercase font-bold tracking-wider hover:bg-neutral-100 transition-colors"
+                          >
+                            <span>Live Status</span>
+                          </Link>
+                        </>
+                      )
+                    })()}
                   </div>
                 </div>
               )}
@@ -196,7 +202,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
               <div className="divide-y divide-neutral-200">
                 {items.map((item) => {
                   const variantInfo = (item.variant_info as any) || {}
-                  const img = item.variant?.product?.images?.[0]?.image_url
+                  const img = variantInfo.image_url || item.variant?.product?.images?.[0]?.image_url
 
                   return (
                     <div key={item.id} className="py-4 flex gap-4 items-center">

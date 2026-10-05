@@ -136,10 +136,13 @@ CREATE TABLE IF NOT EXISTS public.product_images (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
   image_url TEXT NOT NULL,
+  storage_path TEXT,
+  color TEXT,
   alt_text TEXT,
   sort_order INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_product_images_product_color ON public.product_images(product_id, color);
 
 CREATE TABLE IF NOT EXISTS public.collection_products (
   collection_id UUID NOT NULL REFERENCES public.collections(id) ON DELETE CASCADE,
@@ -191,7 +194,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
   user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   guest_email TEXT,
   guest_phone TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'return_requested', 'returned', 'refunded')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'unfulfilled', 'packed', 'pickup_scheduled', 'shipped', 'out_for_delivery', 'delivered', 'delivery_exception', 'return_to_origin', 'cancelled', 'return_requested', 'returned', 'refunded')),
   payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refunded', 'partially_refunded')),
   payment_method TEXT NOT NULL CHECK (payment_method IN ('cashfree', 'cod')),
   subtotal INTEGER NOT NULL,
@@ -207,9 +210,29 @@ CREATE TABLE IF NOT EXISTS public.orders (
   cancelled_at TIMESTAMP WITH TIME ZONE,
   tracking_number TEXT,
   carrier TEXT,
+  tracking_url TEXT,
+  dispatch_date TIMESTAMP WITH TIME ZONE,
+  estimated_delivery_min DATE,
+  estimated_delivery_max DATE,
+  package_weight_grams INTEGER,
+  package_dimensions JSONB,
+  status_history JSONB DEFAULT '[]'::JSONB,
+  shipped_email_sent_at TIMESTAMP WITH TIME ZONE,
+  delivered_email_sent_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Ensure columns exist if public.orders already existed previously
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS tracking_url TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS dispatch_date TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS estimated_delivery_min DATE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS estimated_delivery_max DATE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS package_weight_grams INTEGER;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS package_dimensions JSONB;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS status_history JSONB DEFAULT '[]'::JSONB;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS shipped_email_sent_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS delivered_email_sent_at TIMESTAMP WITH TIME ZONE;
 
 CREATE TABLE IF NOT EXISTS public.order_items (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

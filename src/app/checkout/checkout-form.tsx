@@ -36,7 +36,7 @@ interface CartItemData {
     product: {
       name: string
       selling_price: number
-      images: Array<{ image_url: string }>
+      images: Array<{ image_url: string; color?: string | null }>
     }
   }
 }
@@ -967,7 +967,11 @@ export function CheckoutForm({
             {items.map((item) => {
               const prod = item.variant?.product
               if (!prod) return null
-              const firstImg = prod.images?.[0]?.image_url
+              const variantColor = item.variant?.color?.trim().toLowerCase()
+              const matchedImg = prod.images?.find(
+                (i) => i.color && i.color.trim().toLowerCase() === variantColor
+              ) || prod.images?.[0]
+              const firstImg = matchedImg?.image_url
               const isOutOfStock = isItemOutOfStock(item)
 
               return (

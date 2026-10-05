@@ -77,14 +77,26 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
               <div className="divide-y divide-neutral-200">
                 {items.map((item) => (
                   <div key={item.id} className="py-3 flex justify-between items-center text-xs">
-                    <div>
-                      <span className="font-bold uppercase text-black">{item.product_name}</span>
-                      <span className="text-neutral-500 font-mono ml-2">
-                        ({item.variant_info?.color} / {item.variant_info?.size})
-                      </span>
-                      <p className="text-[11px] text-neutral-500 font-mono">
-                        SKU: {item.variant_info?.sku} • Quantity: {item.quantity} × ₹{item.selling_price?.toLocaleString('en-IN')}
-                      </p>
+                    <div className="flex items-center gap-3">
+                      {item.variant_info?.image_url && (
+                        <div className="relative w-10 h-12 bg-neutral-100 border shrink-0 overflow-hidden">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={item.variant_info.image_url}
+                            alt={item.product_name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <span className="font-bold uppercase text-black">{item.product_name}</span>
+                        <span className="text-neutral-500 font-mono ml-2">
+                          ({item.variant_info?.color} / {item.variant_info?.size})
+                        </span>
+                        <p className="text-[11px] text-neutral-500 font-mono">
+                          SKU: {item.variant_info?.sku} • Quantity: {item.quantity} × ₹{item.selling_price?.toLocaleString('en-IN')}
+                        </p>
+                      </div>
                     </div>
                     <div className="font-mono font-bold">
                       ₹{item.total_amount?.toLocaleString('en-IN')}
