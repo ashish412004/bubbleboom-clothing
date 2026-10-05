@@ -1,9 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Plus, Trash2, ArrowLeft, Image as ImageIcon } from 'lucide-react'
+import {
+  Plus,
+  Trash2,
+  ArrowLeft,
+  Image as ImageIcon,
+  Upload,
+  Loader2,
+  Star,
+  ChevronLeft,
+  ChevronRight,
+  Link2,
+} from 'lucide-react'
 import Link from 'next/link'
 
 interface ProductFormProps {
@@ -47,9 +58,14 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
   // Images
   const [imageUrls, setImageUrls] = useState<string[]>(
     initialProduct?.images && initialProduct.images.length > 0
-      ? initialProduct.images.map((img: any) => (typeof img === 'string' ? img : img.image_url))
-      : ['']
+      ? initialProduct.images.map((img: any) => (typeof img === 'string' ? img : img.image_url)).filter(Boolean)
+      : []
   )
+  const [uploadingImages, setUploadingImages] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [showManualUrl, setShowManualUrl] = useState(false)
+  const [manualUrlInput, setManualUrlInput] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleNameChange = (val: string) => {
     setName(val)
@@ -77,20 +93,94 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
     })
   }
 
-  const addImageRow = () => {
-    setImageUrls((prev) => [...prev, ''])
+  const handleFiles = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files).filter((f) => f.type.startsWith('image/'))
+    if (fileArray.length === 0) {
+      toast.error('Please select valid image files (JPG, PNG, WEBP, AVIF)')
+      return
+    }
+
+    setUploadingImages(true)
+    const toastId = toast.loading(`Uploading ${fileArray.length} photo(s)...`)
+
+    try {
+      const formData = new FormData()
+      fileArray.forEach((file) => formData.append('files', file))
+
+      const res = await fetch('/api/admin/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to upload images')
+      }
+
+      const newUrls: string[] = data.urls || (data.url ? [data.url] : [])
+      if (newUrls.length > 0) {
+        setImageUrls((prev) => [...prev.filter(Boolean), ...newUrls])
+        toast.success(`Uploaded ${newUrls.length} photo(s) successfully!`, { id: toastId })
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Image upload failed', { id: toastId })
+    } finally {
+      setUploadingImages(false)
+    }
   }
 
-  const updateImageRow = (index: number, val: string) => {
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFiles(e.dataTransfer.files)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(true)
+  }
+
+  const handleDragLeave = () => {
+    setDragOver(false)
+  }
+
+  const handleAddManualUrl = () => {
+    const trimmed = manualUrlInput.trim()
+    if (!trimmed) return
+    if (trimmed.includes('\\') || /^[a-zA-Z]:/.test(trimmed)) {
+      toast.error('Local disk paths (e.g. C:\\...) cannot be entered as URLs. Please use the Upload button above!')
+      return
+    }
+    setImageUrls((prev) => [...prev.filter(Boolean), trimmed])
+    setManualUrlInput('')
+    setShowManualUrl(false)
+    toast.success('Image URL added')
+  }
+
+  const removeImage = (index: number) => {
+    setImageUrls((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const makePrimary = (index: number) => {
     setImageUrls((prev) => {
+      if (index === 0) return prev
       const next = [...prev]
-      next[index] = val
-      return next
+      const [item] = next.splice(index, 1)
+      return [item, ...next]
     })
   }
 
-  const removeImageRow = (index: number) => {
-    setImageUrls((prev) => prev.filter((_, i) => i !== index))
+  const moveImage = (index: number, direction: 'prev' | 'next') => {
+    setImageUrls((prev) => {
+      const targetIdx = direction === 'prev' ? index - 1 : index + 1
+      if (targetIdx < 0 || targetIdx >= prev.length) return prev
+      const next = [...prev]
+      const [item] = next.splice(index, 1)
+      next.splice(targetIdx, 0, item)
+      return next
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -105,9 +195,10 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
       return
     }
 
-    const hasDiskPath = imageUrls.some((img) => img && (img.includes('\\') || /^[a-zA-Z]:/.test(img)))
+    const validImages = imageUrls.filter(Boolean)
+    const hasDiskPath = validImages.some((img) => img && (img.includes('\\') || /^[a-zA-Z]:/.test(img)))
     if (hasDiskPath) {
-      toast.error('Local disk paths (e.g. C:\\...) cannot be viewed by browsers. Please use web URLs (https://...) or store images in /images/products/...', { duration: 6000 })
+      toast.error('Local disk paths cannot be viewed by browsers. Please use the Upload Photos button to upload directly from your computer!', { duration: 6000 })
       return
     }
 
@@ -396,43 +487,212 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
         </div>
       </div>
 
-      {/* Image Gallery URLs */}
-      <div className="border border-black bg-white p-6 space-y-4">
-        <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
+      {/* Product Photography & Upload Section */}
+      <div className="border border-black bg-white p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-neutral-200 gap-2">
           <div>
-            <h2 className="text-sm font-black uppercase tracking-tight">Product Photography URLs</h2>
-            <p className="text-[11px] text-neutral-500 font-mono">Cloudinary or hosted product image URLs</p>
+            <div className="flex items-center gap-2">
+              <ImageIcon className="w-4 h-4 text-black" />
+              <h2 className="text-sm font-black uppercase tracking-tight">Product Photography &amp; Gallery</h2>
+            </div>
+            <p className="text-[11px] text-neutral-500 font-mono mt-0.5">
+              Upload photos directly from your device — no image URLs required.
+            </p>
           </div>
           <button
             type="button"
-            onClick={addImageRow}
-            className="inline-flex items-center gap-1.5 border border-black px-3 py-1.5 text-xs font-mono uppercase font-bold hover:bg-black hover:text-white transition-colors"
+            onClick={() => setShowManualUrl(!showManualUrl)}
+            className="inline-flex items-center gap-1.5 border border-neutral-400 px-3 py-1.5 text-xs font-mono uppercase font-bold hover:border-black hover:bg-neutral-100 transition-colors self-start sm:self-auto cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Image URL</span>
+            <Link2 className="w-3.5 h-3.5" />
+            <span>{showManualUrl ? 'Hide URL Input' : 'Or Paste Image URL'}</span>
           </button>
         </div>
 
-        <div className="space-y-2">
-          {imageUrls.map((url, idx) => (
-            <div key={idx} className="flex items-center gap-3">
-              <span className="text-xs font-mono text-neutral-500 w-6">#{idx + 1}</span>
+        {/* Dropzone / Upload Area */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files && e.target.files.length > 0) {
+              handleFiles(e.target.files)
+              e.target.value = ''
+            }
+          }}
+        />
+
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => !uploadingImages && fileInputRef.current?.click()}
+          className={`border-2 border-dashed p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3 ${
+            dragOver
+              ? 'border-black bg-neutral-100 scale-[0.99]'
+              : 'border-neutral-300 bg-[#FAFAFA] hover:border-black hover:bg-neutral-50'
+          }`}
+        >
+          {uploadingImages ? (
+            <div className="flex flex-col items-center gap-2 py-4">
+              <Loader2 className="w-8 h-8 animate-spin text-black" />
+              <span className="text-xs font-mono uppercase tracking-wider font-bold">
+                Uploading photo(s) to server...
+              </span>
+            </div>
+          ) : (
+            <>
+              <div className="w-12 h-12 rounded-full border border-neutral-300 bg-white flex items-center justify-center shadow-sm">
+                <Upload className="w-6 h-6 text-black" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-bold uppercase tracking-wider font-mono">
+                  Click to choose photos or drag &amp; drop files here
+                </p>
+                <p className="text-[11px] text-neutral-500 font-mono">
+                  Supports JPG, PNG, WEBP, AVIF (up to 10MB each). Select multiple files at once.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="mt-1 bg-black text-white px-4 py-2 text-xs uppercase font-mono font-bold hover:bg-neutral-800 transition-colors pointer-events-none"
+              >
+                Select Photos from Device
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Optional Manual URL Accordion */}
+        {showManualUrl && (
+          <div className="p-4 bg-neutral-50 border border-neutral-300 space-y-2">
+            <label className="block text-xs uppercase font-mono tracking-wider font-bold">
+              Paste External Image URL
+            </label>
+            <div className="flex gap-2">
               <input
                 type="url"
-                value={url}
-                onChange={(e) => updateImageRow(idx, e.target.value)}
-                placeholder="https://res.cloudinary.com/... or https://images.unsplash.com/..."
-                className="flex-1 border border-black p-2 text-xs font-mono focus:outline-none"
+                value={manualUrlInput}
+                onChange={(e) => setManualUrlInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleAddManualUrl()
+                  }
+                }}
+                placeholder="https://images.unsplash.com/... or https://res.cloudinary.com/..."
+                className="flex-1 border border-black p-2 text-xs font-mono bg-white focus:outline-none"
               />
               <button
                 type="button"
-                onClick={() => removeImageRow(idx)}
-                className="p-2 text-neutral-500 hover:text-black"
+                onClick={handleAddManualUrl}
+                className="bg-black text-white px-4 py-2 text-xs font-mono uppercase font-bold hover:bg-neutral-800 cursor-pointer"
               >
-                <Trash2 className="w-4 h-4" />
+                Add URL
               </button>
             </div>
-          ))}
+          </div>
+        )}
+
+        {/* Photo Gallery Grid Preview */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-mono uppercase font-bold text-neutral-600">
+              Attached Photos ({imageUrls.filter(Boolean).length})
+            </span>
+            {imageUrls.filter(Boolean).length > 0 && (
+              <span className="text-[10px] font-mono text-neutral-500">
+                First photo is used as main catalog cover
+              </span>
+            )}
+          </div>
+
+          {imageUrls.filter(Boolean).length === 0 ? (
+            <div className="border border-neutral-200 bg-neutral-50 p-6 text-center text-xs font-mono text-neutral-500">
+              No photos added yet. Click &quot;Select Photos from Device&quot; above to upload product images.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {imageUrls.filter(Boolean).map((url, idx) => (
+                <div
+                  key={`${url}-${idx}`}
+                  className="group relative border border-black bg-white flex flex-col overflow-hidden shadow-sm"
+                >
+                  {/* Image container */}
+                  <div className="relative aspect-square w-full bg-neutral-100 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`Product photo ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src =
+                          'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&q=80'
+                      }}
+                    />
+
+                    {/* Badge */}
+                    <div className="absolute top-2 left-2">
+                      {idx === 0 ? (
+                        <span className="bg-black text-white text-[10px] font-mono font-bold px-2 py-0.5 tracking-wider">
+                          COVER
+                        </span>
+                      ) : (
+                        <span className="bg-white/90 text-black border border-black text-[10px] font-mono font-bold px-1.5 py-0.2">
+                          #{idx + 1}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div className="p-2 bg-[#F8F8F6] border-t border-black flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1">
+                      {idx !== 0 && (
+                        <button
+                          type="button"
+                          onClick={() => makePrimary(idx)}
+                          title="Set as Primary Cover"
+                          className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black cursor-pointer"
+                        >
+                          <Star className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => moveImage(idx, 'prev')}
+                        title="Move Left"
+                        className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black disabled:opacity-30 cursor-pointer"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === imageUrls.filter(Boolean).length - 1}
+                        onClick={() => moveImage(idx, 'next')}
+                        title="Move Right"
+                        className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black disabled:opacity-30 cursor-pointer"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeImage(idx)}
+                      title="Remove Photo"
+                      className="p-1 hover:bg-red-50 text-neutral-600 hover:text-red-600 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </form>

@@ -16,6 +16,11 @@ function getDevOrdersFilePath() {
 }
 
 let inMemoryDevOrders: any[] = []
+const deletedDevOrderIds = new Set<string>()
+
+export function getDeletedOrderIds(): Set<string> {
+  return deletedDevOrderIds
+}
 
 export function getDevOrders(): any[] {
   let diskOrders: any[] = []
@@ -29,18 +34,26 @@ export function getDevOrders(): any[] {
 
   const orderMap = new Map<string, any>()
   for (const o of MOCK_ORDERS) {
-    if (o?.id) orderMap.set(o.id, o)
+    if (o?.id && !deletedDevOrderIds.has(o.id) && (!o.order_number || !deletedDevOrderIds.has(o.order_number))) {
+      orderMap.set(o.id, o)
+    }
   }
   for (const o of diskOrders) {
-    if (o?.id) orderMap.set(o.id, o)
+    if (o?.id && !deletedDevOrderIds.has(o.id) && (!o.order_number || !deletedDevOrderIds.has(o.order_number))) {
+      orderMap.set(o.id, o)
+    }
   }
   for (const o of inMemoryDevOrders) {
-    if (o?.id) orderMap.set(o.id, o)
+    if (o?.id && !deletedDevOrderIds.has(o.id) && (!o.order_number || !deletedDevOrderIds.has(o.order_number))) {
+      orderMap.set(o.id, o)
+    }
   }
   return Array.from(orderMap.values())
 }
 
 export function saveDevOrder(order: any) {
+  if (order?.id) deletedDevOrderIds.delete(order.id)
+  if (order?.order_number) deletedDevOrderIds.delete(order.order_number)
   inMemoryDevOrders = [
     order,
     ...inMemoryDevOrders.filter((o: any) => o.id !== order.id && o.order_number !== order.order_number),
@@ -1246,6 +1259,7 @@ export async function deleteOrder(orderId: string) {
   } catch {}
 
   inMemoryDevOrders = inMemoryDevOrders.filter((o: any) => o.id !== orderId && o.order_number !== orderId)
+  deletedDevOrderIds.add(orderId)
 
   const mIdx = MOCK_ORDERS.findIndex((o) => o.id === orderId || o.order_number === orderId)
   if (mIdx >= 0) {
