@@ -12,21 +12,27 @@ export function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const nextParam = searchParams.get('next')
+  const errorParam = searchParams.get('error')
+  const isAdminTarget = nextParam?.startsWith('/admin')
 
   // Prevent open redirects: only allow local relative paths
   const safeRedirect = nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')
     ? nextParam
     : '/account'
 
-  const [authMode, setAuthMode] = useState<'otp' | 'password'>('otp')
+  const [authMode, setAuthMode] = useState<'otp' | 'password'>(isAdminTarget ? 'password' : 'otp')
   const [identifier, setIdentifier] = useState('')
   const [otp, setOtp] = useState('')
   const [otpSent, setOtpSent] = useState(false)
   const [otpMessage, setOtpMessage] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(isAdminTarget ? 'hhshukla241099@gmail.com' : '')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    errorParam === 'unauthorized'
+      ? 'Access restricted: The Admin Terminal can only be accessed by hhshukla241099@gmail.com.'
+      : null
+  )
   const refreshCart = useCartStore((s) => s.refreshCart)
 
   // 1. Send Real OTP
@@ -154,9 +160,17 @@ export function LoginForm() {
   return (
     <div className="w-full max-w-md mx-auto p-8 border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
       <div className="text-center mb-6">
-        <span className="text-xs uppercase font-mono tracking-widest text-neutral-500">Bubble Boom Account</span>
-        <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight mt-1">Sign In</h1>
-        <p className="text-xs text-neutral-600 mt-2">Access your order history, live tracking, and express checkout.</p>
+        <span className="text-xs uppercase font-mono tracking-widest text-neutral-500">
+          {isAdminTarget ? 'Admin Terminal Portal' : 'Bubble Boom Account'}
+        </span>
+        <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight mt-1">
+          {isAdminTarget ? 'Admin Sign In' : 'Sign In'}
+        </h1>
+        <p className="text-xs text-neutral-600 mt-2">
+          {isAdminTarget
+            ? 'Sign in with your authorized admin credentials.'
+            : 'Access your order history, live tracking, and express checkout.'}
+        </p>
       </div>
 
       {/* Mode Switcher: Instant OTP vs Password */}

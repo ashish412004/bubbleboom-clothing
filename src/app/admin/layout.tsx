@@ -15,18 +15,23 @@ export default async function AdminLayout({
   children: React.ReactNode
 }) {
   const user = await getCurrentUser()
+  const allowedAdminEmail = (process.env.ADMIN_EMAIL || 'hhshukla241099@gmail.com').toLowerCase().trim()
 
-  // In production, strictly enforce admin authentication
-  if (!user && process.env.NODE_ENV === 'production') {
+  // Strictly enforce admin authentication
+  if (!user) {
     redirect('/login?next=/admin')
   }
 
-  // If user is authenticated, check admin permission
-  if (user) {
-    const userIsAdmin = await isAdmin(user.id)
-    if (!userIsAdmin && process.env.NODE_ENV === 'production') {
-      redirect('/')
-    }
+  // Strictly enforce that only the authorized email can access the admin portal
+  const userEmail = (user.email || '').toLowerCase().trim()
+  if (userEmail !== allowedAdminEmail) {
+    redirect('/login?next=/admin&error=unauthorized')
+  }
+
+  // Verify admin authorization
+  const userIsAdmin = await isAdmin(user.id)
+  if (!userIsAdmin) {
+    redirect('/login?next=/admin&error=unauthorized')
   }
 
   return (

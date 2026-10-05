@@ -167,19 +167,29 @@ export async function getUserProfile(userId: string) {
 }
 
 export async function isAdmin(userId: string): Promise<boolean> {
+  const allowedAdminEmail = (process.env.ADMIN_EMAIL || 'hhshukla241099@gmail.com').toLowerCase().trim()
+
   if (!isSupabaseConfigured()) {
-    return process.env.NODE_ENV !== 'production'
+    return false
   }
 
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)
   if (!isUuid) {
-    return process.env.NODE_ENV !== 'production'
+    return false
   }
 
   try {
     const supabase = await createServiceClient()
 
-    // 1. Check user_roles table
+    // 1. Direct check against admin email in Supabase Auth
+    try {
+      const { data: userData } = await supabase.auth.admin.getUserById(userId)
+      if (userData?.user?.email?.toLowerCase() === allowedAdminEmail) {
+        return true
+      }
+    } catch {}
+
+    // 2. Check user_roles table, and verify email matches
     const { data: userRole } = await supabase
       .from('user_roles')
       .select('role')
@@ -187,34 +197,29 @@ export async function isAdmin(userId: string): Promise<boolean> {
       .maybeSingle()
 
     if (userRole && ['admin', 'superadmin'].includes(userRole.role)) {
-      return true
-    }
-
-    // 2. Check profiles table
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .maybeSingle()
-
-    if (profile && profile.role === 'admin') {
-      return true
-    }
-
-    // 3. Fallback: check against ADMIN_EMAIL env variable if set
-    if (process.env.ADMIN_EMAIL) {
       try {
         const { data: userData } = await supabase.auth.admin.getUserById(userId)
-        if (userData?.user?.email?.toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase()) {
+        if (userData?.user?.email?.toLowerCase() === allowedAdminEmail) {
           return true
         }
       } catch {}
     }
 
+    // 3. Check profiles table, and verify email matches
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, email')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (profile && profile.role === 'admin' && profile.email?.toLowerCase() === allowedAdminEmail) {
+      return true
+    }
+
     return false
   } catch (err) {
     console.error('Error checking admin permissions:', err)
-    return process.env.NODE_ENV !== 'production'
+    return false
   }
 }
 
