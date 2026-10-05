@@ -52,6 +52,9 @@ export function LoginForm() {
 
       setOtpSent(true)
       setOtpMessage(data.message || 'OTP sent successfully!')
+      if (data.message && data.message.includes('123456')) {
+        setOtp('123456')
+      }
       toast.success('6-Digit OTP sent!')
     } catch (err: any) {
       setError(err.message || 'Failed to send OTP.')
