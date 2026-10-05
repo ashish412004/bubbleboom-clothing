@@ -87,13 +87,19 @@ export function Footer() {
             <p className="text-sm text-neutral-400 max-w-sm leading-relaxed">
               Every style. Every mood. Make it yours. Premium Indian fashion crafted for fearless self-expression.
             </p>
-            <div className="pt-2">
+            <div className="pt-2 flex flex-col gap-2">
               <Link
                 href="/track-order"
-                className="inline-flex items-center text-xs uppercase tracking-wider font-semibold border border-neutral-700 px-4 py-2 hover:bg-white hover:text-black transition-colors"
+                className="inline-flex items-center text-xs uppercase tracking-wider font-semibold border border-neutral-700 px-4 py-2 hover:bg-white hover:text-black transition-colors w-fit"
               >
                 Track Your Order
               </Link>
+              <a
+                href="mailto:bubbleboomstore2026@gmail.com"
+                className="text-xs font-mono text-neutral-400 hover:text-white transition-colors"
+              >
+                bubbleboomstore2026@gmail.com
+              </a>
             </div>
           </div>
 
@@ -142,6 +148,14 @@ export function Footer() {
                 <Link href="/contact" className="hover:text-white transition-colors">
                   Contact Us
                 </Link>
+              </li>
+              <li>
+                <a
+                  href="mailto:bubbleboomstore2026@gmail.com"
+                  className="hover:text-white transition-colors text-xs font-mono break-all inline-block"
+                >
+                  bubbleboomstore2026@gmail.com
+                </a>
               </li>
               <li>
                 <Link href="/track-order" className="hover:text-white transition-colors">

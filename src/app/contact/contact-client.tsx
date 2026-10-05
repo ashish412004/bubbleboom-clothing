@@ -45,11 +45,11 @@ export function ContactClient() {
           <div className="flex items-start gap-4">
             <Mail className="w-5 h-5 text-black shrink-0 mt-0.5" />
             <div>
-              <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block">Support Email</span>
-              <a href="mailto:support@bubbleboom.in" className="text-sm font-bold text-black hover:underline">
-                support@bubbleboom.in
+              <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block">Support & Business Email</span>
+              <a href="mailto:bubbleboomstore2026@gmail.com" className="text-sm font-bold text-black hover:underline">
+                bubbleboomstore2026@gmail.com
               </a>
-              <p className="text-xs text-neutral-500 mt-0.5">Direct response for customer inquiries and orders.</p>
+              <p className="text-xs text-neutral-500 mt-0.5">Direct response for customer inquiries, orders, and business queries.</p>
             </div>
           </div>
 
@@ -65,10 +65,10 @@ export function ContactClient() {
           <div className="flex items-start gap-4 pt-4 border-t border-neutral-200">
             <Shield className="w-5 h-5 text-black shrink-0 mt-0.5" />
             <div>
-              <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block">Consumer Grievance Officer</span>
+              <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block">Consumer Grievance & Desk</span>
               <p className="text-sm font-bold text-black">Grievance Redressal Desk</p>
               <p className="text-xs text-neutral-500 mt-0.5">
-                Designated officer under Consumer Protection (E-Commerce) Rules, 2020. Email: <a href="mailto:grievance@bubbleboom.in" className="underline">grievance@bubbleboom.in</a>
+                Designated officer under Consumer Protection (E-Commerce) Rules, 2020. Email: <a href="mailto:bubbleboomstore2026@gmail.com" className="underline font-bold text-black">bubbleboomstore2026@gmail.com</a>
               </p>
             </div>
           </div>
@@ -76,7 +76,7 @@ export function ContactClient() {
 
         <div className="p-4 bg-[#F8F8F6] border border-neutral-300 text-xs text-neutral-600">
           <p className="font-bold text-black uppercase mb-1 font-mono text-[10px]">Official Notice</p>
-          Bubble Boom does not request one-time passwords (OTP) or UPI PINs for order cancellations or refunds. Always communicate exclusively through official @bubbleboom.in email addresses.
+          Bubble Boom does not request one-time passwords (OTP) or UPI PINs for order cancellations or refunds. Always communicate exclusively through official email address: <strong className="text-black">bubbleboomstore2026@gmail.com</strong>.
         </div>
       </div>
 

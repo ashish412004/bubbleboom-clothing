@@ -87,7 +87,7 @@ export default function PrivacyPolicyPage() {
               </p>
               <div className="bg-[#F8F8F6] border border-black p-4 text-xs font-mono mt-2">
                 <p><strong>Grievance Officer:</strong> Data Privacy Desk, Bubble Boom</p>
-                <p><strong>Email:</strong> privacy@bubbleboom.in / support@bubbleboom.in</p>
+                <p><strong>Email:</strong> bubbleboomstore2026@gmail.com</p>
                 <p><strong>Response SLA:</strong> Within 30 calendar days</p>
               </div>
             </section>

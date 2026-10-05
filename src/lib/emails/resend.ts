@@ -39,7 +39,7 @@ export async function sendOrderConfirmationEmail(
 
           <div style="border-top: 1px solid #eee; padding-top: 16px; font-size: 11px; color: #888; text-align: center;">
             <p>You can download your official tax invoice directly from your <a href="${siteUrl}/account/orders/${orderId}" style="color: #000; font-weight: bold;">Order Details page</a>.</p>
-            <p style="margin-top: 6px;">Bubble Boom Apparel India • support@bubbleboom.in</p>
+            <p style="margin-top: 6px;">Bubble Boom Apparel India • bubbleboomstore2026@gmail.com</p>
           </div>
         </div>
       `,

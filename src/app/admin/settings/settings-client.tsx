@@ -32,7 +32,7 @@ export function SettingsClient({ initialShipping, initialOrders, initialGeneral 
   const [returnDays, setReturnDays] = useState(initialOrders?.return_window_days || 7)
 
   // General
-  const [supportEmail, setSupportEmail] = useState(initialGeneral?.support_email || 'support@bubbleboom.in')
+  const [supportEmail, setSupportEmail] = useState(initialGeneral?.support_email || 'bubbleboomstore2026@gmail.com')
   const [storeName, setStoreName] = useState(initialGeneral?.store_name || 'BUBBLE BOOM')
 
   const handleSaveSettings = async (e: React.FormEvent) => {

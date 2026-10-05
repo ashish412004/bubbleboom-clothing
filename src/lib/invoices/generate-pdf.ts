@@ -111,7 +111,7 @@ export function generateOrderInvoicePdf(order: InvoiceOrderData): Buffer {
   doc.text('Streetwear Hub, Sector 14', margin, y + 8)
   doc.text('New Delhi, India - 110001', margin, y + 12)
   doc.text('GSTIN: 07AAACB1234F1Z5 (Composite)', margin, y + 16)
-  doc.text('Email: orders@bubbleboom.in', margin, y + 20)
+  doc.text('Email: bubbleboomstore2026@gmail.com', margin, y + 20)
 
   // Buyer / Shipping Details
   doc.setFont('helvetica', 'bold')
@@ -292,7 +292,7 @@ export function generateOrderInvoicePdf(order: InvoiceOrderData): Buffer {
     y + 4
   )
   doc.text(
-    'Thank you for shopping with Bubble Boom! For queries, contact support@bubbleboom.in',
+    'Thank you for shopping with Bubble Boom! For queries, contact bubbleboomstore2026@gmail.com',
     margin,
     y + 8
   )

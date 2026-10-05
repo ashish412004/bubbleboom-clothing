@@ -43,7 +43,7 @@ export const DEFAULT_GENERAL_SETTINGS: StoreGeneralSettings = {
   hero_cta_primary: 'SHOP NOW',
   hero_cta_secondary: 'EXPLORE COLLECTIONS',
   brand_statement: 'YOUR STYLE. YOUR RULES.',
-  support_email: 'support@bubbleboom.in',
+  support_email: 'bubbleboomstore2026@gmail.com',
   support_phone: '+91 98765 43210',
   currency: 'INR',
   country: 'India',
