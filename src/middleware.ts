@@ -46,8 +46,13 @@ export async function middleware(request: NextRequest) {
 
   // Protect admin routes
   if (request.nextUrl.pathname.startsWith('/admin')) {
+    // In local dev mode, allow easy admin preview
+    if (process.env.NODE_ENV !== 'production') {
+      return response
+    }
+
     if (!user) {
-      return NextResponse.redirect(new URL('/auth/login', request.url))
+      return NextResponse.redirect(new URL('/login?next=/admin', request.url))
     }
 
     // Check if user is admin
@@ -57,7 +62,9 @@ export async function middleware(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    if (!profile || profile.role !== 'admin') {
+    const isAdminUser = profile?.role === 'admin' || (process.env.ADMIN_EMAIL && user.email === process.env.ADMIN_EMAIL)
+
+    if (!isAdminUser) {
       return NextResponse.redirect(new URL('/', request.url))
     }
   }
@@ -65,7 +72,7 @@ export async function middleware(request: NextRequest) {
   // Protect account routes
   if (request.nextUrl.pathname.startsWith('/account')) {
     if (!user) {
-      return NextResponse.redirect(new URL('/auth/login', request.url))
+      return NextResponse.redirect(new URL('/login?next=/account', request.url))
     }
   }
 
