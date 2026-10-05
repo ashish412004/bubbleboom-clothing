@@ -10,6 +10,12 @@ export const dynamic = 'force-dynamic'
 
 export default async function CheckoutPage() {
   const user = await getCurrentUser()
+
+  // Require customer authentication to checkout
+  if (!user) {
+    redirect('/login?next=/checkout')
+  }
+
   const cookieStore = await cookies()
   const sessionId = cookieStore.get('bb_session_id')?.value
 

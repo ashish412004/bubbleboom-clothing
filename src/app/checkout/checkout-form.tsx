@@ -73,6 +73,43 @@ export function CheckoutForm({
   const [couponDiscountPaise, setCouponDiscountPaise] = useState(summary.coupon_discount_paise || 0)
   const [couponMessage, setCouponMessage] = useState('')
 
+  const [pinLoading, setPinLoading] = useState(false)
+  const [pinSuccessMsg, setPinSuccessMsg] = useState('')
+
+  const handlePinChange = async (val: string) => {
+    const clean = val.replace(/\D/g, '').slice(0, 6)
+    setPinCode(clean)
+    setPinSuccessMsg('')
+
+    if (clean.length === 6) {
+      setPinLoading(true)
+      try {
+        const res = await fetch(`https://api.postalpincode.in/pincode/${clean}`)
+        const data = await res.json()
+        if (data?.[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
+          const po = data[0].PostOffice[0]
+          const detectedCity = po.District || po.Block || po.Name
+          const detectedState = po.State
+          if (detectedCity) setCity(detectedCity)
+          if (detectedState) {
+            const matchedState = indianStates.find(
+              (s) => s.toLowerCase() === detectedState.toLowerCase() ||
+                     (detectedState.toLowerCase() === 'delhi' && s.includes('Delhi'))
+            )
+            setState(matchedState || detectedState)
+          }
+          setPinSuccessMsg(`✓ ${detectedCity}, ${detectedState}`)
+        } else {
+          setPinSuccessMsg('Pincode not found')
+        }
+      } catch {
+        // silent
+      } finally {
+        setPinLoading(false)
+      }
+    }
+  }
+
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -316,16 +353,28 @@ export function CheckoutForm({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs uppercase tracking-wider font-bold mb-1">
-                PIN Code *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs uppercase tracking-wider font-bold">
+                  PIN Code *
+                </label>
+                {pinLoading && (
+                  <span className="text-[10px] text-neutral-500 font-mono animate-pulse">
+                    Detecting...
+                  </span>
+                )}
+                {pinSuccessMsg && !pinLoading && (
+                  <span className={`text-[10px] font-mono font-bold ${pinSuccessMsg.startsWith('✓') ? 'text-green-700' : 'text-amber-600'}`}>
+                    {pinSuccessMsg}
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
                 maxLength={6}
                 required
                 value={pinCode}
-                onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ''))}
-                placeholder="110001"
+                onChange={(e) => handlePinChange(e.target.value)}
+                placeholder="e.g. 110001"
                 className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
               />
             </div>

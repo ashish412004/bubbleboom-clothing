@@ -33,7 +33,35 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
   const [city, setCity] = useState('')
   const [state, setState] = useState('')
   const [pinCode, setPinCode] = useState('')
+  const [pinLoading, setPinLoading] = useState(false)
+  const [pinSuccessMsg, setPinSuccessMsg] = useState('')
   const [isDefault, setIsDefault] = useState(initialAddresses.length === 0)
+
+  const handlePinChange = async (val: string) => {
+    const clean = val.replace(/\D/g, '').slice(0, 6)
+    setPinCode(clean)
+    setPinSuccessMsg('')
+
+    if (clean.length === 6) {
+      setPinLoading(true)
+      try {
+        const res = await fetch(`https://api.postalpincode.in/pincode/${clean}`)
+        const data = await res.json()
+        if (data?.[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
+          const po = data[0].PostOffice[0]
+          const detectedCity = po.District || po.Block || po.Name
+          const detectedState = po.State
+          if (detectedCity) setCity(detectedCity)
+          if (detectedState) setState(detectedState)
+          setPinSuccessMsg(`✓ ${detectedCity}, ${detectedState}`)
+        }
+      } catch {
+        // silent
+      } finally {
+        setPinLoading(false)
+      }
+    }
+  }
 
   const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -217,15 +245,27 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
               </div>
 
               <div>
-                <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-                  6-Digit PIN Code *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs uppercase font-mono tracking-wider font-bold">
+                    6-Digit PIN Code *
+                  </label>
+                  {pinLoading && (
+                    <span className="text-[10px] text-neutral-500 font-mono animate-pulse">
+                      Detecting...
+                    </span>
+                  )}
+                  {pinSuccessMsg && !pinLoading && (
+                    <span className="text-[10px] font-mono font-bold text-green-700">
+                      {pinSuccessMsg}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
                   maxLength={6}
                   value={pinCode}
-                  onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => handlePinChange(e.target.value)}
                   placeholder="400050"
                   className="w-full border border-black p-2.5 text-xs bg-white font-mono focus:outline-none"
                 />

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
-import { AlertCircle, Lock, Mail, ArrowRight } from 'lucide-react'
+import { AlertCircle, Lock, Mail, ArrowRight, Smartphone, KeyRound, CheckCircle2 } from 'lucide-react'
 
 export function LoginForm() {
   const router = useRouter()
@@ -18,12 +18,82 @@ export function LoginForm() {
     ? nextParam
     : '/account'
 
+  const [authMode, setAuthMode] = useState<'otp' | 'password'>('otp')
+  const [identifier, setIdentifier] = useState('')
+  const [otp, setOtp] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpMessage, setOtpMessage] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const refreshCart = useCartStore((s) => s.refreshCart)
 
+  // 1. Send Real OTP
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+
+    try {
+      const res = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send-otp',
+          identifier: identifier.trim(),
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to send OTP. Please check your email/mobile.')
+      }
+
+      setOtpSent(true)
+      setOtpMessage(data.message || 'OTP sent successfully!')
+      toast.success('6-Digit OTP sent!')
+    } catch (err: any) {
+      setError(err.message || 'Failed to send OTP.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 2. Verify Real OTP
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+
+    try {
+      const res = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verify-otp',
+          identifier: identifier.trim(),
+          otp: otp.trim(),
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Invalid or expired OTP.')
+      }
+
+      toast.success('Signed in successfully!')
+      await refreshCart()
+      router.push(safeRedirect)
+      router.refresh()
+    } catch (err: any) {
+      setError(err.message || 'Invalid or expired OTP.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 3. Email + Password Login
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -56,6 +126,7 @@ export function LoginForm() {
     }
   }
 
+  // 4. Google OAuth
   const handleGoogleLogin = async () => {
     setError(null)
     setLoading(true)
@@ -74,22 +145,50 @@ export function LoginForm() {
         throw oauthError
       }
     } catch (err: any) {
-      setError('Google authentication requires active OAuth credentials in .env.local. Sign in with email above for instant local access.')
+      setError('Google authentication requires active OAuth credentials in .env.local. Sign in with OTP or password for instant access.')
       setLoading(false)
     }
   }
 
   return (
     <div className="w-full max-w-md mx-auto p-8 border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-      <div className="text-center mb-8">
+      <div className="text-center mb-6">
         <span className="text-xs uppercase font-mono tracking-widest text-neutral-500">Bubble Boom Account</span>
         <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight mt-1">Sign In</h1>
-        <p className="text-xs text-neutral-600 mt-2">Access your order history, saved drops, and express checkout.</p>
+        <p className="text-xs text-neutral-600 mt-2">Access your order history, live tracking, and express checkout.</p>
+      </div>
+
+      {/* Mode Switcher: Instant OTP vs Password */}
+      <div className="flex border border-black mb-6 p-0.5 bg-neutral-100">
+        <button
+          type="button"
+          onClick={() => {
+            setAuthMode('otp')
+            setError(null)
+          }}
+          className={`flex-1 py-2 text-xs uppercase tracking-wider font-bold transition-all ${
+            authMode === 'otp' ? 'bg-black text-white shadow-sm' : 'text-neutral-600 hover:text-black'
+          }`}
+        >
+          Instant OTP
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAuthMode('password')
+            setError(null)
+          }}
+          className={`flex-1 py-2 text-xs uppercase tracking-wider font-bold transition-all ${
+            authMode === 'password' ? 'bg-black text-white shadow-sm' : 'text-neutral-600 hover:text-black'
+          }`}
+        >
+          Password
+        </button>
       </div>
 
       {error && (
-        <div className="mb-6 p-3 bg-neutral-100 border-l-4 border-black text-xs text-black flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+        <div className="mb-6 p-3 bg-red-50 border-l-4 border-red-600 text-xs text-red-900 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
           <span>{error}</span>
         </div>
       )}
@@ -99,7 +198,7 @@ export function LoginForm() {
         type="button"
         onClick={handleGoogleLogin}
         disabled={loading}
-        className="w-full flex items-center justify-center gap-3 border border-black bg-white hover:bg-neutral-50 text-black py-3 px-4 text-xs uppercase tracking-widest font-bold transition-colors mb-6"
+        className="w-full flex items-center justify-center gap-3 border border-black bg-white hover:bg-neutral-50 text-black py-2.5 px-4 text-xs uppercase tracking-widest font-bold transition-colors mb-6"
       >
         <svg className="w-4 h-4" viewBox="0 0 24 24">
           <path
@@ -125,62 +224,158 @@ export function LoginForm() {
       <div className="relative flex items-center justify-center mb-6">
         <div className="border-t border-neutral-300 w-full" />
         <span className="bg-white px-3 text-[10px] uppercase font-mono tracking-widest text-neutral-500 absolute">
-          Or with email
+          {authMode === 'otp' ? 'Or login with OTP' : 'Or with email & password'}
         </span>
       </div>
 
-      <form onSubmit={handleEmailLogin} className="space-y-4">
-        <div>
-          <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-            Email Address
-          </label>
-          <div className="relative">
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@example.com"
-              className="w-full border border-black p-3 pl-10 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
-            />
-            <Mail className="w-4 h-4 text-neutral-400 absolute left-3 top-3.5" />
-          </div>
-        </div>
+      {/* MODE 1: REAL OTP LOGIN */}
+      {authMode === 'otp' && (
+        <>
+          {!otpSent ? (
+            <form onSubmit={handleSendOtp} className="space-y-4">
+              <div>
+                <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
+                  Gmail / Email or Mobile Number
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="name@gmail.com or 9876543210"
+                    className="w-full border border-black p-3 pl-10 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                  <Mail className="w-4 h-4 text-neutral-400 absolute left-3 top-3.5" />
+                </div>
+                <p className="text-[11px] text-neutral-500 mt-1">
+                  A 6-digit real verification OTP code will be sent instantly.
+                </p>
+              </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs uppercase font-mono tracking-wider font-bold">
-              Password
+              <button
+                type="submit"
+                disabled={loading || !identifier.trim()}
+                className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors flex items-center justify-center gap-2 mt-2"
+              >
+                <span>{loading ? 'Sending OTP...' : 'Send Verification OTP'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div className="p-3 bg-neutral-50 border border-neutral-200 text-xs flex items-center gap-2 text-neutral-700">
+                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                <span className="truncate">{otpMessage}</span>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs uppercase font-mono tracking-wider font-bold">
+                    Enter 6-Digit OTP Code
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpSent(false)
+                      setOtp('')
+                    }}
+                    className="text-[11px] underline text-neutral-600 hover:text-black font-mono"
+                  >
+                    Change Number/Email
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                    placeholder="123456"
+                    className="w-full border border-black p-3 pl-10 text-lg font-mono tracking-widest text-center placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                  <KeyRound className="w-4 h-4 text-neutral-400 absolute left-3 top-4" />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || otp.length < 6}
+                className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors flex items-center justify-center gap-2"
+              >
+                <span>{loading ? 'Verifying OTP...' : 'Verify OTP & Sign In'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSendOtp}
+                disabled={loading}
+                className="w-full py-2 text-center text-xs text-neutral-600 hover:text-black font-mono underline"
+              >
+                Resend OTP Code
+              </button>
+            </form>
+          )}
+        </>
+      )}
+
+      {/* MODE 2: EMAIL & PASSWORD LOGIN */}
+      {authMode === 'password' && (
+        <form onSubmit={handleEmailLogin} className="space-y-4">
+          <div>
+            <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
+              Email Address
             </label>
-            <Link
-              href="/forgot-password"
-              className="text-xs font-mono text-neutral-500 hover:text-black hover:underline"
-            >
-              Forgot?
-            </Link>
+            <div className="relative">
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@example.com"
+                className="w-full border border-black p-3 pl-10 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
+              />
+              <Mail className="w-4 h-4 text-neutral-400 absolute left-3 top-3.5" />
+            </div>
           </div>
-          <div className="relative">
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full border border-black p-3 pl-10 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
-            />
-            <Lock className="w-4 h-4 text-neutral-400 absolute left-3 top-3.5" />
-          </div>
-        </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors flex items-center justify-center gap-2 mt-2"
-        >
-          <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
-      </form>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs uppercase font-mono tracking-wider font-bold">
+                Password
+              </label>
+              <Link
+                href="/forgot-password"
+                className="text-xs font-mono text-neutral-500 hover:text-black hover:underline"
+              >
+                Forgot?
+              </Link>
+            </div>
+            <div className="relative">
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full border border-black p-3 pl-10 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
+              />
+              <Lock className="w-4 h-4 text-neutral-400 absolute left-3 top-3.5" />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors flex items-center justify-center gap-2 mt-2"
+          >
+            <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </form>
+      )}
 
       <div className="mt-8 pt-6 border-t border-neutral-200 text-center">
         <p className="text-xs text-neutral-600">
