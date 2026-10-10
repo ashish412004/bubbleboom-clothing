@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useCartStore } from '@/lib/cart-store'
 import { useAuthStore } from '@/lib/auth-store'
+import { getAppOrigin, getSafeRedirect } from '@/lib/origin'
 import toast from 'react-hot-toast'
 import {
   AlertCircle,
@@ -27,15 +28,7 @@ export function LoginForm() {
   const isAdminTarget = nextParam?.startsWith('/admin')
 
   // Prevent open redirects: only allow safe local relative paths, default to homepage (/)
-  const safeRedirect =
-    nextParam &&
-    nextParam.startsWith('/') &&
-    !nextParam.startsWith('//') &&
-    !nextParam.startsWith('/\\') &&
-    !nextParam.startsWith('/login') &&
-    !nextParam.startsWith('/signup')
-      ? nextParam
-      : '/'
+  const safeRedirect = getSafeRedirect(nextParam, '/')
 
   const refreshCart = useCartStore((s) => s.refreshCart)
 
@@ -75,11 +68,16 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
 
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(
-    errorParam === 'unauthorized'
-      ? 'Access restricted: The Admin Terminal can only be accessed by hhshukla241099@gmail.com.'
-      : null
-  )
+  const [error, setError] = useState<string | null>(() => {
+    if (!errorParam) return null
+    if (errorParam === 'unauthorized') {
+      return 'Access restricted: The Admin Terminal can only be accessed by hhshukla241099@gmail.com.'
+    }
+    if (errorParam === 'access_denied') {
+      return 'Google sign in was cancelled. Please try again.'
+    }
+    return decodeURIComponent(errorParam)
+  })
 
   // Resend Countdown Timer
   useEffect(() => {
@@ -268,22 +266,32 @@ export function LoginForm() {
 
     try {
       const supabase = createClient()
-      const siteUrl = window.location.origin
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      const appOrigin = getAppOrigin()
+      const redirectTo = `${appOrigin}/auth/callback?next=${encodeURIComponent(safeRedirect)}`
+
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${siteUrl}/auth/callback?next=${encodeURIComponent(safeRedirect)}`,
+          redirectTo,
         },
       })
 
       if (oauthError) {
         throw oauthError
       }
+
+      if (data?.url) {
+        window.location.href = data.url
+      }
     } catch (err: any) {
-      setError('Google authentication is currently unavailable. Please sign in with Email OTP or Password.')
+      setError(
+        err.message ||
+          'Google authentication is currently unavailable. Please sign in with Email OTP or Password.'
+      )
       setLoading(false)
     }
   }
+
 
   return (
     <div className="w-full max-w-md mx-auto p-8 border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">

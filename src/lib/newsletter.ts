@@ -65,7 +65,7 @@ const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000 // 24 hours expiry
 export async function subscribeNewsletter({
   email,
   source = 'storefront_footer',
-  siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+  siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://bubbleboom-clothing.vercel.app',
 }: {
   email: string
   source?: string
@@ -255,7 +255,7 @@ export async function subscribeNewsletter({
  */
 export async function confirmNewsletterSubscription({
   token,
-  siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+  siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://bubbleboom-clothing.vercel.app',
 }: {
   token: string
   siteUrl?: string

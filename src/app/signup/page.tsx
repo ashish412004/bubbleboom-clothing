@@ -10,6 +10,8 @@ export const metadata = {
   description: 'Join Bubble Boom to access limited edition streetwear drops and manage orders.',
 }
 
+import { getSafeRedirect } from '@/lib/origin'
+
 interface SignupPageProps {
   searchParams?: Promise<{
     next?: string
@@ -18,16 +20,8 @@ interface SignupPageProps {
 
 export default async function SignupPage({ searchParams }: SignupPageProps) {
   const params = searchParams ? await searchParams : {}
-  const nextParam = params.next
-  const safeRedirect =
-    nextParam &&
-    nextParam.startsWith('/') &&
-    !nextParam.startsWith('//') &&
-    !nextParam.startsWith('/\\') &&
-    !nextParam.startsWith('/login') &&
-    !nextParam.startsWith('/signup')
-      ? nextParam
-      : '/'
+  const safeRedirect = getSafeRedirect(params.next, '/')
+
 
   const user = await getCurrentUser()
   if (user) {

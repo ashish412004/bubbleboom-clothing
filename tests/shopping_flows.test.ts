@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { getBuyNowItemDetails } from '@/lib/cart'
 import { MOCK_PRODUCTS } from '@/lib/mock-data'
+import { getAppOrigin, getSafeRedirect } from '@/lib/origin'
 
 describe('Shopping Flows & Navigation Suite', () => {
   describe('1. BUY IT NOW Flow', () => {
@@ -218,4 +219,96 @@ describe('Shopping Flows & Navigation Suite', () => {
       expect(getSafeRedirect('/login?next=/account')).toBe('/')
     })
   })
+
+  describe('4. Google OAuth Origin Resolution & Callback Protection', () => {
+    it('guarantees production origin is https://bubbleboom-clothing.vercel.app and never localhost in production', () => {
+      const originalEnv = process.env.NODE_ENV
+      const originalSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
+      try {
+        // @ts-ignore
+        process.env.NODE_ENV = 'production'
+        delete process.env.NEXT_PUBLIC_SITE_URL
+
+        const origin = getAppOrigin()
+        expect(origin).toBe('https://bubbleboom-clothing.vercel.app')
+        expect(origin).not.toContain('localhost')
+        expect(origin).not.toContain('127.0.0.1')
+      } finally {
+        // @ts-ignore
+        process.env.NODE_ENV = originalEnv
+        process.env.NEXT_PUBLIC_SITE_URL = originalSiteUrl
+      }
+    })
+
+    it('extracts production origin correctly from x-forwarded-host header on Vercel', () => {
+      const originalEnv = process.env.NODE_ENV
+      try {
+        // @ts-ignore
+        process.env.NODE_ENV = 'production'
+        const req = new Request('http://localhost:3000/auth/callback?code=mock_code', {
+          headers: {
+            'x-forwarded-host': 'bubbleboom-clothing.vercel.app',
+            'x-forwarded-proto': 'https',
+          },
+        })
+
+        const origin = getAppOrigin(req)
+        expect(origin).toBe('https://bubbleboom-clothing.vercel.app')
+      } finally {
+        // @ts-ignore
+        process.env.NODE_ENV = originalEnv
+      }
+    })
+
+    it('ignores localhost in request URL during production behind reverse proxy', () => {
+      const originalEnv = process.env.NODE_ENV
+      try {
+        // @ts-ignore
+        process.env.NODE_ENV = 'production'
+        // Internal worker URL without forwarded host
+        const req = new Request('http://localhost:3000/auth/callback?code=mock_code')
+
+        const origin = getAppOrigin(req)
+        // Must fallback to approved production origin, NOT localhost!
+        expect(origin).toBe('https://bubbleboom-clothing.vercel.app')
+      } finally {
+        // @ts-ignore
+        process.env.NODE_ENV = originalEnv
+      }
+    })
+
+    it('constructs correct Google OAuth redirectTo matching approved app origin and preserves checkout query', () => {
+      const originalEnv = process.env.NODE_ENV
+      try {
+        // @ts-ignore
+        process.env.NODE_ENV = 'production'
+        const appOrigin = getAppOrigin()
+        const targetPath = '/checkout?variant_id=v_tee_blk&quantity=1'
+        const safeTarget = getSafeRedirect(targetPath, '/')
+        const redirectTo = `${appOrigin}/auth/callback?next=${encodeURIComponent(safeTarget)}`
+
+        expect(redirectTo).toBe(
+          'https://bubbleboom-clothing.vercel.app/auth/callback?next=%2Fcheckout%3Fvariant_id%3Dv_tee_blk%26quantity%3D1'
+        )
+      } finally {
+        // @ts-ignore
+        process.env.NODE_ENV = originalEnv
+      }
+    })
+
+    it('constructs correct callback error redirect preserving original return path', () => {
+      const appOrigin = 'https://bubbleboom-clothing.vercel.app'
+      const safeRedirect = '/checkout?variant_id=v123&quantity=2'
+      const errorMsg = 'Google sign in was cancelled. Please try again.'
+
+      const loginUrl = new URL('/login', appOrigin)
+      loginUrl.searchParams.set('error', errorMsg)
+      loginUrl.searchParams.set('next', safeRedirect)
+
+      expect(loginUrl.toString()).toBe(
+        'https://bubbleboom-clothing.vercel.app/login?error=Google+sign+in+was+cancelled.+Please+try+again.&next=%2Fcheckout%3Fvariant_id%3Dv123%26quantity%3D2'
+      )
+    })
+  })
 })
+
