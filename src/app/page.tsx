@@ -112,50 +112,80 @@ export default async function HomePage() {
         )}
 
         {/* 4. Featured Collection Editorial Banner (Only visible when a real collection exists) */}
-        {collections.length > 0 && (
-          <section className="bg-black text-white py-20 sm:py-28 overflow-hidden">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-                <div className="space-y-6">
-                  <div className="inline-flex items-center space-x-2 border border-neutral-800 px-3 py-1 text-[11px] uppercase tracking-widest font-bold text-neutral-300">
-                    <Sparkles size={12} className="mr-1" />
-                    Featured Capsule
+        {(() => {
+          const featuredCollection =
+            collections.find((c) => c.slug === 'bubble-boom-monochrome-kicks') || collections[0]
+          if (!featuredCollection) return null
+
+          const coverImage = featuredCollection.banner_image_url
+          const mobileImage = (featuredCollection as any).mobile_banner_image_url || coverImage
+
+          return (
+            <section className="bg-black text-white py-16 sm:py-24 lg:py-28 overflow-hidden border-y border-neutral-900">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-14 items-center">
+                  <div className="space-y-5 sm:space-y-6 order-2 lg:order-1">
+                    <div className="inline-flex items-center space-x-2 border border-neutral-800 px-3 py-1 text-[11px] uppercase tracking-widest font-bold text-neutral-300">
+                      <Sparkles size={12} className="mr-1" />
+                      Featured Capsule
+                    </div>
+                    <h2 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tighter uppercase leading-[0.95]">
+                      {featuredCollection.name}
+                    </h2>
+                    {featuredCollection.description && (
+                      <p className="text-xs sm:text-sm md:text-base text-neutral-400 max-w-lg leading-relaxed font-light">
+                        {featuredCollection.description}
+                      </p>
+                    )}
+                    <div className="pt-2">
+                      <Link
+                        href={`/collections/${featuredCollection.slug}`}
+                        className="inline-flex items-center bg-white text-black hover:bg-neutral-200 px-7 sm:px-8 py-3.5 sm:py-4 text-xs uppercase tracking-widest font-extrabold transition-colors"
+                      >
+                        Shop The Capsule
+                        <ArrowRight size={16} className="ml-2" />
+                      </Link>
+                    </div>
                   </div>
-                  <h2 className="text-4xl sm:text-6xl font-extrabold tracking-tighter uppercase leading-[0.95]">
-                    {collections[0].name}
-                  </h2>
-                  {collections[0].description && (
-                    <p className="text-sm sm:text-base text-neutral-400 max-w-lg leading-relaxed">
-                      {collections[0].description}
-                    </p>
-                  )}
-                  <div className="pt-2">
+
+                  {/* Campaign Cover Image or B Logo Fallback */}
+                  <div className="order-1 lg:order-2">
                     <Link
-                      href={`/collections/${collections[0].slug}`}
-                      className="inline-flex items-center bg-white text-black hover:bg-neutral-200 px-8 py-4 text-xs uppercase tracking-widest font-extrabold transition-colors"
+                      href={`/collections/${featuredCollection.slug}`}
+                      className="block relative aspect-[4/3] sm:aspect-[16/10] lg:aspect-[4/3] w-full overflow-hidden bg-neutral-950 border border-neutral-800 group"
                     >
-                      Shop The Capsule
-                      <ArrowRight size={16} className="ml-2" />
+                      {coverImage ? (
+                        <>
+                          <Image
+                            src={coverImage}
+                            alt={featuredCollection.name}
+                            fill
+                            sizes="(max-width: 1024px) 100vw, 50vw"
+                            priority
+                            className="object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60" />
+                        </>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center p-12">
+                          <div className="relative w-40 h-40 sm:w-56 sm:h-56">
+                            <Image
+                              src="/images/brand/bubble-boom-icon.png"
+                              alt="Bubble Boom Monogram"
+                              fill
+                              sizes="(max-width: 640px) 160px, 224px"
+                              className="object-contain"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </Link>
                   </div>
                 </div>
-
-                {/* Minimal Brand Monogram Showcase */}
-                <div className="relative aspect-[4/3] bg-neutral-950 border border-neutral-800 flex items-center justify-center p-12">
-                  <div className="relative w-48 h-48 sm:w-64 sm:h-64">
-                    <Image
-                      src="/images/brand/bubble-boom-icon.png"
-                      alt="Bubble Boom Monogram"
-                      fill
-                      sizes="(max-width: 640px) 192px, 256px"
-                      className="object-contain"
-                    />
-                  </div>
-                </div>
               </div>
-            </div>
-          </section>
-        )}
+            </section>
+          )
+        })()}
 
         {/* 5. Best Sellers (Only visible when products exist) */}
         {bestSellers.length > 0 && (

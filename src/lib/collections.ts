@@ -1,6 +1,7 @@
 import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 import { MOCK_COLLECTIONS, MOCK_PRODUCTS } from './mock-data'
+import { revalidatePath } from 'next/cache'
 import fs from 'fs'
 import path from 'path'
 
@@ -79,10 +80,7 @@ export async function getCollectionBySlug(slug: string) {
     if (!col) return null
     return {
       ...col,
-      collection_products: MOCK_PRODUCTS.slice(0, 3).map((p, idx) => ({
-        product_id: p.id,
-        products: p,
-      })),
+      collection_products: (col as any).collection_products || [],
     }
   }
 
@@ -95,7 +93,7 @@ export async function getCollectionBySlug(slug: string) {
         *,
         collection_products(
           product_id,
-          products(*, images:product_images(*), variants:product_variants(*))
+          products(*, images:product_images(id, image_url, alt_text, sort_order), variants:product_variants(*))
         )
       `)
       .eq('slug', slug)
@@ -107,10 +105,7 @@ export async function getCollectionBySlug(slug: string) {
       if (!col) return null
       return {
         ...col,
-        collection_products: MOCK_PRODUCTS.slice(0, 3).map((p, idx) => ({
-          product_id: p.id,
-          products: p,
-        })),
+        collection_products: (col as any).collection_products || [],
       }
     }
 
@@ -120,10 +115,7 @@ export async function getCollectionBySlug(slug: string) {
     if (!col) return null
     return {
       ...col,
-      collection_products: MOCK_PRODUCTS.slice(0, 3).map((p, idx) => ({
-        product_id: p.id,
-        products: p,
-      })),
+      collection_products: (col as any).collection_products || [],
     }
   }
 }
@@ -157,11 +149,7 @@ export async function getCollectionById(id: string) {
 
 export async function getProductsByCollectionId(collectionId: string) {
   if (!isSupabaseConfigured()) {
-    return MOCK_PRODUCTS.slice(0, 3).map((p, idx) => ({
-      product_id: p.id,
-      sort_order: idx + 1,
-      products: p,
-    }))
+    return []
   }
 
   try {
@@ -172,26 +160,18 @@ export async function getProductsByCollectionId(collectionId: string) {
       .select(`
         product_id,
         sort_order,
-        products(*, images:product_images(*), variants:product_variants(*))
+        products(*, images:product_images(id, image_url, alt_text, sort_order), variants:product_variants(*))
       `)
       .eq('collection_id', collectionId)
       .order('sort_order')
 
-    if (error || !data || data.length === 0) {
-      return MOCK_PRODUCTS.slice(0, 3).map((p, idx) => ({
-        product_id: p.id,
-        sort_order: idx + 1,
-        products: p,
-      }))
+    if (error || !data) {
+      return []
     }
 
     return data
   } catch {
-    return MOCK_PRODUCTS.slice(0, 3).map((p, idx) => ({
-      product_id: p.id,
-      sort_order: idx + 1,
-      products: p,
-    }))
+    return []
   }
 }
 
@@ -212,19 +192,32 @@ export async function createCollection(collection: Database['public']['Tables'][
     return { data: newCol }
   }
 
-  const supabase = await createServerClient()
+  const supabase = await createServiceClient()
 
   // @ts-ignore
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('collections')
     .insert(collection)
     .select()
     .single()
 
+  if (error && error.message?.includes('mobile_banner_image_url')) {
+    const { mobile_banner_image_url, ...fallback } = collection as any
+    const res = await supabase.from('collections').insert(fallback).select().single()
+    data = res.data
+    error = res.error
+  }
+
   if (error) {
     console.error('Error creating collection:', error)
     return { error: error.message }
   }
+
+  try {
+    revalidatePath('/')
+    revalidatePath('/collections')
+    revalidatePath('/admin/collections')
+  } catch {}
 
   return { data }
 }
@@ -243,20 +236,34 @@ export async function updateCollection(id: string, collection: Database['public'
     }
   }
 
-  const supabase = await createServerClient()
+  const supabase = await createServiceClient()
 
   // @ts-ignore
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('collections')
     .update(collection)
     .eq('id', id)
     .select()
     .single()
 
+  if (error && error.message?.includes('mobile_banner_image_url')) {
+    const { mobile_banner_image_url, ...fallback } = collection as any
+    const res = await supabase.from('collections').update(fallback).eq('id', id).select().single()
+    data = res.data
+    error = res.error
+  }
+
   if (error) {
     console.error('Error updating collection:', error)
     return { error: error.message }
   }
+
+  try {
+    revalidatePath('/')
+    revalidatePath('/collections')
+    if (data?.slug) revalidatePath(`/collections/${data.slug}`)
+    revalidatePath('/admin/collections')
+  } catch {}
 
   return { data }
 }

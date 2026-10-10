@@ -53,3 +53,70 @@ export function getSafeImageUrl(
   }
   return fallback
 }
+
+export function normalizeColor(c?: string | null): string {
+  if (!c) return ''
+  const trimmed = c.trim().toLowerCase()
+  if (trimmed === 'grey') return 'gray'
+  return trimmed
+}
+
+export interface ParsedProductImage {
+  id?: string
+  product_id?: string
+  image_url: string
+  storage_path?: string | null
+  color: string | null
+  alt_text: string | null
+  sort_order: number
+}
+
+export function parseProductImage(img: any): ParsedProductImage | null {
+  if (!img) return null
+  const rawUrl = typeof img === 'string' ? img : img.image_url
+  if (!rawUrl) return null
+  const imageUrl = getSafeImageUrl(rawUrl)
+
+  let color: string | null = null
+  if (typeof img === 'object' && img.color) {
+    color = img.color.trim()
+  }
+
+  let altText = (typeof img === 'object' && img.alt_text ? img.alt_text : '') || ''
+  if (!color && altText) {
+    const match = altText.match(/\[color:([^\]]+)\]/i)
+    if (match) {
+      color = match[1].trim()
+    }
+  }
+
+  // Strip [color:...] tag from user-facing alt text for clean accessibility presentation
+  const cleanAlt = altText.replace(/\[color:[^\]]+\]/gi, '').trim()
+
+  return {
+    id: typeof img === 'object' ? img.id : undefined,
+    product_id: typeof img === 'object' ? img.product_id : undefined,
+    image_url: imageUrl,
+    storage_path: (typeof img === 'object' ? img.storage_path : null) || null,
+    color: color || null,
+    alt_text: cleanAlt || null,
+    sort_order: typeof img === 'object' && typeof img.sort_order === 'number' ? img.sort_order : 0,
+  }
+}
+
+export function findImageForVariantColor(
+  images: any[],
+  color?: string | null
+): ParsedProductImage | null {
+  if (!images || images.length === 0) return null
+  const parsed = images.map(parseProductImage).filter((i): i is ParsedProductImage => Boolean(i))
+  if (parsed.length === 0) return null
+
+  if (color) {
+    const targetNorm = normalizeColor(color)
+    const match = parsed.find((img) => img.color && normalizeColor(img.color) === targetNorm)
+    if (match) return match
+  }
+
+  return parsed[0]
+}

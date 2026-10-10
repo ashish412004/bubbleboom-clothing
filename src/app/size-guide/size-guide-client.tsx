@@ -197,6 +197,42 @@ export function SizeGuideClient() {
         </div>
       </div>
 
+      {/* Footwear & Kicks */}
+      <div className="border border-black bg-white p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-black uppercase tracking-tight">Footwear, Sneakers &amp; Chunky Kicks</h3>
+          <span className="text-[10px] uppercase font-mono bg-[#F8F8F6] border border-black px-2 py-0.5">
+            Fit: Unisex Standard
+          </span>
+        </div>
+        <p className="text-xs text-neutral-600 mb-4">
+          Standard streetwear sneaker size conversions. Bubble Boom sneakers feature sculpted outsoles and cushioned interiors.
+        </p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs font-mono">
+            <thead>
+              <tr className="border-b-2 border-black bg-neutral-100">
+                <th className="py-2.5 px-3">UK / India Size</th>
+                <th className="py-2.5 px-3">EU Size</th>
+                <th className="py-2.5 px-3">US Men</th>
+                <th className="py-2.5 px-3">US Women</th>
+                <th className="py-2.5 px-3">Foot Length (cm)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-200">
+              <tr className="hover:bg-neutral-50"><td className="py-2.5 px-3 font-bold text-black">UK 6</td><td className="py-2.5 px-3">40</td><td className="py-2.5 px-3">7</td><td className="py-2.5 px-3">8.5</td><td className="py-2.5 px-3 font-bold">25.0 cm</td></tr>
+              <tr className="hover:bg-neutral-50"><td className="py-2.5 px-3 font-bold text-black">UK 7</td><td className="py-2.5 px-3">41</td><td className="py-2.5 px-3">8</td><td className="py-2.5 px-3">9.5</td><td className="py-2.5 px-3 font-bold">25.8 cm</td></tr>
+              <tr className="hover:bg-neutral-50"><td className="py-2.5 px-3 font-bold text-black">UK 8</td><td className="py-2.5 px-3">42</td><td className="py-2.5 px-3">9</td><td className="py-2.5 px-3">10.5</td><td className="py-2.5 px-3 font-bold">26.6 cm</td></tr>
+              <tr className="hover:bg-neutral-50"><td className="py-2.5 px-3 font-bold text-black">UK 9</td><td className="py-2.5 px-3">43</td><td className="py-2.5 px-3">10</td><td className="py-2.5 px-3">11.5</td><td className="py-2.5 px-3 font-bold">27.5 cm</td></tr>
+              <tr className="hover:bg-neutral-50"><td className="py-2.5 px-3 font-bold text-black">UK 10</td><td className="py-2.5 px-3">44</td><td className="py-2.5 px-3">11</td><td className="py-2.5 px-3">12.5</td><td className="py-2.5 px-3 font-bold">28.3 cm</td></tr>
+              <tr className="hover:bg-neutral-50"><td className="py-2.5 px-3 font-bold text-black">UK 11</td><td className="py-2.5 px-3">45</td><td className="py-2.5 px-3">12</td><td className="py-2.5 px-3">13.5</td><td className="py-2.5 px-3 font-bold">29.2 cm</td></tr>
+              <tr className="hover:bg-neutral-50"><td className="py-2.5 px-3 font-bold text-black">UK 12</td><td className="py-2.5 px-3">46</td><td className="py-2.5 px-3">13</td><td className="py-2.5 px-3">14.5</td><td className="py-2.5 px-3 font-bold">30.0 cm</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Measuring Instructions */}
       <div className="border-2 border-black p-6 bg-[#F8F8F6]">
         <h3 className="text-sm font-black uppercase tracking-tight mb-3">How to Measure for the Perfect Fit</h3>

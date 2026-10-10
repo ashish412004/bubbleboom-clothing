@@ -114,6 +114,12 @@ export function Header({
               Women
             </Link>
             <Link
+              href="/shop?category=footwear"
+              className="text-xs uppercase tracking-widest font-semibold text-black hover:text-neutral-500 transition-colors py-2 border-b-2 border-transparent hover:border-black"
+            >
+              Footwear
+            </Link>
+            <Link
               href="/collections"
               className="text-xs uppercase tracking-widest font-semibold text-black hover:text-neutral-500 transition-colors py-2 border-b-2 border-transparent hover:border-black"
             >
@@ -246,6 +252,13 @@ export function Header({
                   className="block text-sm uppercase tracking-widest font-bold text-black hover:text-neutral-500 py-1"
                 >
                   Women
+                </Link>
+                <Link
+                  href="/shop?category=footwear"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block text-sm uppercase tracking-widest font-bold text-black hover:text-neutral-500 py-1"
+                >
+                  Footwear
                 </Link>
                 <Link
                   href="/collections"

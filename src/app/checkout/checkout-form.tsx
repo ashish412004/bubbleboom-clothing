@@ -19,7 +19,7 @@ import {
   MapPin,
   Check
 } from 'lucide-react'
-import { formatPrice, getSafeImageUrl } from '@/lib/utils'
+import { formatPrice, getSafeImageUrl, findImageForVariantColor } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
 import { load as loadCashfree } from '@cashfreepayments/cashfree-js'
@@ -986,10 +986,7 @@ export function CheckoutForm({
             {items.map((item) => {
               const prod = item.variant?.product
               if (!prod) return null
-              const variantColor = item.variant?.color?.trim().toLowerCase()
-              const matchedImg = prod.images?.find(
-                (i) => i.color && i.color.trim().toLowerCase() === variantColor
-              ) || prod.images?.[0]
+              const matchedImg = findImageForVariantColor(prod.images, item.variant?.color)
               const firstImg = matchedImg?.image_url
               const isOutOfStock = isItemOutOfStock(item)
 

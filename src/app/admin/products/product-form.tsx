@@ -19,13 +19,15 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { parseProductImage } from '@/lib/utils'
 
 interface ProductFormProps {
   categories: Array<{ id: string; name: string; slug: string }>
+  collections?: Array<{ id: string; name: string; slug: string }>
   initialProduct?: any
 }
 
-export function ProductForm({ categories, initialProduct }: ProductFormProps) {
+export function ProductForm({ categories, collections = [], initialProduct }: ProductFormProps) {
   const router = useRouter()
   const isEdit = Boolean(initialProduct?.id)
   const [loading, setLoading] = useState(false)
@@ -35,6 +37,9 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
   const [slug, setSlug] = useState(initialProduct?.slug || '')
   const [description, setDescription] = useState(initialProduct?.description || '')
   const [categoryId, setCategoryId] = useState(initialProduct?.category_id || categories[0]?.id || '')
+  const [collectionId, setCollectionId] = useState<string>(
+    initialProduct?.collection_id || (initialProduct?.collection_ids && initialProduct.collection_ids[0]) || ''
+  )
   const [material, setMaterial] = useState(initialProduct?.material || '')
   const [fit, setFit] = useState(initialProduct?.fit || '')
   const [washCare, setWashCare] = useState(initialProduct?.wash_care || '')
@@ -71,14 +76,17 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
   const [images, setImages] = useState<AdminProductImage[]>(() => {
     if (initialProduct?.images && initialProduct.images.length > 0) {
       return initialProduct.images
-        .map((img: any, idx: number) => ({
-          id: typeof img === 'object' ? img.id : undefined,
-          image_url: typeof img === 'string' ? img : img.image_url,
-          storage_path: typeof img === 'object' ? img.storage_path : null,
-          color: typeof img === 'object' && img.color ? img.color.trim() : '',
-          alt_text: typeof img === 'object' ? img.alt_text : '',
-          sort_order: typeof img === 'object' && typeof img.sort_order === 'number' ? img.sort_order : idx,
-        }))
+        .map((img: any, idx: number) => {
+          const parsed = parseProductImage(img)
+          return {
+            id: typeof img === 'object' ? img.id : undefined,
+            image_url: parsed?.image_url || (typeof img === 'string' ? img : img.image_url),
+            storage_path: parsed?.storage_path || (typeof img === 'object' ? img.storage_path : null),
+            color: parsed?.color || (typeof img === 'object' && img.color ? img.color.trim() : ''),
+            alt_text: parsed?.alt_text || (typeof img === 'object' ? img.alt_text : ''),
+            sort_order: typeof img === 'object' && typeof img.sort_order === 'number' ? img.sort_order : idx,
+          }
+        })
         .filter((img: AdminProductImage) => Boolean(img.image_url))
     }
     return []
@@ -103,11 +111,38 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
     }
   }
 
+  const selectedCategory = categories.find((c) => c.id === categoryId)
+  const isFootwearCat =
+    selectedCategory?.slug === 'footwear' ||
+    (selectedCategory?.name || '').toLowerCase().includes('footwear')
+  const isAccessoriesCat =
+    selectedCategory?.slug === 'accessories' ||
+    (selectedCategory?.name || '').toLowerCase().includes('accessories')
+
+  const categorySizes = isFootwearCat
+    ? ['UK 6', 'UK 7', 'UK 8', 'UK 9', 'UK 10', 'UK 11', 'UK 12']
+    : isAccessoriesCat
+    ? ['One Size', 'Standard']
+    : ['XS', 'S', 'M', 'L', 'XL', 'XXL', '30', '32', '34', '36']
+
   const addVariantRow = () => {
+    const defaultSize = isFootwearCat ? 'UK 8' : isAccessoriesCat ? 'One Size' : 'M'
     setVariants((prev) => [
       ...prev,
-      { color: '', size: 'M', sku: '', stock: 0 },
+      { color: prev[0]?.color || '', size: defaultSize, sku: '', stock: 0 },
     ])
+  }
+
+  const handlePopulateStandardSizes = () => {
+    const defaultColor = variants[0]?.color || 'Black'
+    const newVariants = categorySizes.map((sz) => ({
+      color: defaultColor,
+      size: sz,
+      sku: '',
+      stock: 5,
+    }))
+    setVariants(newVariants)
+    toast.success(`Generated ${categorySizes.length} standard ${isFootwearCat ? 'footwear' : 'clothing'} sizes!`)
   }
 
   const removeVariantRow = (index: number) => {
@@ -376,6 +411,8 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
             slug,
             description,
             category_id: categoryId || null,
+            collection_id: collectionId || null,
+            collection_ids: collectionId ? [collectionId] : [],
             material,
             fit,
             wash_care: washCare,
@@ -384,14 +421,19 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
             is_published: isPublished,
           },
           variants,
-          images: validImages.map((img, idx) => ({
-            id: img.id,
-            image_url: img.image_url,
-            storage_path: img.storage_path || null,
-            color: img.color ? img.color.trim() : null,
-            alt_text: img.alt_text || name,
-            sort_order: idx,
-          })),
+          images: validImages.map((img, idx) => {
+            const color = img.color ? img.color.trim() : null
+            const baseAlt = (img.alt_text || name).replace(/\[color:[^\]]+\]/gi, '').trim()
+            const altText = color ? `[color:${color}] ${baseAlt}` : baseAlt
+            return {
+              id: img.id,
+              image_url: img.image_url,
+              storage_path: img.storage_path || null,
+              color,
+              alt_text: altText,
+              sort_order: idx,
+            }
+          }),
         }),
       })
 
@@ -476,18 +518,34 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-              Category
+              Category *
             </label>
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full border border-black p-2.5 text-xs focus:outline-none"
+              className="w-full border border-black p-2.5 text-xs bg-white focus:outline-none"
             >
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
+              Capsule Drop / Collection
+            </label>
+            <select
+              value={collectionId}
+              onChange={(e) => setCollectionId(e.target.value)}
+              className="w-full border border-black p-2.5 text-xs bg-white focus:outline-none"
+            >
+              <option value="">None (Standard Catalog)</option>
+              {collections.map((col) => (
+                <option key={col.id} value={col.id}>{col.name}</option>
               ))}
             </select>
           </div>
@@ -573,19 +631,30 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
 
       {/* Variant Matrix */}
       <div className="border border-black bg-white p-6 space-y-4">
-        <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-neutral-200">
           <div>
             <h2 className="text-sm font-black uppercase tracking-tight">Variant Matrix (Color &amp; Sizing)</h2>
-            <p className="text-[11px] text-neutral-500 font-mono">Variant-level inventory management</p>
+            <p className="text-[11px] text-neutral-500 font-mono">
+              {isFootwearCat ? 'Configuring Footwear UK Sizes' : isAccessoriesCat ? 'Configuring Accessories' : 'Configuring Apparel Sizing'}
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={addVariantRow}
-            className="inline-flex items-center gap-1.5 border border-black px-3 py-1.5 text-xs font-mono uppercase font-bold hover:bg-black hover:text-white transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Variant</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePopulateStandardSizes}
+              className="inline-flex items-center gap-1.5 border border-dashed border-neutral-400 px-3 py-1.5 text-xs font-mono uppercase font-bold hover:border-black hover:bg-neutral-100 transition-colors"
+            >
+              <span>+ Standard {isFootwearCat ? 'Shoe Sizes (UK 6–12)' : 'Sizes (XS–XXL)'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={addVariantRow}
+              className="inline-flex items-center gap-1.5 border border-black px-3 py-1.5 text-xs font-mono uppercase font-bold hover:bg-black hover:text-white transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Variant</span>
+            </button>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -601,21 +670,21 @@ export function ProductForm({ categories, initialProduct }: ProductFormProps) {
                 />
               </div>
 
-              <div className="col-span-1 md:w-24">
-                <label className="block text-[10px] uppercase font-mono text-neutral-500">Size</label>
+              <div className="col-span-1 md:w-28">
+                <label className="block text-[10px] uppercase font-mono text-neutral-500">
+                  {isFootwearCat ? 'Shoe Size' : 'Size'}
+                </label>
                 <select
                   value={v.size}
                   onChange={(e) => updateVariantRow(idx, 'size', e.target.value)}
                   className="w-full border border-black p-1.5 text-xs bg-white font-mono focus:outline-none"
                 >
-                  <option value="S">S</option>
-                  <option value="M">M</option>
-                  <option value="L">L</option>
-                  <option value="XL">XL</option>
-                  <option value="XXL">XXL</option>
-                  <option value="30">30</option>
-                  <option value="32">32</option>
-                  <option value="34">34</option>
+                  {categorySizes.map((sz) => (
+                    <option key={sz} value={sz}>{sz}</option>
+                  ))}
+                  {!categorySizes.includes(v.size) && v.size && (
+                    <option value={v.size}>{v.size}</option>
+                  )}
                 </select>
               </div>
 

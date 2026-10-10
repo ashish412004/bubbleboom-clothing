@@ -6,6 +6,7 @@ import { ProductCard } from '@/components/product/product-card'
 import Link from 'next/link'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
+import { parseProductImage } from '@/lib/utils'
 
 interface CollectionPageProps {
   params: Promise<{ slug: string }>
@@ -23,7 +24,11 @@ export default async function CollectionDetailPage({ params }: CollectionPagePro
   const description = collection.description || ''
   const banner = collection.banner_image_url || ''
   // @ts-ignore
-  const products: any[] = collection.collection_products?.map((cp: any) => cp.products).filter(Boolean) || []
+  const rawProducts: any[] = collection.collection_products?.map((cp: any) => cp.products).filter(Boolean) || []
+  const products = rawProducts.map((p) => ({
+    ...p,
+    images: (((p.images || []) as any[]) || []).map(parseProductImage).filter(Boolean),
+  }))
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-black">

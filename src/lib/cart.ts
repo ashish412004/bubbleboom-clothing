@@ -3,6 +3,7 @@ import { Database } from '@/types/database'
 import { getStoreSettings, StoreShippingSettings } from '@/lib/settings'
 import { MOCK_PRODUCTS } from '@/lib/mock-data'
 import { cookies } from 'next/headers'
+import { parseProductImage, findImageForVariantColor } from '@/lib/utils'
 
 export interface CartItemWithDetails {
   id: string
@@ -203,9 +204,9 @@ export async function getCart(userId?: string, sessionId?: string): Promise<Cart
           is_published,
           is_active,
           images:product_images (
+            id,
             image_url,
             alt_text,
-            color,
             sort_order
           )
         )
@@ -218,13 +219,31 @@ export async function getCart(userId?: string, sessionId?: string): Promise<Cart
     return []
   }
 
-  const validItems = items.filter(
-    (item: any) =>
-      item.variant &&
-      item.variant.product &&
-      item.variant.product.is_active &&
-      item.variant.is_active
-  )
+  const validItems = items
+    .filter(
+      (item: any) =>
+        item.variant &&
+        item.variant.product &&
+        item.variant.product.is_active &&
+        item.variant.is_active
+    )
+    .map((item: any) => {
+      const prod = item.variant.product
+      const parsedImages = ((prod.images || []) as any[])
+        .map(parseProductImage)
+        .filter(Boolean)
+        .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      return {
+        ...item,
+        variant: {
+          ...item.variant,
+          product: {
+            ...prod,
+            images: parsedImages,
+          },
+        },
+      }
+    })
 
   return validItems as unknown as CartItemWithDetails[]
 }
@@ -660,7 +679,7 @@ export async function getBuyNowItemDetails(
           selling_price: product.selling_price,
           is_published: product.is_published,
           is_active: product.is_active,
-          images: product.images || [],
+          images: ((product.images || []) as any[]).map(parseProductImage).filter(Boolean) as any,
         },
       },
     }
@@ -686,13 +705,50 @@ export async function getBuyNowItemDetails(
         selling_price,
         is_published,
         is_active,
-        images:product_images(image_url, alt_text, color, sort_order)
+        images:product_images(id, image_url, alt_text, sort_order)
       )
     `)
     .eq('id', variantId)
     .single()
 
   if (varError || !variant) {
+    const match = findMockVariantWithProduct(variantId)
+    if (match) {
+      const { variant: mVar, product: mProd } = match
+      if (!mProd.is_published || !mProd.is_active || !mVar.is_active) {
+        return { error: 'Product is currently not available' }
+      }
+      if (safeQty > mVar.stock) {
+        return { error: `Only ${mVar.stock} item(s) available in stock.` }
+      }
+      return {
+        item: {
+          id: `buy_now_${mVar.id}`,
+          cart_id: 'buy_now_direct',
+          variant_id: mVar.id,
+          quantity: safeQty,
+          variant: {
+            id: mVar.id,
+            product_id: mProd.id,
+            sku: mVar.sku,
+            color: mVar.color,
+            size: mVar.size,
+            stock: mVar.stock,
+            is_active: mVar.is_active,
+            product: {
+              id: mProd.id,
+              name: mProd.name,
+              slug: mProd.slug,
+              mrp: mProd.mrp,
+              selling_price: mProd.selling_price,
+              is_published: mProd.is_published,
+              is_active: mProd.is_active,
+              images: ((mProd.images || []) as any[]).map(parseProductImage).filter(Boolean) as any,
+            },
+          },
+        },
+      }
+    }
     return { error: 'Variant not found' }
   }
 
@@ -705,9 +761,10 @@ export async function getBuyNowItemDetails(
     return { error: `Only ${variant.stock} item(s) available in stock.` }
   }
 
-  const sortedImages = ((product.images as any[]) || []).sort(
-    (a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
-  )
+  const sortedImages = (((product.images as any[]) || [])
+    .map(parseProductImage)
+    .filter(Boolean) as any[])
+    .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
 
   const item: CartItemWithDetails = {
     id: `buy_now_${variant.id}`,

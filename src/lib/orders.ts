@@ -7,6 +7,7 @@ import { createCashfreeOrder, getCashfreeConfig, getPaymentStatus } from '@/lib/
 import { sendOrderShippedEmail, sendOrderDeliveredEmail } from '@/lib/emails/resend'
 import { isAdmin } from '@/lib/auth'
 import { MOCK_PRODUCTS, MOCK_ORDERS } from '@/lib/mock-data'
+import { parseProductImage, findImageForVariantColor, normalizeColor } from '@/lib/utils'
 import fs from 'fs'
 import path from 'path'
 
@@ -307,9 +308,9 @@ export async function createOrder(input: CreateOrderInput) {
         is_published,
         is_active,
         images:product_images (
+          id,
           image_url,
           alt_text,
-          color,
           sort_order
         )
       )
@@ -350,11 +351,7 @@ export async function createOrder(input: CreateOrderInput) {
     const itemTotalPaise = sellingPricePaise * item.quantity
     subtotalPaise += itemTotalPaise
 
-    const prodImages = ((prod.images || []) as Array<{ image_url: string; color?: string | null; sort_order?: number }>)
-      .slice()
-      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    const variantColor = (v.color || '').trim().toLowerCase()
-    const colorImg = prodImages.find((img) => img.color && img.color.trim().toLowerCase() === variantColor) || prodImages[0]
+    const colorImg = findImageForVariantColor(prod.images, v.color)
     const imageUrl = colorImg?.image_url || null
 
     itemSnapshots.push({

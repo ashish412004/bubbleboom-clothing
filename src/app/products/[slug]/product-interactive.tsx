@@ -18,11 +18,12 @@ import {
   ChevronRight,
   Image as ImageIcon,
 } from 'lucide-react'
-import { formatPrice, formatDiscount, getSafeImageUrl } from '@/lib/utils'
+import { formatPrice, formatDiscount, getSafeImageUrl, normalizeColor, parseProductImage, type ParsedProductImage } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
 import { DeliveryExchangeCard } from '@/components/product/delivery-exchange-card'
 import type { StoreShippingSettings, StoreExchangeSettings } from '@/types/settings'
+import { CategorySizeGuideModal, getProductCategoryType } from '@/components/product/category-size-guide-modal'
 
 interface ProductVariant {
   id: string
@@ -71,13 +72,12 @@ export function ProductInteractive({
   const setWishlist = useCartStore((state) => state.setWishlistCount)
   const wishlistCount = useCartStore((state) => state.wishlistCount)
 
-  // Images sorted by sort_order
+  const categoryType = getProductCategoryType(product as any)
+
+  // Images sorted by sort_order and parsed for color tags
   const allImages = (product.images?.length > 0 ? product.images : [])
-    .map((img) => ({
-      ...img,
-      image_url: getSafeImageUrl(img.image_url),
-      color: img.color ? img.color.trim() : null,
-    }))
+    .map(parseProductImage)
+    .filter((img): img is ParsedProductImage => Boolean(img))
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
 
   // Extract distinct colors and sizes
@@ -86,11 +86,14 @@ export function ProductInteractive({
   ) as string[]
   const [selectedColor, setSelectedColor] = useState(colors[0] || '')
 
-  // Images mapped specifically to selected colour (fallback to all images if legacy product has no colors mapped)
+  // Images mapped specifically to selected colour
   const hasAnyColorAssigned = allImages.some((img) => Boolean(img.color))
-  const activeColorLower = (selectedColor || '').trim().toLowerCase()
+  const activeColorLower = normalizeColor(selectedColor)
+  // If product has colour-assigned images, show ONLY the images for that colour.
+  // If a colour has no photos, activeColorImages will be empty and display the clear neutral fallback.
+  // If a legacy product has no colours assigned on any images at all, display general gallery.
   const activeColorImages = hasAnyColorAssigned
-    ? allImages.filter((img) => img.color && img.color.trim().toLowerCase() === activeColorLower)
+    ? allImages.filter((img) => img.color && normalizeColor(img.color) === activeColorLower)
     : allImages
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
@@ -110,7 +113,7 @@ export function ProductInteractive({
 
   // Available sizes for the chosen color
   const variantsForColor = product.variants.filter(
-    (v) => v.color?.trim().toLowerCase() === activeColorLower && v.is_active
+    (v) => normalizeColor(v.color) === activeColorLower && v.is_active
   )
   const sizesForColor = sortSizes(Array.from(new Set(variantsForColor.map((v) => v.size))))
   const inStockSizesForColor = variantsForColor.filter((v) => v.stock > 0).map((v) => v.size)
@@ -131,7 +134,7 @@ export function ProductInteractive({
   // Find currently active variant based on color and size
   const activeVariant = product.variants.find(
     (v) =>
-      v.color?.trim().toLowerCase() === activeColorLower &&
+      normalizeColor(v.color) === activeColorLower &&
       v.size === selectedSize &&
       v.is_active
   )
@@ -170,9 +173,9 @@ export function ProductInteractive({
     // Always reset active image index to 0 when colour changes
     setSelectedImageIndex(0)
 
-    const newColorLower = newColor.trim().toLowerCase()
+    const newColorNorm = normalizeColor(newColor)
     const newVariants = product.variants.filter(
-      (v) => v.color?.trim().toLowerCase() === newColorLower && v.is_active
+      (v) => normalizeColor(v.color) === newColorNorm && v.is_active
     )
 
     // Keep the currently selected size only if available in the new colour; otherwise require selecting a size
@@ -188,7 +191,12 @@ export function ProductInteractive({
     setQuantity(1)
   }
 
-  const handleAddToCart = async () => {
+  const handleAddToCart = async (e?: React.MouseEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
+
+    if (isAdding || isBuyingNow) return
+
     if (!selectedColor) {
       toast.error('Please select a colour first.')
       return
@@ -280,7 +288,12 @@ export function ProductInteractive({
     }
   }
 
-  const handleBuyNow = () => {
+  const handleBuyNow = (e?: React.MouseEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
+
+    if (isBuyingNow || isAdding) return
+
     if (!selectedColor) {
       toast.error('Please select a colour first.')
       return
@@ -306,8 +319,6 @@ export function ProductInteractive({
       return
     }
 
-    // Prevent duplicate clicks/submissions
-    if (isBuyingNow) return
     setIsBuyingNow(true)
 
     // Directly open checkout for that selected variant and quantity without touching persistent cart
@@ -409,10 +420,10 @@ export function ProductInteractive({
             </span>
             <div className="flex flex-wrap gap-2.5">
               {colors.map((c) => {
-                const cLower = c.trim().toLowerCase()
-                const isCurrent = cLower === activeColorLower
+                const cNorm = normalizeColor(c)
+                const isCurrent = cNorm === activeColorLower
                 const cPrimaryImg = allImages.find(
-                  (img) => img.color && img.color.trim().toLowerCase() === cLower
+                  (img) => img.color && normalizeColor(img.color) === cNorm
                 ) || (hasAnyColorAssigned ? null : allImages[0])
 
                 return (
@@ -488,10 +499,10 @@ export function ProductInteractive({
             </div>
             <div className="flex flex-wrap gap-2">
               {colors.map((c) => {
-                const cLower = c.trim().toLowerCase()
-                const isSelected = selectedColor.trim().toLowerCase() === cLower
+                const cNorm = normalizeColor(c)
+                const isSelected = activeColorLower === cNorm
                 const cPrimaryImg = allImages.find(
-                  (img) => img.color && img.color.trim().toLowerCase() === cLower
+                  (img) => img.color && normalizeColor(img.color) === cNorm
                 )
                 return (
                   <button
@@ -527,14 +538,16 @@ export function ProductInteractive({
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs uppercase tracking-widest font-bold">Select Size</span>
-            <button
-              type="button"
-              onClick={() => setShowSizeGuide(true)}
-              className="text-xs font-semibold underline text-neutral-600 hover:text-black flex items-center"
-            >
-              <Ruler size={13} className="mr-1" />
-              Size Guide
-            </button>
+            {categoryType !== 'accessories' && (
+              <button
+                type="button"
+                onClick={() => setShowSizeGuide(true)}
+                className="text-xs font-semibold underline text-neutral-600 hover:text-black flex items-center"
+              >
+                <Ruler size={13} className="mr-1" />
+                Size Guide
+              </button>
+            )}
           </div>
 
           {sizesForColor.length === 0 ? (
@@ -638,18 +651,34 @@ export function ProductInteractive({
               type="button"
               disabled={!selectedSize || isOutOfStock || isAdding || isBuyingNow}
               onClick={handleAddToCart}
-              className="flex-1 bg-black text-white hover:bg-neutral-800 h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-colors disabled:bg-neutral-300 disabled:cursor-not-allowed"
+              className={`flex-1 h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-colors ${
+                isAdding
+                  ? 'bg-black text-white cursor-wait'
+                  : !selectedSize || isOutOfStock
+                  ? 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
+                  : 'bg-black text-white hover:bg-neutral-800 cursor-pointer'
+              }`}
             >
-              <ShoppingBag size={16} className="mr-2" />
-              {isAdding
-                ? 'Adding...'
-                : justAdded
-                ? 'Added to Bag ✓'
-                : !selectedSize
-                ? 'Select a Size'
-                : isOutOfStock
-                ? 'Sold Out'
-                : 'Add to Cart'}
+              {isAdding ? (
+                <>
+                  <RefreshCw size={16} className="mr-2 animate-spin text-white" />
+                  Adding to Bag...
+                </>
+              ) : justAdded ? (
+                <>
+                  <Check size={16} className="mr-2" />
+                  Added to Bag ✓
+                </>
+              ) : !selectedSize ? (
+                'Select a Size'
+              ) : isOutOfStock ? (
+                'Sold Out'
+              ) : (
+                <>
+                  <ShoppingBag size={16} className="mr-2" />
+                  Add to Cart
+                </>
+              )}
             </button>
 
             <button
@@ -667,15 +696,28 @@ export function ProductInteractive({
           {!isOutOfStock && (
             <button
               type="button"
-              disabled={!selectedSize || isAdding || isBuyingNow}
+              disabled={!selectedSize || isBuyingNow}
               onClick={handleBuyNow}
-              className="w-full bg-[#F8F8F6] border border-black text-black hover:bg-black hover:text-white h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all disabled:bg-neutral-200 disabled:border-neutral-300 disabled:text-neutral-400 disabled:cursor-not-allowed shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none"
+              className={`w-full h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all ${
+                isBuyingNow
+                  ? 'bg-black text-white border border-black cursor-wait shadow-none'
+                  : isAdding
+                  ? 'bg-[#F8F8F6] border border-black text-black opacity-60 pointer-events-none'
+                  : !selectedSize
+                  ? 'bg-neutral-200 border-neutral-300 text-neutral-400 cursor-not-allowed shadow-none'
+                  : 'bg-[#F8F8F6] border border-black text-black hover:bg-black hover:text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none cursor-pointer'
+              }`}
             >
-              {isBuyingNow
-                ? 'Opening Checkout...'
-                : !selectedSize
-                ? 'Select a Size to Buy'
-                : 'Buy It Now'}
+              {isBuyingNow ? (
+                <>
+                  <RefreshCw size={16} className="mr-2 animate-spin text-white" />
+                  Opening Checkout...
+                </>
+              ) : !selectedSize ? (
+                'Select a Size to Buy'
+              ) : (
+                'Buy It Now'
+              )}
             </button>
           )}
 
@@ -774,52 +816,12 @@ export function ProductInteractive({
         </div>
       </div>
 
-      {/* Size Guide Modal */}
-      {showSizeGuide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
-          <div className="bg-white max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-sm uppercase tracking-widest font-extrabold">Bubble Boom Size Guide</h3>
-              <button
-                type="button"
-                onClick={() => setShowSizeGuide(false)}
-                className="p-1 hover:bg-neutral-100"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <p className="text-xs text-neutral-600 leading-relaxed">
-              Our streetwear silhouettes are intentionally crafted with drop shoulders and relaxed body measurements. All dimensions are in inches.
-            </p>
-            <div className="border border-neutral-200 overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-[#F8F8F6] border-b border-neutral-200">
-                  <tr>
-                    <th className="p-2 font-bold uppercase">Size</th>
-                    <th className="p-2 font-bold uppercase">Chest</th>
-                    <th className="p-2 font-bold uppercase">Length</th>
-                    <th className="p-2 font-bold uppercase">Shoulder</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-200">
-                  <tr><td className="p-2 font-bold">S</td><td className="p-2">42&quot;</td><td className="p-2">28&quot;</td><td className="p-2">21&quot;</td></tr>
-                  <tr><td className="p-2 font-bold">M</td><td className="p-2">44&quot;</td><td className="p-2">29&quot;</td><td className="p-2">22&quot;</td></tr>
-                  <tr><td className="p-2 font-bold">L</td><td className="p-2">46&quot;</td><td className="p-2">30&quot;</td><td className="p-2">23&quot;</td></tr>
-                  <tr><td className="p-2 font-bold">XL</td><td className="p-2">48&quot;</td><td className="p-2">31&quot;</td><td className="p-2">24&quot;</td></tr>
-                  <tr><td className="p-2 font-bold">XXL</td><td className="p-2">50&quot;</td><td className="p-2">32&quot;</td><td className="p-2">25&quot;</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowSizeGuide(false)}
-              className="w-full bg-black text-white py-2.5 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors"
-            >
-              Close Size Guide
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Category-Based Size Guide Modal */}
+      <CategorySizeGuideModal
+        isOpen={showSizeGuide}
+        onClose={() => setShowSizeGuide(false)}
+        categoryType={categoryType}
+      />
 
       {/* Zoom / Lightbox Modal */}
       {isZoomOpen && activeColorImages.length > 0 && (

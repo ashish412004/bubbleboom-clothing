@@ -1,6 +1,6 @@
 import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
-import { generateSlug } from './utils'
+import { generateSlug, parseProductImage } from './utils'
 import { MOCK_PRODUCTS } from './mock-data'
 import fs from 'fs'
 import path from 'path'
@@ -333,7 +333,16 @@ export async function getProductBySlug(slug: string) {
     if (error || !data || deletedIds.has(data.id)) {
       return MOCK_PRODUCTS.find((p) => p.slug === slug && !deletedIds.has(p.id)) || null
     }
-    return data
+
+    const parsedImages = (((data as any).images || []) as any[])
+      .map(parseProductImage)
+      .filter(Boolean)
+      .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+
+    return {
+      ...data,
+      images: parsedImages,
+    }
   } catch {
     return MOCK_PRODUCTS.find((p) => p.slug === slug && !deletedIds.has(p.id)) || null
   }
@@ -364,7 +373,16 @@ export async function getProductById(id: string) {
     if (error || !data || deletedIds.has(data.id) || deletedIds.has(data.slug)) {
       return MOCK_PRODUCTS.find((p) => p.id === id && !deletedIds.has(p.slug)) || null
     }
-    return data
+
+    const parsedImages = (((data as any).images || []) as any[])
+      .map(parseProductImage)
+      .filter(Boolean)
+      .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+
+    return {
+      ...data,
+      images: parsedImages,
+    }
   } catch {
     return MOCK_PRODUCTS.find((p) => p.id === id && !deletedIds.has(p.slug)) || null
   }
@@ -390,7 +408,12 @@ export async function getAdminProducts() {
         .order('created_at', { ascending: false })
 
       if (products && products.length > 0) {
-        list = products.filter((p) => !deletedIds.has(p.id) && !deletedIds.has(p.slug))
+        list = products
+          .filter((p) => !deletedIds.has(p.id) && !deletedIds.has(p.slug))
+          .map((p) => ({
+            ...p,
+            images: (((p as any).images || []) as any[]).map(parseProductImage).filter(Boolean),
+          }))
       }
     } catch {
       // Fallback

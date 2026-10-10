@@ -18,10 +18,17 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
   }
 
   const supabase = await createServiceClient()
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('id, name, slug')
-    .order('name')
+  const [{ data: categories }, { data: collections }, { data: colProducts }] = await Promise.all([
+    supabase.from('categories').select('id, name, slug').order('sort_order'),
+    supabase.from('collections').select('id, name, slug').order('sort_order'),
+    supabase.from('collection_products').select('collection_id').eq('product_id', id),
+  ])
+
+  const initialProductWithCollection = {
+    ...product,
+    collection_id: colProducts?.[0]?.collection_id || null,
+    collection_ids: (colProducts || []).map((cp) => cp.collection_id),
+  }
 
   return (
     <div className="space-y-6">
@@ -32,7 +39,11 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
         </p>
       </div>
 
-      <ProductForm categories={categories || []} initialProduct={product} />
+      <ProductForm
+        categories={categories || []}
+        collections={collections || []}
+        initialProduct={initialProductWithCollection}
+      />
     </div>
   )
 }

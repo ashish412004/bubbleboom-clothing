@@ -5,10 +5,10 @@ export const dynamic = 'force-dynamic'
 
 export default async function NewProductPage() {
   const supabase = await createServiceClient()
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('id, name, slug')
-    .order('name')
+  const [{ data: categories }, { data: collections }] = await Promise.all([
+    supabase.from('categories').select('id, name, slug').order('sort_order'),
+    supabase.from('collections').select('id, name, slug').order('sort_order'),
+  ])
 
   return (
     <div className="space-y-6">
@@ -19,7 +19,7 @@ export default async function NewProductPage() {
         </p>
       </div>
 
-      <ProductForm categories={categories || []} />
+      <ProductForm categories={categories || []} collections={collections || []} />
     </div>
   )
 }

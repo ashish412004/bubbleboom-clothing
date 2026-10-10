@@ -41,7 +41,10 @@ export function ShopFilters({ categories, isMobile = false }: ShopFiltersProps) 
     setMobileDrawerOpen(false)
   }
 
-  const sizes = ['S', 'M', 'L', 'XL', 'XXL', '30', '32', '34']
+  const isFootwear = currentCategory.toLowerCase() === 'footwear'
+  const sizes = isFootwear
+    ? ['UK 6', 'UK 7', 'UK 8', 'UK 9', 'UK 10', 'UK 11', 'UK 12']
+    : ['S', 'M', 'L', 'XL', 'XXL', '30', '32', '34', 'UK 7', 'UK 8', 'UK 9', 'UK 10']
   const colors = ['Black', 'White', 'Charcoal', 'Grey']
 
   const filterContent = (

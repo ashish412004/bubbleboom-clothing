@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { name, slug, description, banner_image_url, sort_order, is_visible } = body
+    const { name, slug, description, banner_image_url, mobile_banner_image_url, sort_order, is_visible } = body
 
     if (!name) {
       return NextResponse.json({ error: 'Collection name is required' }, { status: 400 })
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
       slug: slug ? generateSlug(slug) : generateSlug(name),
       description: description || null,
       banner_image_url: banner_image_url || null,
+      mobile_banner_image_url: mobile_banner_image_url || null,
       sort_order: Number(sort_order) || 0,
       is_visible: is_visible !== undefined ? Boolean(is_visible) : true,
     } as any)

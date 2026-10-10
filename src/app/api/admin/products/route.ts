@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { getCurrentUser, isAdmin } from '@/lib/auth'
 import { deleteProduct, saveDevProduct } from '@/lib/products'
@@ -116,12 +117,16 @@ export async function POST(req: NextRequest) {
             ? img.storage_path
             : extractStoragePath(safeUrl)
           const color = typeof img === 'object' && img.color ? img.color.trim() : null
+          let altText = (typeof img === 'object' && img.alt_text) ? img.alt_text : product.name
+          if (color && !altText.includes(`[color:${color}]`)) {
+            altText = `[color:${color}] ${altText.replace(/\[color:[^\]]+\]/gi, '').trim()}`
+          }
           return {
             product_id: createdProduct.id,
             image_url: safeUrl,
             storage_path: storagePath || null,
             color: color || null,
-            alt_text: (typeof img === 'object' && img.alt_text) ? img.alt_text : product.name,
+            alt_text: altText,
             sort_order: (typeof img === 'object' && typeof img.sort_order === 'number') ? img.sort_order : idx,
           }
         })
@@ -145,7 +150,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. Log in audit logs
+    // 4. Link collection if provided
+    const targetCollectionId = product.collection_id || (product.collection_ids && product.collection_ids[0])
+    if (targetCollectionId) {
+      try {
+        await supabase.from('collection_products').upsert({
+          collection_id: targetCollectionId,
+          product_id: createdProduct.id,
+          sort_order: 0,
+        }, { onConflict: 'collection_id,product_id' })
+      } catch (colErr) {
+        console.warn('Could not link product to collection:', colErr)
+      }
+    }
+
+    // 5. Log in audit logs
     await supabase.from('admin_audit_logs').insert({
       admin_id: user.id,
       action: 'CREATE_PRODUCT',
@@ -153,6 +172,15 @@ export async function POST(req: NextRequest) {
       entity_id: createdProduct.id,
       metadata: { name: product.name, slug: product.slug },
     })
+
+    try {
+      revalidatePath('/products/[slug]', 'page')
+      revalidatePath('/shop', 'page')
+      revalidatePath('/', 'page')
+      revalidatePath('/collections', 'page')
+      revalidatePath('/collections/[slug]', 'page')
+      revalidatePath('/admin/products', 'page')
+    } catch {}
 
     return NextResponse.json({ success: true, product: createdProduct })
   } catch (error: any) {
@@ -246,12 +274,16 @@ export async function PUT(req: NextRequest) {
             ? img.storage_path
             : extractStoragePath(safeUrl)
           const color = typeof img === 'object' && img.color ? img.color.trim() : null
+          let altText = (typeof img === 'object' && img.alt_text) ? img.alt_text : product.name
+          if (color && !altText.includes(`[color:${color}]`)) {
+            altText = `[color:${color}] ${altText.replace(/\[color:[^\]]+\]/gi, '').trim()}`
+          }
           return {
             product_id: product.id,
             image_url: safeUrl,
             storage_path: storagePath || null,
             color: color || null,
-            alt_text: (typeof img === 'object' && img.alt_text) ? img.alt_text : product.name,
+            alt_text: altText,
             sort_order: (typeof img === 'object' && typeof img.sort_order === 'number') ? img.sort_order : idx,
           }
         })
@@ -287,7 +319,26 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    // 4. Log in audit logs
+    // 4. Sync collection association
+    const targetCollectionId = product.collection_id !== undefined
+      ? product.collection_id
+      : (product.collection_ids ? product.collection_ids[0] : undefined)
+    if (targetCollectionId !== undefined) {
+      try {
+        await supabase.from('collection_products').delete().eq('product_id', product.id)
+        if (targetCollectionId) {
+          await supabase.from('collection_products').upsert({
+            collection_id: targetCollectionId,
+            product_id: product.id,
+            sort_order: 0,
+          }, { onConflict: 'collection_id,product_id' })
+        }
+      } catch (colErr) {
+        console.warn('Could not sync collection product association:', colErr)
+      }
+    }
+
+    // 5. Log in audit logs
     try {
       await supabase.from('admin_audit_logs').insert({
         admin_id: user.id,
@@ -296,6 +347,15 @@ export async function PUT(req: NextRequest) {
         entity_id: product.id,
         metadata: { name: product.name, slug: product.slug, selling_price: product.selling_price },
       })
+    } catch {}
+
+    try {
+      revalidatePath('/products/[slug]', 'page')
+      revalidatePath('/shop', 'page')
+      revalidatePath('/', 'page')
+      revalidatePath('/collections', 'page')
+      revalidatePath('/collections/[slug]', 'page')
+      revalidatePath('/admin/products', 'page')
     } catch {}
 
     return NextResponse.json({ success: true, product: updatedProduct })
