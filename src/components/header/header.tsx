@@ -138,7 +138,7 @@ export function Header({
             </Link>
 
             <Link
-              href="/account"
+              href={mounted && authUser ? '/account' : '/login'}
               className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black hidden sm:inline-flex items-center gap-1.5"
               aria-label={mounted && authUser ? `Account (${authUser.name})` : 'Customer account'}
             >
@@ -267,7 +267,7 @@ export function Header({
             {/* Mobile Footer Links */}
             <div className="pt-6 border-t border-neutral-200 space-y-3">
               <Link
-                href="/account"
+                href={mounted && authUser ? '/account' : '/login'}
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center text-xs uppercase tracking-wider font-semibold text-black hover:text-neutral-600 py-1"
               >

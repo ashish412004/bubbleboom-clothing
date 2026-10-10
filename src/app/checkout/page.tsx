@@ -1,6 +1,6 @@
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
-import { getCart, calculateCartSummary } from '@/lib/cart'
+import { getCart, calculateCartSummary, getBuyNowItemDetails, CartItemWithDetails } from '@/lib/cart'
 import { getCurrentUser } from '@/lib/auth'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
@@ -8,21 +8,48 @@ import { CheckoutForm } from './checkout-form'
 
 export const dynamic = 'force-dynamic'
 
-export default async function CheckoutPage() {
+interface CheckoutPageProps {
+  searchParams?: Promise<{
+    variant_id?: string
+    quantity?: string
+  }>
+}
+
+export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
+  const params = searchParams ? await searchParams : {}
+  const buyNowVariantId = typeof params.variant_id === 'string' ? params.variant_id : undefined
+  const buyNowQuantity = Math.max(1, parseInt(typeof params.quantity === 'string' ? params.quantity : '1', 10) || 1)
+
+  const isBuyNow = Boolean(buyNowVariantId)
+
   const user = await getCurrentUser()
 
   // Require customer authentication to checkout
   if (!user) {
-    redirect('/login?next=/checkout')
+    if (isBuyNow) {
+      const returnUrl = `/checkout?variant_id=${encodeURIComponent(buyNowVariantId!)}&quantity=${buyNowQuantity}`
+      redirect(`/login?next=${encodeURIComponent(returnUrl)}`)
+    } else {
+      redirect('/login?next=/checkout')
+    }
   }
 
-  const cookieStore = await cookies()
-  const sessionId = cookieStore.get('bb_session_id')?.value
+  let items: CartItemWithDetails[] = []
 
-  const items = await getCart(user?.id, sessionId)
+  if (isBuyNow) {
+    const buyNowRes = await getBuyNowItemDetails(buyNowVariantId!, buyNowQuantity)
+    if (buyNowRes.error || !buyNowRes.item) {
+      redirect('/cart')
+    }
+    items = [buyNowRes.item]
+  } else {
+    const cookieStore = await cookies()
+    const sessionId = cookieStore.get('bb_session_id')?.value
+    items = await getCart(user?.id, sessionId)
 
-  if (!items || items.length === 0) {
-    redirect('/cart')
+    if (!items || items.length === 0) {
+      redirect('/cart')
+    }
   }
 
   const summary = await calculateCartSummary(items)
@@ -35,7 +62,7 @@ export default async function CheckoutPage() {
         <div className="border-b border-neutral-200 py-6 bg-[#F8F8F6]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <h1 className="text-2xl sm:text-3xl font-extrabold uppercase tracking-tight">
-              Secure Checkout
+              {isBuyNow ? 'Instant Checkout' : 'Secure Checkout'}
             </h1>
             <p className="text-xs text-neutral-500 uppercase tracking-wider mt-1">
               Bubble Boom Official Store | All India Express Logistics
@@ -49,6 +76,9 @@ export default async function CheckoutPage() {
             summary={summary as any}
             userEmail={user?.email || ''}
             userName={(user as any)?.user_metadata?.full_name || ''}
+            isBuyNow={isBuyNow}
+            buyNowVariantId={buyNowVariantId}
+            buyNowQuantity={buyNowQuantity}
           />
         </div>
       </main>
@@ -57,3 +87,4 @@ export default async function CheckoutPage() {
     </div>
   )
 }
+

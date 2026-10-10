@@ -615,3 +615,125 @@ export async function calculateCartSummary(
     coupon_discount_paise: discount_paise,
   }
 }
+
+/**
+ * Retrieve item details for a Buy It Now purchase without modifying the persistent cart.
+ * Validates product/variant status and available stock.
+ */
+export async function getBuyNowItemDetails(
+  variantId: string,
+  quantity: number = 1
+): Promise<{ item?: CartItemWithDetails; error?: string }> {
+  const safeQty = Math.max(1, quantity)
+
+  if (!isSupabaseConfigured()) {
+    const match = findMockVariantWithProduct(variantId)
+    if (!match) {
+      return { error: 'Variant not found' }
+    }
+    const { variant, product } = match
+    if (!product.is_published || !product.is_active || !variant.is_active) {
+      return { error: 'Product is currently not available' }
+    }
+    if (safeQty > variant.stock) {
+      return { error: `Only ${variant.stock} item(s) available in stock.` }
+    }
+
+    const item: CartItemWithDetails = {
+      id: `buy_now_${variant.id}`,
+      cart_id: 'buy_now_direct',
+      variant_id: variant.id,
+      quantity: safeQty,
+      variant: {
+        id: variant.id,
+        product_id: product.id,
+        sku: variant.sku,
+        color: variant.color,
+        size: variant.size,
+        stock: variant.stock,
+        is_active: variant.is_active,
+        product: {
+          id: product.id,
+          name: product.name,
+          slug: product.slug,
+          mrp: product.mrp,
+          selling_price: product.selling_price,
+          is_published: product.is_published,
+          is_active: product.is_active,
+          images: product.images || [],
+        },
+      },
+    }
+    return { item }
+  }
+
+  const supabase = await createServerClient()
+  const { data: variant, error: varError } = await supabase
+    .from('product_variants')
+    .select(`
+      id,
+      product_id,
+      sku,
+      color,
+      size,
+      stock,
+      is_active,
+      product:products(
+        id,
+        name,
+        slug,
+        mrp,
+        selling_price,
+        is_published,
+        is_active,
+        images:product_images(image_url, alt_text, color, sort_order)
+      )
+    `)
+    .eq('id', variantId)
+    .single()
+
+  if (varError || !variant) {
+    return { error: 'Variant not found' }
+  }
+
+  const product = (variant as any).product
+  if (!product || !product.is_published || !product.is_active || !variant.is_active) {
+    return { error: 'Product is currently not available' }
+  }
+
+  if (safeQty > variant.stock) {
+    return { error: `Only ${variant.stock} item(s) available in stock.` }
+  }
+
+  const sortedImages = ((product.images as any[]) || []).sort(
+    (a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+  )
+
+  const item: CartItemWithDetails = {
+    id: `buy_now_${variant.id}`,
+    cart_id: 'buy_now_direct',
+    variant_id: variant.id,
+    quantity: safeQty,
+    variant: {
+      id: variant.id,
+      product_id: product.id,
+      sku: variant.sku,
+      color: variant.color,
+      size: variant.size,
+      stock: variant.stock,
+      is_active: variant.is_active,
+      product: {
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        mrp: product.mrp,
+        selling_price: product.selling_price,
+        is_published: product.is_published,
+        is_active: product.is_active,
+        images: sortedImages,
+      },
+    },
+  }
+
+  return { item }
+}

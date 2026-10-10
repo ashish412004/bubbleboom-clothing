@@ -10,10 +10,28 @@ export const metadata = {
   description: 'Join Bubble Boom to access limited edition streetwear drops and manage orders.',
 }
 
-export default async function SignupPage() {
+interface SignupPageProps {
+  searchParams?: Promise<{
+    next?: string
+  }>
+}
+
+export default async function SignupPage({ searchParams }: SignupPageProps) {
+  const params = searchParams ? await searchParams : {}
+  const nextParam = params.next
+  const safeRedirect =
+    nextParam &&
+    nextParam.startsWith('/') &&
+    !nextParam.startsWith('//') &&
+    !nextParam.startsWith('/\\') &&
+    !nextParam.startsWith('/login') &&
+    !nextParam.startsWith('/signup')
+      ? nextParam
+      : '/'
+
   const user = await getCurrentUser()
   if (user) {
-    redirect('/')
+    redirect(safeRedirect)
   }
 
   return (

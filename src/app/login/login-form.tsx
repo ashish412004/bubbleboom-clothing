@@ -26,11 +26,16 @@ export function LoginForm() {
   const resetParam = searchParams.get('reset')
   const isAdminTarget = nextParam?.startsWith('/admin')
 
-  // Prevent open redirects: only allow local relative paths
+  // Prevent open redirects: only allow safe local relative paths, default to homepage (/)
   const safeRedirect =
-    nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')
+    nextParam &&
+    nextParam.startsWith('/') &&
+    !nextParam.startsWith('//') &&
+    !nextParam.startsWith('/\\') &&
+    !nextParam.startsWith('/login') &&
+    !nextParam.startsWith('/signup')
       ? nextParam
-      : '/account'
+      : '/'
 
   const refreshCart = useCartStore((s) => s.refreshCart)
 
@@ -195,7 +200,7 @@ export function LoginForm() {
 
       toast.success('Signed in successfully!')
       await refreshCart()
-      window.location.href = safeRedirect
+      window.location.replace(safeRedirect)
     } catch (err: any) {
       setError(err.message || 'Invalid or expired login code.')
       setLoading(false)
@@ -249,7 +254,7 @@ export function LoginForm() {
 
       toast.success('Signed in successfully!')
       await refreshCart()
-      window.location.href = safeRedirect
+      window.location.replace(safeRedirect)
     } catch (err: any) {
       setError(err.message || 'Invalid email or password.')
       setLoading(false)

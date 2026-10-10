@@ -10,10 +10,28 @@ export const metadata = {
   description: 'Sign in to your Bubble Boom account for fast checkout, order history, and saved capsules.',
 }
 
-export default async function LoginPage() {
+interface LoginPageProps {
+  searchParams?: Promise<{
+    next?: string
+  }>
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = searchParams ? await searchParams : {}
+  const nextParam = params.next
+  const safeRedirect =
+    nextParam &&
+    nextParam.startsWith('/') &&
+    !nextParam.startsWith('//') &&
+    !nextParam.startsWith('/\\') &&
+    !nextParam.startsWith('/login') &&
+    !nextParam.startsWith('/signup')
+      ? nextParam
+      : '/'
+
   const user = await getCurrentUser()
   if (user) {
-    redirect('/')
+    redirect(safeRedirect)
   }
 
   return (

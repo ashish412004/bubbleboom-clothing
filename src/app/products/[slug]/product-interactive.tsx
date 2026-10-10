@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Heart,
@@ -120,6 +121,8 @@ export function ProductInteractive({
   const [quantity, setQuantity] = useState(1)
   const [isWishlisted, setIsWishlisted] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
+  const [isBuyingNow, setIsBuyingNow] = useState(false)
+  const [justAdded, setJustAdded] = useState(false)
   const [showSizeGuide, setShowSizeGuide] = useState(false)
 
   // Active accordion tabs
@@ -185,7 +188,12 @@ export function ProductInteractive({
     setQuantity(1)
   }
 
-  const handleAddToCart = async (redirectToCheckout = false) => {
+  const handleAddToCart = async () => {
+    if (!selectedColor) {
+      toast.error('Please select a colour first.')
+      return
+    }
+
     if (!selectedSize) {
       toast.error('Please select a size first.')
       return
@@ -196,8 +204,13 @@ export function ProductInteractive({
       return
     }
 
-    if (isOutOfStock) {
-      toast.error('Selected variant is out of stock.')
+    if (isOutOfStock || activeVariant.stock <= 0) {
+      toast.error(`Size ${selectedSize} is currently out of stock.`)
+      return
+    }
+
+    if (quantity < 1 || quantity > activeVariant.stock) {
+      toast.error(`Please select a valid quantity (1 to ${activeVariant.stock}).`)
       return
     }
 
@@ -215,12 +228,48 @@ export function ProductInteractive({
       const data = await res.json()
       if (res.ok) {
         incrementCart(quantity)
-        toast.success(`Added ${product.name} (${selectedColor} / ${selectedSize}) to bag!`, {
-          style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
-        })
-        if (redirectToCheckout) {
-          router.push('/checkout')
-        }
+        setJustAdded(true)
+        setTimeout(() => setJustAdded(false), 3000)
+
+        // Show "Added to Bag" toast with "View Bag" action
+        toast.custom(
+          (t) => (
+            <div
+              className={`${
+                t.visible ? 'animate-enter' : 'animate-leave'
+              } max-w-md w-full bg-black text-white shadow-2xl pointer-events-auto flex items-center justify-between p-4 border border-neutral-700`}
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center shrink-0">
+                  <Check size={16} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider">Added to Bag</p>
+                  <p className="text-[11px] text-neutral-400 truncate max-w-[200px]">
+                    {product.name} ({selectedColor} / {selectedSize} &times; {quantity})
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 pl-3 border-l border-neutral-800">
+                <Link
+                  href="/cart"
+                  onClick={() => toast.dismiss(t.id)}
+                  className="bg-white text-black hover:bg-neutral-200 text-[10px] uppercase tracking-widest font-extrabold px-3 py-2 transition-colors shrink-0"
+                >
+                  View Bag
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => toast.dismiss(t.id)}
+                  className="text-neutral-400 hover:text-white p-1"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          ),
+          { duration: 4500, position: 'top-right' }
+        )
       } else {
         toast.error(data.error || 'Failed to add to bag')
       }
@@ -230,6 +279,41 @@ export function ProductInteractive({
       setIsAdding(false)
     }
   }
+
+  const handleBuyNow = () => {
+    if (!selectedColor) {
+      toast.error('Please select a colour first.')
+      return
+    }
+
+    if (!selectedSize) {
+      toast.error('Please select a size first.')
+      return
+    }
+
+    if (!activeVariant) {
+      toast.error('Selected variant is unavailable.')
+      return
+    }
+
+    if (isOutOfStock || activeVariant.stock <= 0) {
+      toast.error(`Size ${selectedSize} is currently out of stock.`)
+      return
+    }
+
+    if (quantity < 1 || quantity > activeVariant.stock) {
+      toast.error(`Please select a valid quantity (1 to ${activeVariant.stock}).`)
+      return
+    }
+
+    // Prevent duplicate clicks/submissions
+    if (isBuyingNow) return
+    setIsBuyingNow(true)
+
+    // Directly open checkout for that selected variant and quantity without touching persistent cart
+    router.push(`/checkout?variant_id=${encodeURIComponent(activeVariant.id)}&quantity=${quantity}`)
+  }
+
 
   const toggleWishlist = () => {
     const nextState = !isWishlisted
@@ -552,13 +636,15 @@ export function ProductInteractive({
           <div className="flex gap-3">
             <button
               type="button"
-              disabled={!selectedSize || isOutOfStock || isAdding}
-              onClick={() => handleAddToCart(false)}
+              disabled={!selectedSize || isOutOfStock || isAdding || isBuyingNow}
+              onClick={handleAddToCart}
               className="flex-1 bg-black text-white hover:bg-neutral-800 h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-colors disabled:bg-neutral-300 disabled:cursor-not-allowed"
             >
               <ShoppingBag size={16} className="mr-2" />
               {isAdding
                 ? 'Adding...'
+                : justAdded
+                ? 'Added to Bag ✓'
                 : !selectedSize
                 ? 'Select a Size'
                 : isOutOfStock
@@ -581,13 +667,18 @@ export function ProductInteractive({
           {!isOutOfStock && (
             <button
               type="button"
-              disabled={!selectedSize || isAdding}
-              onClick={() => handleAddToCart(true)}
-              className="w-full bg-[#F8F8F6] border border-black text-black hover:bg-black hover:text-white h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all disabled:bg-neutral-200 disabled:border-neutral-300 disabled:text-neutral-400 disabled:cursor-not-allowed"
+              disabled={!selectedSize || isAdding || isBuyingNow}
+              onClick={handleBuyNow}
+              className="w-full bg-[#F8F8F6] border border-black text-black hover:bg-black hover:text-white h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all disabled:bg-neutral-200 disabled:border-neutral-300 disabled:text-neutral-400 disabled:cursor-not-allowed shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none"
             >
-              {!selectedSize ? 'Select a Size to Buy' : 'Buy It Now'}
+              {isBuyingNow
+                ? 'Opening Checkout...'
+                : !selectedSize
+                ? 'Select a Size to Buy'
+                : 'Buy It Now'}
             </button>
           )}
+
         </div>
 
         {/* Delivery & Exchange Section */}

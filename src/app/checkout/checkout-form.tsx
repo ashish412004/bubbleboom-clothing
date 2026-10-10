@@ -35,11 +35,13 @@ interface CartItemData {
     is_active?: boolean
     product: {
       name: string
+      slug?: string
       selling_price: number
       images: Array<{ image_url: string; color?: string | null }>
     }
   }
 }
+
 
 interface CartSummaryData {
   subtotal_paise: number
@@ -64,12 +66,18 @@ export function CheckoutForm({
   userEmail = '',
   userName = '',
   userPhone = '',
+  isBuyNow = false,
+  buyNowVariantId,
+  buyNowQuantity,
 }: {
   items: CartItemData[]
   summary: CartSummaryData
   userEmail?: string
   userName?: string
   userPhone?: string
+  isBuyNow?: boolean
+  buyNowVariantId?: string
+  buyNowQuantity?: number
 }) {
   const router = useRouter()
   const setItemCount = useCartStore((state) => state.setItemCount)
@@ -464,6 +472,9 @@ export function CheckoutForm({
           payment_method: paymentMethod,
           coupon_code: couponDiscountPaise > 0 ? couponCode : undefined,
           notes: notes.trim() || undefined,
+          is_buy_now: isBuyNow,
+          buy_now_variant_id: buyNowVariantId,
+          buy_now_quantity: buyNowQuantity,
         }),
       })
 
@@ -476,8 +487,10 @@ export function CheckoutForm({
         return
       }
 
-      // Order created successfully! Clear cart counter
-      setItemCount(0)
+      // Order created successfully! Clear cart counter only if normal cart checkout
+      if (!isBuyNow) {
+        setItemCount(0)
+      }
 
       if (paymentMethod === 'cod') {
         router.push(data.redirect_url || `/orders/${data.order_number}/payment?order_id=${data.order_number}&method=cod`)
@@ -951,15 +964,21 @@ export function CheckoutForm({
           <div className="flex items-center justify-between pb-3 border-b border-neutral-200">
             <h3 className="text-xs uppercase tracking-widest font-extrabold flex items-center gap-2">
               <ShoppingBag size={14} />
-              Review Bag Items ({items.length})
+              {isBuyNow ? 'Buy It Now Item' : `Review Bag Items (${items.length})`}
             </h3>
-            <Link
-              href="/cart"
-              className="text-[11px] font-bold text-neutral-600 hover:text-black underline flex items-center gap-1"
-            >
-              <Edit2 size={11} />
-              Edit Cart
-            </Link>
+            {isBuyNow ? (
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider bg-black text-white px-2 py-0.5">
+                Direct Purchase
+              </span>
+            ) : (
+              <Link
+                href="/cart"
+                className="text-[11px] font-bold text-neutral-600 hover:text-black underline flex items-center gap-1"
+              >
+                <Edit2 size={11} />
+                Edit Cart
+              </Link>
+            )}
           </div>
 
           {/* Line item reviews with size, quantity, and edit options */}
@@ -1014,10 +1033,10 @@ export function CheckoutForm({
 
                     <div className="pt-1">
                       <Link
-                        href="/cart"
+                        href={isBuyNow ? (prod.slug ? `/products/${prod.slug}` : '/shop') : '/cart'}
                         className="text-[11px] text-neutral-500 hover:text-black underline font-medium flex items-center gap-1"
                       >
-                        <Edit2 size={10} /> Change size/qty
+                        <Edit2 size={10} /> {isBuyNow ? 'Change variant' : 'Change size/qty'}
                       </Link>
                     </div>
                   </div>
@@ -1025,6 +1044,7 @@ export function CheckoutForm({
               )
             })}
           </div>
+
 
           {/* Coupon Code */}
           <div className="pt-2 border-t border-neutral-200">

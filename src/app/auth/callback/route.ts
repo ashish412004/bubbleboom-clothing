@@ -9,9 +9,16 @@ export async function GET(request: Request) {
   const code = requestUrl.searchParams.get('code')
   const nextParam = requestUrl.searchParams.get('next')
 
-  // Validate redirect to prevent open redirect vulnerabilities
-  let safeRedirect = '/account'
-  if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')) {
+  // Validate redirect to prevent open redirect vulnerabilities, default to homepage (/)
+  let safeRedirect = '/'
+  if (
+    nextParam &&
+    nextParam.startsWith('/') &&
+    !nextParam.startsWith('//') &&
+    !nextParam.startsWith('/\\') &&
+    !nextParam.startsWith('/login') &&
+    !nextParam.startsWith('/signup')
+  ) {
     safeRedirect = nextParam
   }
 
@@ -21,7 +28,9 @@ export async function GET(request: Request) {
 
     if (!error && session?.user) {
       const cookieStore = await cookies()
-      const guestSessionId = cookieStore.get('bubbleboom_guest_session')?.value
+      const guestSessionId =
+        cookieStore.get('bb_session_id')?.value ||
+        cookieStore.get('bubbleboom_guest_session')?.value
 
       if (guestSessionId) {
         // Automatically merge guest cart & wishlist into authenticated user

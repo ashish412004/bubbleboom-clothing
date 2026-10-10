@@ -47,6 +47,9 @@ export async function POST(request: NextRequest) {
       payment_method = 'cashfree',
       coupon_code,
       notes,
+      is_buy_now,
+      buy_now_variant_id,
+      buy_now_quantity,
     } = body
 
     if (!full_name || !email || !phone || !address_line1 || !city || !state || !pin_code) {
@@ -56,19 +59,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 1. Fetch current cart items
-    const cartItems = await getCart(userId, sessionId)
-    if (!cartItems || cartItems.length === 0) {
-      return NextResponse.json(
-        { error: 'Your shopping cart is empty. Please add items before checking out.' },
-        { status: 400 }
-      )
-    }
+    let orderCartItems: Array<{ variant_id: string; quantity: number }> = []
 
-    const orderCartItems = cartItems.map((item) => ({
-      variant_id: item.variant_id,
-      quantity: item.quantity,
-    }))
+    if (is_buy_now) {
+      if (!buy_now_variant_id) {
+        return NextResponse.json(
+          { error: 'Invalid Buy It Now variant selection.' },
+          { status: 400 }
+        )
+      }
+      const qty = Math.max(1, parseInt(String(buy_now_quantity || '1'), 10) || 1)
+      orderCartItems = [{ variant_id: buy_now_variant_id, quantity: qty }]
+    } else {
+      // 1. Fetch current cart items
+      const cartItems = await getCart(userId, sessionId)
+      if (!cartItems || cartItems.length === 0) {
+        return NextResponse.json(
+          { error: 'Your shopping cart is empty. Please add items before checking out.' },
+          { status: 400 }
+        )
+      }
+
+      orderCartItems = cartItems.map((item) => ({
+        variant_id: item.variant_id,
+        quantity: item.quantity,
+      }))
+    }
 
     // 2. Server creates authoritative order and atomically reserves inventory
     const orderRes = await createOrder({
@@ -132,8 +148,10 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Order & Cashfree session created successfully! Now clear cart
-      await clearCart(userId, sessionId)
+      // Order & Cashfree session created successfully! Clear cart only if this is NOT a Buy It Now flow
+      if (!is_buy_now) {
+        await clearCart(userId, sessionId)
+      }
 
       const response = NextResponse.json({
         order_number: order.order_number,
@@ -141,11 +159,15 @@ export async function POST(request: NextRequest) {
         payment_method: 'cashfree',
         cf_mode: cfSessionRes.cf_mode || 'production',
       })
-      response.cookies.delete('bb_cart')
+      if (!is_buy_now) {
+        response.cookies.delete('bb_cart')
+      }
       return response
     } else {
       // Cash on Delivery
-      await clearCart(userId, sessionId)
+      if (!is_buy_now) {
+        await clearCart(userId, sessionId)
+      }
 
       // Send order confirmation email for confirmed COD order
       sendOrderConfirmationEmail({
@@ -162,7 +184,9 @@ export async function POST(request: NextRequest) {
         payment_method: 'cod',
         redirect_url: `/payment-return?order_id=${order.order_number}&method=cod`,
       })
-      response.cookies.delete('bb_cart')
+      if (!is_buy_now) {
+        response.cookies.delete('bb_cart')
+      }
       return response
     }
   } catch (err: any) {

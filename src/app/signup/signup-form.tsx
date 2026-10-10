@@ -49,7 +49,17 @@ export function SignupForm() {
         if (res.ok) {
           const data = await res.json()
           if (data.user) {
-            router.replace('/')
+            const nextParam = searchParams.get('next')
+            const safeRedirect =
+              nextParam &&
+              nextParam.startsWith('/') &&
+              !nextParam.startsWith('//') &&
+              !nextParam.startsWith('/\\') &&
+              !nextParam.startsWith('/login') &&
+              !nextParam.startsWith('/signup')
+                ? nextParam
+                : '/'
+            router.replace(safeRedirect)
           }
         }
       } catch {
@@ -57,7 +67,7 @@ export function SignupForm() {
       }
     }
     checkExistingAuth()
-  }, [router])
+  }, [router, searchParams])
 
   // Resend countdown timer effect
   useEffect(() => {
@@ -251,8 +261,18 @@ export function SignupForm() {
       toast.success('Registration complete! Welcome to Bubble Boom.')
       await refreshCart()
 
-      // Redirect to homepage ("/") using history replacement so Back does not reopen registration
-      window.location.replace('/')
+      // Redirect to intended destination (or "/" by default) using history replacement
+      const nextParam = searchParams.get('next')
+      const safeRedirect =
+        nextParam &&
+        nextParam.startsWith('/') &&
+        !nextParam.startsWith('//') &&
+        !nextParam.startsWith('/\\') &&
+        !nextParam.startsWith('/login') &&
+        !nextParam.startsWith('/signup')
+          ? nextParam
+          : '/'
+      window.location.replace(safeRedirect)
     } catch (err: any) {
       setError(err.message || 'Failed to complete password setup.')
       setLoading(false)
@@ -502,11 +522,12 @@ export function SignupForm() {
         <p className="text-xs text-neutral-600">
           Already have an account?{' '}
           <Link
-            href="/login"
+            href={`/login${searchParams.get('next') ? `?next=${encodeURIComponent(searchParams.get('next')!)}` : ''}`}
             className="font-bold text-black underline hover:text-neutral-700"
           >
             Sign In Here
           </Link>
+
         </p>
       </div>
     </div>
