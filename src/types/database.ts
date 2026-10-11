@@ -121,6 +121,10 @@ export interface Database {
           parent_id: string | null
           sort_order: number
           is_active: boolean
+          show_on_homepage?: boolean
+          homepage_order?: number
+          featured_product_id?: string | null
+          auto_image?: boolean
           created_at: string
           updated_at: string
         }
@@ -133,6 +137,10 @@ export interface Database {
           parent_id?: string | null
           sort_order?: number
           is_active?: boolean
+          show_on_homepage?: boolean
+          homepage_order?: number
+          featured_product_id?: string | null
+          auto_image?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -145,6 +153,10 @@ export interface Database {
           parent_id?: string | null
           sort_order?: number
           is_active?: boolean
+          show_on_homepage?: boolean
+          homepage_order?: number
+          featured_product_id?: string | null
+          auto_image?: boolean
           created_at?: string
           updated_at?: string
         }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { deleteProduct, getProducts, getAdminProducts, getDeletedProductIds } from '@/lib/products'
-import { deleteCategory, getCategories, getDeletedCategoryIds } from '@/lib/categories'
-import { deleteCollection, getCollections, getDeletedCollectionIds } from '@/lib/collections'
+import { deleteCategory, createCategory, getCategories, getDeletedCategoryIds } from '@/lib/categories'
+import { deleteCollection, createCollection, getCollections, getDeletedCollectionIds } from '@/lib/collections'
 import { cancelOrder, deleteOrder, getDevOrders, saveDevOrder } from '@/lib/orders'
 
 describe('Admin & Store Deletion Logic & Persistence', () => {
@@ -33,41 +33,50 @@ describe('Admin & Store Deletion Logic & Persistence', () => {
 
   describe('Category Deletion', () => {
     it('successfully deletes a category and removes it from category listings', async () => {
-      const initialCategories = await getCategories()
-      expect(initialCategories.length).toBeGreaterThan(0)
-      const targetCat = initialCategories[initialCategories.length - 1]
+      const tempCat = {
+        id: 'c9999999-0000-0000-0000-000000000001',
+        name: 'Temporary Category For Delete',
+        slug: 'temp-cat-delete-1',
+        sort_order: 99,
+        is_active: true,
+      }
+      const created = await createCategory(tempCat as any)
+      const targetId = created.data?.id || tempCat.id
+      const initialCategories = await getCategories(true)
+      expect(initialCategories.some((c) => c.id === targetId)).toBe(true)
 
-      const res = await deleteCategory(targetCat.id)
+      const res = await deleteCategory(targetId)
       expect(res.success).toBe(true)
 
       const deletedIds = getDeletedCategoryIds()
-      expect(deletedIds.has(targetCat.id)).toBe(true)
+      expect(deletedIds.has(targetId)).toBe(true)
 
-      const remainingCategories = await getCategories()
-      expect(remainingCategories.some((c) => c.id === targetCat.id)).toBe(false)
+      const remainingCategories = await getCategories(true)
+      expect(remainingCategories.some((c) => c.id === targetId)).toBe(false)
     })
   })
 
   describe('Collection Deletion', () => {
     it('successfully deletes a collection and removes it from collections listing', async () => {
-      const initialCollections = await getCollections(true)
-      if (initialCollections.length === 0) {
-        const res = await deleteCollection('test-temp-col-1')
-        expect(res.success).toBe(true)
-        const deletedIds = getDeletedCollectionIds()
-        expect(deletedIds.has('test-temp-col-1')).toBe(true)
-        return
+      const tempCol = {
+        id: 'test-temp-col-delete-1',
+        name: 'Temporary Collection For Delete',
+        slug: 'temp-col-delete-1',
+        sort_order: 99,
+        is_visible: true,
       }
-      const targetCol = initialCollections[initialCollections.length - 1]
+      await createCollection(tempCol as any)
+      const initialCollections = await getCollections(true)
+      expect(initialCollections.some((c) => c.id === tempCol.id)).toBe(true)
 
-      const res = await deleteCollection(targetCol.id)
+      const res = await deleteCollection(tempCol.id)
       expect(res.success).toBe(true)
 
       const deletedIds = getDeletedCollectionIds()
-      expect(deletedIds.has(targetCol.id)).toBe(true)
+      expect(deletedIds.has(tempCol.id)).toBe(true)
 
       const remainingCollections = await getCollections(true)
-      expect(remainingCollections.some((c) => c.id === targetCol.id)).toBe(false)
+      expect(remainingCollections.some((c) => c.id === tempCol.id)).toBe(false)
     })
   })
 

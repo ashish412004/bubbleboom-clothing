@@ -268,6 +268,13 @@ export function Header({
                   Collections
                 </Link>
                 <Link
+                  href="/categories"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block text-sm uppercase tracking-widest font-bold text-black hover:text-neutral-500 py-1"
+                >
+                  Categories
+                </Link>
+                <Link
                   href="/shop?sale=true"
                   onClick={() => setMobileMenuOpen(false)}
                   className="block text-sm uppercase tracking-widest font-extrabold text-black hover:text-neutral-500 py-1"

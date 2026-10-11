@@ -1,21 +1,22 @@
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { ProductCard } from '@/components/product/product-card'
+import { CategoryCard } from '@/components/category/category-card'
 import { HeroCarousel } from '@/components/home/hero-carousel'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight, Sparkles, Compass } from 'lucide-react'
 import { getProducts } from '@/lib/products'
-import { getCategories } from '@/lib/categories'
+import { getCategoriesWithCovers } from '@/lib/categories'
 import { getCollections } from '@/lib/collections'
 import { getStoreSettings, StoreGeneralSettings } from '@/lib/settings'
 
 export const revalidate = 60 // Revalidate every 60 seconds
 
 export default async function HomePage() {
-  const [products, categories, collections, generalSettings] = await Promise.all([
+  const [products, featuredCategories, collections, generalSettings] = await Promise.all([
     getProducts({ sortBy: 'created_at', sortOrder: 'desc' }),
-    getCategories(),
+    getCategoriesWithCovers({ onlyFeatured: true, limit: 8 }),
     getCollections(),
     getStoreSettings<StoreGeneralSettings>('general'),
   ])
@@ -42,44 +43,47 @@ export default async function HomePage() {
           secondaryCtaLink="/collections"
         />
 
-        {/* 2. Shop By Category */}
-        <section className="py-16 sm:py-24 border-b border-neutral-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-end justify-between mb-10">
-              <div>
-                <p className="text-xs uppercase tracking-widest font-bold text-neutral-500 mb-1">
-                  Curated Catalog
-                </p>
-                <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight uppercase">
-                  Shop By Category
-                </h2>
-              </div>
-              <Link
-                href="/shop"
-                className="text-xs uppercase tracking-widest font-bold hover:underline hidden sm:inline-flex items-center"
-              >
-                All Categories <ArrowRight size={14} className="ml-1" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-              {categories.map((cat) => (
+        {/* 2. Shop By Category (Max 8 Featured Categories in 4x2 Desktop / 2x4 Mobile Grid) */}
+        {featuredCategories.length > 0 && (
+          <section className="py-16 sm:py-24 border-b border-neutral-200">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex items-end justify-between mb-8 sm:mb-12">
+                <div>
+                  <p className="text-xs uppercase tracking-widest font-bold text-neutral-500 mb-1">
+                    Curated Wardrobe
+                  </p>
+                  <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight uppercase">
+                    Shop By Category
+                  </h2>
+                </div>
                 <Link
-                  key={cat.id}
-                  href={`/shop?category=${cat.slug}`}
-                  className="group relative aspect-square bg-[#F8F8F6] border border-neutral-200 flex flex-col items-center justify-center p-4 hover:border-black transition-all hover:shadow-sm"
+                  href="/categories"
+                  className="text-xs uppercase tracking-widest font-bold hover:underline hidden sm:inline-flex items-center"
                 >
-                  <span className="text-xs sm:text-sm uppercase tracking-wider font-bold text-center text-black group-hover:underline">
-                    {cat.name}
-                  </span>
-                  <span className="mt-2 text-[10px] uppercase tracking-widest text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                    Explore →
-                  </span>
+                  View All Categories <ArrowRight size={14} className="ml-1" />
                 </Link>
-              ))}
+              </div>
+
+              {/* Responsive Grid: Desktop 4 cols x 2 rows, Tablet 3 cols, Mobile 2 cols x 4 rows */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                {featuredCategories.map((cat, idx) => (
+                  <CategoryCard key={cat.id} category={cat} priority={idx < 4} />
+                ))}
+              </div>
+
+              {/* Mobile View All Categories Link */}
+              <div className="mt-8 text-center sm:hidden">
+                <Link
+                  href="/categories"
+                  className="inline-flex items-center justify-center w-full py-3 border border-black text-xs font-mono uppercase font-bold tracking-wider hover:bg-black hover:text-white transition-colors"
+                >
+                  View All Categories
+                  <ArrowRight size={14} className="ml-2" />
+                </Link>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* 3. New Arrivals (Only visible when products exist) */}
         {newArrivals.length > 0 && (
