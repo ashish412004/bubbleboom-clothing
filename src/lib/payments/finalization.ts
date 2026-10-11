@@ -317,57 +317,60 @@ export async function finalizeOrderPayment(
           }
         })
 
-        // 1. Queue Order Placed
-        queueOrderNotification({
-          order_id: order.id,
-          order_number: order.order_number,
-          event: 'order_placed',
-          recipient_email: customerEmail,
-          customer_name: customerName,
-          total_amount: order.total_amount,
-          subtotal: (order as any).subtotal_amount || order.total_amount,
-          shipping_amount: order.shipping_amount,
-          discount_amount: order.coupon_discount,
-          payment_method: 'cashfree',
-          payment_status: 'paid',
-          items: notificationItems,
-          shipping_address: order.shipping_address as any,
-        }).catch((e) =>
-          console.warn('[finalizeOrderPayment] Outbox order_placed error:', e)
-        )
+        // 1. Await outbox notifications so serverless execution is not frozen prematurely
+        await Promise.allSettled([
+          // Customer Order Placed
+          queueOrderNotification(
+            {
+              order_id: order.id,
+              order_number: order.order_number,
+              event: 'order_placed',
+              recipient_email: customerEmail,
+              customer_name: customerName,
+              total_amount: order.total_amount,
+              subtotal: (order as any).subtotal_amount || order.total_amount,
+              shipping_amount: order.shipping_amount,
+              discount_amount: order.coupon_discount,
+              payment_method: 'cashfree',
+              payment_status: 'paid',
+              items: notificationItems,
+              shipping_address: order.shipping_address as any,
+            },
+            { immediate: true }
+          ),
 
-        // 2. Queue Order Confirmed
-        queueOrderNotification({
-          order_id: order.id,
-          order_number: order.order_number,
-          event: 'order_confirmed',
-          recipient_email: customerEmail,
-          customer_name: customerName,
-          total_amount: order.total_amount,
-          subtotal: (order as any).subtotal_amount || order.total_amount,
-          shipping_amount: order.shipping_amount,
-          discount_amount: order.coupon_discount,
-          payment_method: 'cashfree',
-          payment_status: 'paid',
-          items: notificationItems,
-          shipping_address: order.shipping_address as any,
-        }).catch((e) =>
-          console.warn('[finalizeOrderPayment] Outbox order_confirmed error:', e)
-        )
+          // Customer Order Confirmed
+          queueOrderNotification(
+            {
+              order_id: order.id,
+              order_number: order.order_number,
+              event: 'order_confirmed',
+              recipient_email: customerEmail,
+              customer_name: customerName,
+              total_amount: order.total_amount,
+              subtotal: (order as any).subtotal_amount || order.total_amount,
+              shipping_amount: order.shipping_amount,
+              discount_amount: order.coupon_discount,
+              payment_method: 'cashfree',
+              payment_status: 'paid',
+              items: notificationItems,
+              shipping_address: order.shipping_address as any,
+            },
+            { immediate: true }
+          ),
 
-        // 3. Queue Admin New Order Notification
-        queueAdminNewOrderNotification(
-          {
-            ...(updatedOrder || order),
-            order_items: hydratedItems,
-            customer_email: customerEmail,
-            customer_name: customerName,
-            customer_phone: (order.shipping_address as any)?.phone || order.guest_phone,
-          },
-          { immediate: true }
-        ).catch((e) =>
-          console.warn('[finalizeOrderPayment] Admin new order notification error:', e)
-        )
+          // Admin New Order Notification to bubbleboomstore2026@gmail.com
+          queueAdminNewOrderNotification(
+            {
+              ...(updatedOrder || order),
+              order_items: hydratedItems,
+              customer_email: customerEmail,
+              customer_name: customerName,
+              customer_phone: (order.shipping_address as any)?.phone || order.guest_phone,
+            },
+            { immediate: true }
+          ),
+        ])
       } catch (emailErr) {
         console.warn('[finalizeOrderPayment] Outbox email queue warning:', emailErr)
       }

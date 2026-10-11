@@ -204,11 +204,11 @@ export function renderNotificationHtml(
               <tr>
                 ${
                   img
-                    ? `<td style="padding-right: 12px; vertical-align: middle;">
-                        <img src="${img}" alt="${name}" width="54" height="54" style="width: 54px; height: 54px; object-fit: contain; border: 1px solid #000; background: #fafafa; display: block;" />
+                    ? `<td style="padding-right: 14px; vertical-align: middle;">
+                        <img src="${img}" alt="${name}" width="80" height="80" style="width: 80px; height: 80px; max-width: 80px; max-height: 80px; object-fit: cover; border: 1px solid #000; background: #fafafa; display: block; border-radius: 0px;" />
                        </td>`
-                    : `<td style="padding-right: 12px; vertical-align: middle;">
-                        <div style="width: 54px; height: 54px; border: 1px solid #000; background: #111; color: #fff; font-size: 8px; font-weight: bold; text-align: center; line-height: 54px; letter-spacing: 1px;">BB</div>
+                    : `<td style="padding-right: 14px; vertical-align: middle;">
+                        <div style="width: 80px; height: 80px; border: 1px solid #000; background: #111; color: #fff; font-size: 11px; font-weight: bold; text-align: center; line-height: 80px; letter-spacing: 1px;">BB</div>
                        </td>`
                 }
                 <td style="vertical-align: middle;">

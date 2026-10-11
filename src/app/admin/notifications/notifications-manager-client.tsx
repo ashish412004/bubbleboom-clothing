@@ -984,7 +984,8 @@ export function NotificationsManagerClient({
                     <th className="p-3">Event</th>
                     <th className="p-3">Order #</th>
                     <th className="p-3">Recipient</th>
-                    <th className="p-3">Status</th>
+                    <th className="p-3">Attempts</th>
+                    <th className="p-3">Status &amp; Sent At</th>
                     <th className="p-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -1017,6 +1018,11 @@ export function NotificationsManagerClient({
                           </div>
                         </td>
                         <td className="p-3">
+                          <span className="font-bold text-black">
+                            {job.attempts ?? job.retry_count ?? 0}
+                          </span>
+                        </td>
+                        <td className="p-3">
                           <span
                             className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                               isSuccess
@@ -1028,6 +1034,11 @@ export function NotificationsManagerClient({
                           >
                             {job.status}
                           </span>
+                          {job.sent_at && (
+                            <div className="text-[10px] text-neutral-500 font-mono mt-0.5">
+                              Sent: {new Date(job.sent_at).toLocaleTimeString('en-IN')}
+                            </div>
+                          )}
                           {job.last_error && (
                             <div className="text-[10px] text-red-600 mt-1 max-w-[200px] truncate" title={job.last_error}>
                               {job.last_error}

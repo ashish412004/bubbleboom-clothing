@@ -54,6 +54,45 @@ export function getSafeImageUrl(
   return fallback
 }
 
+/**
+ * Resolves any image URL (relative, storage path, or absolute) into a valid,
+ * publicly accessible absolute HTTPS URL strictly required for email clients (Gmail, Outlook).
+ */
+export function toAbsoluteEmailImageUrl(
+  url: any,
+  fallback: string = 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&q=80'
+): string {
+  if (!url || typeof url !== 'string') return fallback
+  const trimmed = url.trim()
+  if (!trimmed) return fallback
+
+  // Discard local disk paths or invalid links
+  if (trimmed.includes('\\') || /^[a-zA-Z]:/.test(trimmed)) {
+    return fallback
+  }
+
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://bubbleboom-clothing.vercel.app').replace(/\/$/, '')
+  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co').replace(/\/$/, '')
+
+  // 1. If absolute URL
+  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
+    if (trimmed.includes('localhost:') || trimmed.includes('127.0.0.1:')) {
+      const pathPart = trimmed.replace(/^https?:\/\/[^\/]+/, '')
+      return `${siteUrl}${pathPart.startsWith('/') ? '' : '/'}${pathPart}`
+    }
+    return trimmed
+  }
+
+  // 2. If relative web path (e.g. /images/products/...)
+  if (trimmed.startsWith('/')) {
+    return `${siteUrl}${trimmed}`
+  }
+
+  // 3. If Supabase storage path (e.g. products/... or product-images/...)
+  const cleanPath = trimmed.replace(/^product-images\//, '').replace(/^\/+/, '')
+  return `${supabaseUrl}/storage/v1/object/public/product-images/${cleanPath}`
+}
+
 export function normalizeColor(c?: string | null): string {
   if (!c) return ''
   const trimmed = c.trim().toLowerCase()

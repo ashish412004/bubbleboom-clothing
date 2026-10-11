@@ -155,8 +155,10 @@ export function PaymentReturnClient({
             </span>
             <span className="bg-[#F8F8F6] border border-black px-3.5 py-1.5">
               PAYMENT:{' '}
-              <span className={order?.payment_method === 'cod' ? 'text-amber-800 uppercase font-black' : 'text-black uppercase'}>
-                {order?.payment_method === 'cod' ? 'PENDING COLLECTION (COD)' : 'PAID & VERIFIED'}
+              <span className={order?.payment_status === 'paid' ? 'text-black uppercase font-black' : 'text-amber-800 uppercase font-black'}>
+                {order?.payment_status === 'paid'
+                  ? (order?.payment_method === 'cod' ? 'PAID (COD COLLECTED)' : 'PAID & VERIFIED')
+                  : (order?.payment_method === 'cod' ? 'PENDING COLLECTION (COD)' : order?.payment_status?.toUpperCase() || 'PENDING')}
               </span>
             </span>
           </div>

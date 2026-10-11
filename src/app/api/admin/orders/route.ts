@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { updateOrderStatus, updateFulfillmentDetails, cancelOrder, deleteOrder } from '@/lib/orders'
+import { updateOrderStatus, updateFulfillmentDetails, cancelOrder, deleteOrder, confirmCodPaymentCollection } from '@/lib/orders'
 import { executeRefund } from '@/lib/returns'
 import { getCurrentUser, isAdmin } from '@/lib/auth'
 
@@ -12,12 +12,22 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { action, orderId, status, courierPartner, trackingNumber, refundAmountPaise, refundReason } = body
+    const { action, orderId, status, courierPartner, trackingNumber, refundAmountPaise, refundReason, codPaymentCollected } = body
 
     const supabase = await createServiceClient()
 
     if (action === 'UPDATE_STATUS') {
-      const res = await updateOrderStatus(orderId, status, user.id)
+      const res = await updateOrderStatus(orderId, status, user.id, {
+        codPaymentCollected: typeof codPaymentCollected === 'boolean' ? codPaymentCollected : undefined,
+      })
+      if (res.error) {
+        return NextResponse.json({ error: res.error }, { status: 400 })
+      }
+      return NextResponse.json({ success: true, order: res.data })
+    }
+
+    if (action === 'CONFIRM_COD_PAYMENT') {
+      const res = await confirmCodPaymentCollection(orderId, user.id)
       if (res.error) {
         return NextResponse.json({ error: res.error }, { status: 400 })
       }

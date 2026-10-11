@@ -303,12 +303,14 @@ export function PaymentRecoveryClient({
             </span>
             <span className="bg-[#F8F8F6] border border-black px-3.5 py-1.5">
               PAYMENT:{' '}
-              <span className={isCod ? 'text-amber-800 uppercase font-black' : 'text-black uppercase'}>
-                {isCod ? 'PENDING COLLECTION (COD)' : 'PAID & VERIFIED'}
+              <span className={order?.payment_status === 'paid' ? 'text-black uppercase font-black' : 'text-amber-800 uppercase font-black'}>
+                {order?.payment_status === 'paid'
+                  ? (isCod ? 'PAID (COD COLLECTED)' : 'PAID & VERIFIED')
+                  : (isCod ? 'PENDING COLLECTION (COD)' : 'PENDING')}
               </span>
             </span>
             <span className="bg-black text-white px-3.5 py-1.5 uppercase font-bold">
-              {isCod ? 'DUE ON DELIVERY: ' : 'TOTAL: '}₹{order?.total_amount?.toLocaleString('en-IN')}
+              {isCod && order?.payment_status !== 'paid' ? 'DUE ON DELIVERY: ' : 'TOTAL: '}₹{order?.total_amount?.toLocaleString('en-IN')}
             </span>
           </div>
         </div>

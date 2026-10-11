@@ -170,50 +170,67 @@ export async function POST(request: NextRequest) {
         await clearCart(userId, sessionId)
       }
 
-      // Queue order placed & order confirmed notifications for confirmed COD order
-      queueOrderNotification({
-        order_id: order.id,
-        order_number: order.order_number,
-        event: 'order_placed',
-        recipient_email: email,
-        customer_name: full_name,
-        total_amount: order.total_amount,
-        subtotal: (order as any).subtotal_amount || order.total_amount,
-        shipping_amount: order.shipping_amount,
-        discount_amount: order.coupon_discount,
-        payment_method: 'cod',
-        payment_status: 'pending',
-        items: ((order as any).order_items || []).map((it: any) => ({
-          product_name: it.product_name || 'Bubble Boom Apparel',
-          size: it.variant_info?.size || it.size || null,
-          color: it.variant_info?.color || it.color || null,
-          quantity: it.quantity || 1,
-          price: it.selling_price || it.price || 0,
-          total_amount: it.total_amount || (it.price ? it.price * (it.quantity || 1) : 0),
-          image_url: it.image_url || it.variant_info?.image_url || null,
-        })),
-        shipping_address: order.shipping_address as any,
-      }).catch((e) => console.warn('[checkout] COD order_placed email warning:', e))
+      // Format notification items with absolute image URLs
+      const notificationItems = ((order as any).order_items || []).map((it: any) => ({
+        product_name: it.product_name || 'Bubble Boom Apparel',
+        size: it.variant_info?.size || it.size || null,
+        color: it.variant_info?.color || it.color || null,
+        quantity: it.quantity || 1,
+        price: it.selling_price || it.price || 0,
+        total_amount: it.total_amount || (it.price ? it.price * (it.quantity || 1) : 0),
+        image_url: it.image_url || it.variant_info?.image_url || null,
+      }))
 
-      // Queue automatic New Order Notification to Store Admin Gmail
-      queueAdminNewOrderNotification(
-        {
-          ...order,
-          customer_name: full_name,
-          customer_email: email,
-          customer_phone: phone,
-        },
-        { immediate: true }
-      ).catch((e) => console.warn('[checkout] COD admin_new_order email warning:', e))
+      // In Vercel serverless functions, background promises must be awaited
+      // before returning a response, otherwise execution is frozen.
+      // We run them concurrently with safe fallback so order creation is never aborted.
+      try {
+        await Promise.allSettled([
+          // 1. Customer order_placed email via Outbox
+          queueOrderNotification(
+            {
+              order_id: order.id,
+              order_number: order.order_number,
+              event: 'order_placed',
+              recipient_email: email,
+              customer_name: full_name,
+              total_amount: order.total_amount,
+              subtotal: (order as any).subtotal_amount || order.total_amount,
+              shipping_amount: order.shipping_amount,
+              discount_amount: order.coupon_discount,
+              payment_method: 'cod',
+              payment_status: 'pending',
+              items: notificationItems,
+              shipping_address: order.shipping_address as any,
+            },
+            { immediate: true }
+          ),
 
-      sendOrderConfirmationEmail({
-        email,
-        orderId: order.order_number,
-        customerName: full_name,
-        totalAmount: order.total_amount,
-        items: (order as any).order_items || [],
-        shippingAddress: order.shipping_address,
-      }).catch((e) => console.warn('[checkout] COD email send warning:', e))
+          // 2. Immediate Admin notification to bubbleboomstore2026@gmail.com
+          queueAdminNewOrderNotification(
+            {
+              ...order,
+              customer_name: full_name,
+              customer_email: email,
+              customer_phone: phone,
+              order_items: notificationItems,
+            },
+            { immediate: true }
+          ),
+
+          // 3. Fallback direct confirmation email
+          sendOrderConfirmationEmail({
+            email,
+            orderId: order.order_number,
+            customerName: full_name,
+            totalAmount: order.total_amount,
+            items: (order as any).order_items || [],
+            shippingAddress: order.shipping_address,
+          }),
+        ])
+      } catch (notifyErr) {
+        console.warn('[checkout] Non-fatal notification error during COD order placement:', notifyErr)
+      }
 
       const response = NextResponse.json({
         order_number: order.order_number,

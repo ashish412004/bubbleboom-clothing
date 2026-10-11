@@ -87,7 +87,15 @@ export async function sendOrderShippedEmail(
   orderId: string,
   trackingNumber: string,
   carrier: string,
-  trackingUrl?: string | null
+  trackingUrl?: string | null,
+  options?: {
+    customerName?: string
+    totalAmount?: number
+    items?: any[]
+    shippingAddress?: any
+    paymentMethod?: string
+    paymentStatus?: string
+  }
 ) {
   try {
     const queueRes = await queueOrderNotification({
@@ -95,11 +103,12 @@ export async function sendOrderShippedEmail(
       order_number: orderId,
       event: 'order_shipped',
       recipient_email: email,
-      customer_name: 'Customer',
-      total_amount: 0,
-      payment_method: 'online',
-      payment_status: 'paid',
-      items: [],
+      customer_name: options?.customerName || 'Customer',
+      total_amount: options?.totalAmount || 0,
+      payment_method: options?.paymentMethod || 'online',
+      payment_status: options?.paymentStatus || 'paid',
+      items: options?.items || [],
+      shipping_address: options?.shippingAddress,
       carrier,
       tracking_number: trackingNumber,
       tracking_url: trackingUrl || null,
@@ -113,7 +122,15 @@ export async function sendOrderShippedEmail(
 
 export async function sendOrderDeliveredEmail(
   email: string,
-  orderId: string
+  orderId: string,
+  options?: {
+    customerName?: string
+    totalAmount?: number
+    items?: any[]
+    shippingAddress?: any
+    paymentMethod?: string
+    paymentStatus?: string
+  }
 ) {
   try {
     const queueRes = await queueOrderNotification({
@@ -121,11 +138,12 @@ export async function sendOrderDeliveredEmail(
       order_number: orderId,
       event: 'order_delivered',
       recipient_email: email,
-      customer_name: 'Customer',
-      total_amount: 0,
-      payment_method: 'online',
-      payment_status: 'paid',
-      items: [],
+      customer_name: options?.customerName || 'Customer',
+      total_amount: options?.totalAmount || 0,
+      payment_method: options?.paymentMethod || 'online',
+      payment_status: options?.paymentStatus || 'paid',
+      items: options?.items || [],
+      shipping_address: options?.shippingAddress,
     })
     return { data: { id: queueRes.jobId || `job_${Date.now()}` } }
   } catch (error: any) {

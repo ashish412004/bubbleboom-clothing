@@ -55,6 +55,12 @@ export function AdminOrderManager({ order }: AdminOrderManagerProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [cancelReason, setCancelReason] = useState('Order cancelled by Bubble Boom administrator')
 
+  // COD Collection Prompt & Action state
+  const [showCodDeliveredModal, setShowCodDeliveredModal] = useState(false)
+  const [isConfirmingCodCollection, setIsConfirmingCodCollection] = useState(false)
+
+  const isCod = order.payment_method === 'cod'
+  const isCodUnpaid = isCod && order.payment_status !== 'paid'
   const isOnlineUnpaid = order.payment_method === 'cashfree' && order.payment_status !== 'paid'
   const isDispatchAttemptBlocked = isOnlineUnpaid && ['shipped', 'out_for_delivery'].includes(selectedStatus)
 
@@ -109,12 +115,7 @@ Collectable COD : ${codAmount}
     setTimeout(() => setCopiedSummary(false), 2500)
   }
 
-  const handleUpdateStatus = async () => {
-    if (isDispatchAttemptBlocked) {
-      toast.error('Cannot dispatch order: Online payment is not confirmed.')
-      return
-    }
-
+  const performStatusUpdate = async (codPaymentCollected?: boolean) => {
     setLoading(true)
     try {
       const res = await fetch('/api/admin/orders', {
@@ -124,18 +125,63 @@ Collectable COD : ${codAmount}
           action: 'UPDATE_STATUS',
           orderId: order.id,
           status: selectedStatus,
+          codPaymentCollected,
         }),
       })
 
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to update order status')
 
-      toast.success(`Order status updated to ${selectedStatus.replace(/_/g, ' ')}`)
+      toast.success(
+        codPaymentCollected
+          ? `Order marked Delivered & COD payment recorded as PAID!`
+          : `Order status updated to ${selectedStatus.replace(/_/g, ' ')}`
+      )
+      setShowCodDeliveredModal(false)
       router.refresh()
     } catch (err: any) {
       toast.error(err.message || 'Status update failed')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleUpdateStatus = async () => {
+    if (isDispatchAttemptBlocked) {
+      toast.error('Cannot dispatch order: Online payment is not confirmed.')
+      return
+    }
+
+    // If changing a COD order to "delivered", prompt admin whether cash was collected
+    if (selectedStatus === 'delivered' && isCod) {
+      setShowCodDeliveredModal(true)
+      return
+    }
+
+    await performStatusUpdate()
+  }
+
+  const handleDirectCodPaymentCollection = async () => {
+    setIsConfirmingCodCollection(true)
+    try {
+      const res = await fetch('/api/admin/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CONFIRM_COD_PAYMENT',
+          orderId: order.id,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to confirm COD collection')
+
+      toast.success('COD cash payment verified and marked as PAID!')
+      router.refresh()
+    } catch (err: any) {
+      toast.error(err.message || 'Error recording COD collection')
+    } finally {
+      setIsConfirmingCodCollection(false)
     }
   }
 
@@ -300,6 +346,43 @@ Collectable COD : ${codAmount}
               <span className="font-bold uppercase block text-black">Online Payment Unverified</span>
               This order used Cashfree online payment but is marked <strong>{order.payment_status}</strong>. Dispatching to "Shipped" is guarded and blocked until online payment is confirmed or verified.
             </div>
+          </div>
+        )}
+
+        {isCod && (
+          <div className="mb-4 p-4 border border-black bg-[#F8F8F6] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black uppercase tracking-wider text-black">
+                  CASH ON DELIVERY (COD)
+                </span>
+                <span
+                  className={`px-2 py-0.5 text-[10px] font-bold uppercase ${
+                    order.payment_status === 'paid'
+                      ? 'bg-black text-white'
+                      : 'bg-amber-100 border border-amber-800 text-amber-900'
+                  }`}
+                >
+                  {order.payment_status === 'paid' ? 'PAID & COLLECTED' : 'PENDING COLLECTION'}
+                </span>
+              </div>
+              <p className="text-[11px] text-neutral-600 mt-1">
+                {order.payment_status === 'paid'
+                  ? `Payment of ₹${order.total_amount?.toLocaleString('en-IN')} has been verified and recorded.`
+                  : `Amount to collect upon delivery: ₹${order.total_amount?.toLocaleString('en-IN')}.`}
+              </p>
+            </div>
+
+            {isCodUnpaid && (
+              <button
+                type="button"
+                onClick={handleDirectCodPaymentCollection}
+                disabled={isConfirmingCodCollection}
+                className="bg-black text-white px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider hover:bg-neutral-800 transition-colors shrink-0 disabled:opacity-50"
+              >
+                {isConfirmingCodCollection ? 'Recording...' : 'Confirm COD Payment Collected'}
+              </button>
+            )}
           </div>
         )}
 
@@ -742,6 +825,66 @@ Collectable COD : ${codAmount}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* COD Delivery Payment Prompt Modal */}
+      {showCodDeliveredModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white border-2 border-black max-w-md w-full p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-4">
+            <div className="flex items-start gap-3">
+              <Package className="w-6 h-6 text-black shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-base font-black uppercase tracking-tight">
+                  COD Payment Verification
+                </h3>
+                <p className="text-xs text-neutral-600 font-mono mt-1">
+                  You are marking order <strong className="text-black font-bold">#{order.order_number}</strong> as{' '}
+                  <strong className="text-black uppercase">Delivered</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-[#F8F8F6] border border-black font-mono text-xs space-y-1">
+              <div className="text-neutral-500 uppercase text-[10px] font-bold">Cash to Collect</div>
+              <div className="text-lg font-black text-black">
+                ₹{order.total_amount?.toLocaleString('en-IN')}
+              </div>
+              <p className="text-[11px] text-neutral-600 pt-1">
+                Was this Cash on Delivery amount collected from the customer upon delivery?
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => performStatusUpdate(true)}
+                className="w-full bg-black text-white py-3 text-xs font-mono font-bold uppercase tracking-wider hover:bg-neutral-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                <span>Yes, Payment Collected (Mark Paid)</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => performStatusUpdate(false)}
+                className="w-full bg-white text-black border border-black py-2.5 text-xs font-mono font-bold uppercase tracking-wider hover:bg-neutral-100 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <span>No, Payment Still Pending</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => setShowCodDeliveredModal(false)}
+                className="w-full text-neutral-500 py-1.5 text-[11px] font-mono uppercase hover:text-black transition-colors"
+              >
+                Cancel Status Change
+              </button>
+            </div>
           </div>
         </div>
       )}

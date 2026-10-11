@@ -9,7 +9,7 @@ import { queueOrderNotification, OrderNotificationEvent } from '@/lib/emails/not
 import { isAdmin } from '@/lib/auth'
 import { MOCK_PRODUCTS, MOCK_ORDERS } from '@/lib/mock-data'
 import { getDevProducts } from '@/lib/products'
-import { parseProductImage, findImageForVariantColor, normalizeColor } from '@/lib/utils'
+import { parseProductImage, findImageForVariantColor, normalizeColor, toAbsoluteEmailImageUrl } from '@/lib/utils'
 import fs from 'fs'
 import path from 'path'
 
@@ -179,15 +179,15 @@ export async function hydrateOrderItemsWithImages(
   const missingItems = items.filter((item) => !resolveOrderItemImage(item))
 
   if (missingItems.length === 0) {
-    // Standardize: ensure both item.image_url and item.variant_info.image_url are uniformly set
+    // Standardize: ensure both item.image_url and item.variant_info.image_url are uniformly set to absolute URLs
     return items.map((item) => {
-      const img = resolveOrderItemImage(item)
+      const img = toAbsoluteEmailImageUrl(resolveOrderItemImage(item))
       return {
         ...item,
         image_url: img,
         variant_info: {
           ...(item.variant_info || {}),
-          image_url: img || item.variant_info?.image_url || null,
+          image_url: img || toAbsoluteEmailImageUrl(item.variant_info?.image_url) || null,
         },
       }
     })
@@ -228,13 +228,14 @@ export async function hydrateOrderItemsWithImages(
             const matchedImg = findImageForVariantColor(p.images || [], itemColor)
             resolved = matchedImg?.image_url || null
           }
+          const absoluteImg = toAbsoluteEmailImageUrl(resolved)
 
           return {
             ...item,
-            image_url: resolved,
+            image_url: absoluteImg,
             variant_info: {
               ...(item.variant_info || {}),
-              image_url: resolved || item.variant_info?.image_url || null,
+              image_url: absoluteImg || toAbsoluteEmailImageUrl(item.variant_info?.image_url) || null,
             },
           }
         })
@@ -261,13 +262,14 @@ export async function hydrateOrderItemsWithImages(
         resolved = matchedImg?.image_url || null
       }
     }
+    const absoluteImg = toAbsoluteEmailImageUrl(resolved)
 
     return {
       ...item,
-      image_url: resolved,
+      image_url: absoluteImg,
       variant_info: {
         ...(item.variant_info || {}),
-        image_url: resolved || item.variant_info?.image_url || null,
+        image_url: absoluteImg || toAbsoluteEmailImageUrl(item.variant_info?.image_url) || null,
       },
     }
   })
@@ -482,7 +484,8 @@ export async function createOrder(input: CreateOrderInput) {
     subtotalPaise += itemTotalPaise
 
     const colorImg = findImageForVariantColor(prod.images, v.color)
-    const imageUrl = colorImg?.image_url || null
+    const rawImageUrl = colorImg?.image_url || null
+    const imageUrl = toAbsoluteEmailImageUrl(rawImageUrl)
 
     itemSnapshots.push({
       variant_id: v.id,
@@ -1013,34 +1016,12 @@ export async function notifyOrderStatusChange(order: any, newStatus: string) {
     return
   }
 
-  if (newStatus === 'shipped') {
-    try {
-      await sendOrderShippedEmail(
-        customerEmail,
-        order.order_number || order.id,
-        order.tracking_number || 'AWB-PENDING',
-        order.carrier || 'Express Courier',
-        order.tracking_url || null
-      )
-    } catch (e) {
-      console.warn('[notifyOrderStatusChange] sendOrderShippedEmail error:', e)
-    }
-    return
-  }
-
-  if (newStatus === 'delivered') {
-    try {
-      await sendOrderDeliveredEmail(customerEmail, order.order_number || order.id)
-    } catch (e) {
-      console.warn('[notifyOrderStatusChange] sendOrderDeliveredEmail error:', e)
-    }
-    return
-  }
-
   let event: OrderNotificationEvent | null = null
   if (newStatus === 'confirmed') event = 'order_confirmed'
   else if (newStatus === 'packed') event = 'order_packed'
+  else if (newStatus === 'shipped') event = 'order_shipped'
   else if (newStatus === 'out_for_delivery') event = 'out_for_delivery'
+  else if (newStatus === 'delivered') event = 'order_delivered'
   else if (newStatus === 'cancelled') event = 'order_cancelled'
   else if (newStatus === 'refunded') event = 'refund_completed'
 
@@ -1048,8 +1029,13 @@ export async function notifyOrderStatusChange(order: any, newStatus: string) {
 
   try {
     const rawItems = order.order_items || []
-    const items = rawItems.map((it: any) => {
+    const supabase = isSupabaseConfigured() ? await createServiceClient() : undefined
+    // Ensure all items are hydrated with high-res color-accurate product images
+    const hydratedOrderItems = await hydrateOrderItemsWithImages(rawItems, supabase)
+    const items = (hydratedOrderItems || []).map((it: any) => {
       const v = it.variant_info || {}
+      const rawImg = it.image_url || v.image_url || null
+      const safeImg = toAbsoluteEmailImageUrl(rawImg)
       return {
         product_id: it.product_id,
         product_name: it.product_name || it.name || 'Bubble Boom Apparel',
@@ -1058,9 +1044,55 @@ export async function notifyOrderStatusChange(order: any, newStatus: string) {
         quantity: it.quantity || 1,
         price: it.selling_price || it.price || 0,
         total_amount: it.total_amount || (it.price ? it.price * (it.quantity || 1) : 0),
-        image_url: it.image_url || v.image_url || null,
+        image_url: safeImg,
       }
     })
+
+    const customerName = (order.shipping_address as any)?.full_name || order.customer_name || 'Customer'
+
+    // Call dedicated helper for shipped and delivered so any specialized transport/spies are satisfied
+    if (newStatus === 'shipped') {
+      try {
+        await sendOrderShippedEmail(
+          customerEmail,
+          order.order_number || order.id,
+          order.tracking_number || 'AWB-PENDING',
+          order.carrier || order.courier_partner || 'Express Courier',
+          order.tracking_url || null,
+          {
+            customerName,
+            totalAmount: order.total_amount || 0,
+            items,
+            shippingAddress: order.shipping_address,
+            paymentMethod: order.payment_method || 'cod',
+            paymentStatus: order.payment_status || 'pending',
+          }
+        )
+      } catch (e) {
+        console.warn('[notifyOrderStatusChange] sendOrderShippedEmail notice:', e)
+      }
+      return
+    }
+
+    if (newStatus === 'delivered') {
+      try {
+        await sendOrderDeliveredEmail(
+          customerEmail,
+          order.order_number || order.id,
+          {
+            customerName,
+            totalAmount: order.total_amount || 0,
+            items,
+            shippingAddress: order.shipping_address,
+            paymentMethod: order.payment_method || 'cod',
+            paymentStatus: order.payment_status || 'pending',
+          }
+        )
+      } catch (e) {
+        console.warn('[notifyOrderStatusChange] sendOrderDeliveredEmail notice:', e)
+      }
+      return
+    }
 
     await queueOrderNotification(
       {
@@ -1098,7 +1130,10 @@ export async function notifyOrderStatusChange(order: any, newStatus: string) {
 export async function updateOrderStatus(
   orderId: string,
   newStatus: OrderStatus,
-  adminUserId?: string
+  adminUserId?: string,
+  options?: {
+    codPaymentCollected?: boolean
+  }
 ) {
   if (!isSupabaseConfigured()) {
     const devOrders = getDevOrders()
@@ -1124,6 +1159,16 @@ export async function updateOrderStatus(
     found.status = newStatus
     found.updated_at = new Date().toISOString()
 
+    // Handle COD payment collection upon delivery
+    if (found.payment_method === 'cod') {
+      if (options?.codPaymentCollected === true) {
+        found.payment_status = 'paid'
+        found.cod_collected_at = new Date().toISOString()
+      } else if (newStatus !== 'delivered' && options?.codPaymentCollected === false) {
+        found.payment_status = 'pending'
+      }
+    }
+
     // Status history entry
     found.status_history = Array.isArray(found.status_history) ? found.status_history : []
     found.status_history.push({
@@ -1131,6 +1176,7 @@ export async function updateOrderStatus(
       to: newStatus,
       timestamp: new Date().toISOString(),
       admin_id: adminUserId || null,
+      cod_payment_collected: options?.codPaymentCollected,
     })
 
     if (newStatus === 'shipped') found.shipped_email_sent_at = new Date().toISOString()
@@ -1177,6 +1223,7 @@ export async function updateOrderStatus(
     to: newStatus,
     timestamp: new Date().toISOString(),
     admin_id: adminUserId || null,
+    cod_payment_collected: options?.codPaymentCollected,
   })
 
   let shippedEmailSentAt = (currentOrder as any).shipped_email_sent_at
@@ -1185,27 +1232,41 @@ export async function updateOrderStatus(
   if (newStatus === 'shipped') shippedEmailSentAt = new Date().toISOString()
   if (newStatus === 'delivered') deliveredEmailSentAt = new Date().toISOString()
 
-  let { data, error } = await supabase
-    .from('orders')
-    .update({
-      status: newStatus,
-      status_history: history as any,
-      shipped_email_sent_at: shippedEmailSentAt,
-      delivered_email_sent_at: deliveredEmailSentAt,
-      updated_at: new Date().toISOString(),
-    })
+  const updatePayload: Record<string, any> = {
+    status: newStatus,
+    status_history: history as any,
+    shipped_email_sent_at: shippedEmailSentAt,
+    delivered_email_sent_at: deliveredEmailSentAt,
+    updated_at: new Date().toISOString(),
+  }
+
+  // If COD order and admin specified payment collected status
+  if (currentOrder.payment_method === 'cod') {
+    if (options?.codPaymentCollected === true) {
+      updatePayload.payment_status = 'paid'
+      updatePayload.cod_collected_at = new Date().toISOString()
+    } else if (options?.codPaymentCollected === false) {
+      updatePayload.payment_status = 'pending'
+    }
+  }
+
+  let { data, error } = await (supabase.from('orders') as any)
+    .update(updatePayload)
     .eq('id', orderId)
     .select()
     .single()
 
   if (error && (error.message.includes('column') || error.message.includes('schema cache'))) {
     console.warn('[updateOrderStatus] Extended status columns missing, falling back to core status:', error.message)
-    const fallbackRes = await supabase
-      .from('orders')
-      .update({
-        status: newStatus,
-        updated_at: new Date().toISOString(),
-      })
+    const fallbackPayload: Record<string, any> = {
+      status: newStatus,
+      updated_at: new Date().toISOString(),
+    }
+    if (currentOrder.payment_method === 'cod' && options?.codPaymentCollected === true) {
+      fallbackPayload.payment_status = 'paid'
+    }
+    const fallbackRes = await (supabase.from('orders') as any)
+      .update(fallbackPayload)
       .eq('id', orderId)
       .select()
       .single()
@@ -1214,6 +1275,28 @@ export async function updateOrderStatus(
   }
 
   if (error) return { error: error.message }
+
+  // If COD payment was confirmed as collected, also insert or update payment record
+  if (currentOrder.payment_method === 'cod' && options?.codPaymentCollected === true) {
+    try {
+      await supabase.from('payments').insert({
+        order_id: currentOrder.id,
+        cashfree_order_id: `COD-${currentOrder.order_number}`,
+        cf_payment_id: `CASH-COLLECTED-${Date.now()}`,
+        amount: currentOrder.total_amount,
+        status: 'paid',
+        payment_method: 'cod',
+        currency: 'INR',
+        payment_data: {
+          collected_by_admin: adminUserId || 'system',
+          collected_at: new Date().toISOString(),
+          status: 'PAID',
+        },
+      })
+    } catch (payErr) {
+      console.warn('[updateOrderStatus] Non-fatal COD payment record creation warning:', payErr)
+    }
+  }
 
   // Hydrate order items and send notification after database update succeeds
   try {
@@ -1240,7 +1323,97 @@ export async function updateOrderStatus(
         action: 'UPDATE_ORDER_STATUS',
         entity: 'orders',
         entity_id: orderId,
-        metadata: { from: currentOrder.status, to: newStatus },
+        metadata: {
+          from: currentOrder.status,
+          to: newStatus,
+          cod_payment_collected: options?.codPaymentCollected,
+        },
+      })
+    } catch {}
+  }
+
+  return { data }
+}
+
+/**
+ * Explicitly confirms COD cash collection for a delivered order.
+ */
+export async function confirmCodPaymentCollection(
+  orderId: string,
+  adminUserId?: string
+) {
+  if (!isSupabaseConfigured()) {
+    const devOrders = getDevOrders()
+    const found = devOrders.find((o) => o.id === orderId || o.order_number === orderId)
+    if (!found) return { error: 'Order not found' }
+    found.payment_status = 'paid'
+    found.cod_collected_at = new Date().toISOString()
+    found.updated_at = new Date().toISOString()
+    saveDevOrder(found)
+    return { data: found }
+  }
+
+  const supabase = await createServiceClient()
+  const { data: currentOrder, error: fetchErr } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('id', orderId)
+    .single()
+
+  if (fetchErr || !currentOrder) return { error: 'Order not found' }
+
+  let { data, error } = await (supabase.from('orders') as any)
+    .update({
+      payment_status: 'paid',
+      cod_collected_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', orderId)
+    .select()
+    .single()
+
+  if (error && (error.message.includes('column') || error.message.includes('schema cache'))) {
+    const fallbackRes = await (supabase.from('orders') as any)
+      .update({
+        payment_status: 'paid',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .select()
+      .single()
+    data = fallbackRes.data
+    error = fallbackRes.error
+  }
+
+  if (error) return { error: error.message }
+
+  try {
+    await supabase.from('payments').insert({
+      order_id: currentOrder.id,
+      cashfree_order_id: `COD-${currentOrder.order_number}`,
+      cf_payment_id: `CASH-COLLECTED-${Date.now()}`,
+      amount: currentOrder.total_amount,
+      status: 'paid',
+      payment_method: 'cod',
+      currency: 'INR',
+      payment_data: {
+        collected_by_admin: adminUserId || 'system',
+        collected_at: new Date().toISOString(),
+        action: 'CONFIRM_COD_PAYMENT',
+      },
+    })
+  } catch (payErr) {
+    console.warn('[confirmCodPaymentCollection] Payment row record notice:', payErr)
+  }
+
+  if (adminUserId) {
+    try {
+      await supabase.from('admin_audit_logs').insert({
+        admin_id: adminUserId,
+        action: 'CONFIRM_COD_PAYMENT',
+        entity: 'orders',
+        entity_id: orderId,
+        metadata: { amount: currentOrder.total_amount },
       })
     } catch {}
   }

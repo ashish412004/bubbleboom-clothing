@@ -245,10 +245,16 @@ export function generateOrderInvoicePdf(order: InvoiceOrderData): Buffer {
   y += 5
 
   // Grand Total
+  const isPaid = order.payment_status === 'paid'
+  const isCod = order.payment_method === 'cod'
+  const grandTotalLabel = isPaid
+    ? (isCod ? 'TOTAL COLLECTED (COD):' : 'TOTAL AMOUNT PAID:')
+    : (isCod ? 'TOTAL AMOUNT (COD DUE):' : 'TOTAL AMOUNT:')
+
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
   doc.setTextColor(0, 0, 0)
-  doc.text('TOTAL AMOUNT PAID:', summaryX, y)
+  doc.text(grandTotalLabel, summaryX, y)
   doc.text(`Rs. ${order.total_amount.toLocaleString('en-IN')}`, summaryValX, y, { align: 'right' })
 
   y += 14
