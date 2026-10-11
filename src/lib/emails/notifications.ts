@@ -53,7 +53,14 @@ async function persistJobToSupabase(job: OutboxJobRecord) {
       order_id: job.order_id,
       customer_email: job.customer_email,
       event_type: job.event_type,
-      status: job.status === 'completed' ? 'sent' : job.status,
+      status:
+        job.status === 'completed' || job.status === 'sent'
+          ? 'sent'
+          : job.status === 'failed' || job.status === 'simulated'
+          ? 'failed'
+          : job.status === 'processing'
+          ? 'processing'
+          : 'pending',
       attempts: job.attempts || 0,
       last_error: job.last_error || null,
       created_at: job.created_at,
@@ -105,7 +112,14 @@ async function updateJobInSupabase(job: OutboxJobRecord) {
     const { error: outboxErr } = await (supabase as any)
       .from('email_notification_outbox')
       .update({
-        status: job.status === 'completed' ? 'sent' : job.status,
+        status:
+          job.status === 'completed' || job.status === 'sent'
+            ? 'sent'
+            : job.status === 'failed' || job.status === 'simulated'
+            ? 'failed'
+            : job.status === 'processing'
+            ? 'processing'
+            : 'pending',
         attempts: job.attempts,
         last_error: job.last_error,
         sent_at: job.sent_at,
