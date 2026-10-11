@@ -299,10 +299,16 @@ export function PaymentRecoveryClient({
               ORDER #: <span className="text-black">{orderNumber}</span>
             </span>
             <span className="bg-[#F8F8F6] border border-black px-3.5 py-1.5">
-              STATUS: <span className="text-black uppercase">PAID &amp; CONFIRMED</span>
+              ORDER STATUS: <span className="text-black uppercase">CONFIRMED</span>
+            </span>
+            <span className="bg-[#F8F8F6] border border-black px-3.5 py-1.5">
+              PAYMENT:{' '}
+              <span className={isCod ? 'text-amber-800 uppercase font-black' : 'text-black uppercase'}>
+                {isCod ? 'PENDING COLLECTION (COD)' : 'PAID & VERIFIED'}
+              </span>
             </span>
             <span className="bg-black text-white px-3.5 py-1.5 uppercase font-bold">
-              ₹{order?.total_amount?.toLocaleString('en-IN')}
+              {isCod ? 'DUE ON DELIVERY: ' : 'TOTAL: '}₹{order?.total_amount?.toLocaleString('en-IN')}
             </span>
           </div>
         </div>
@@ -315,38 +321,47 @@ export function PaymentRecoveryClient({
               <ShoppingBag size={14} />
               Purchased Items ({items.length})
             </h3>
-            <div className="divide-y divide-neutral-200 space-y-3 max-h-72 overflow-y-auto pr-1">
+            <div className="divide-y divide-neutral-200 space-y-3 max-h-80 overflow-y-auto pr-1">
               {items.map((item: any, idx: number) => {
                 const varInfo = item.variant_info || {}
+                const imageUrl = item.image_url || varInfo.image_url || null
                 return (
-                  <div key={item.id || idx} className="pt-3 flex items-start gap-3">
-                    <div className="w-12 h-16 bg-neutral-200 border shrink-0 overflow-hidden relative">
-                      {item.image_url ? (
+                  <div key={item.id || idx} className="pt-3 flex items-center gap-3.5">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-neutral-100 border border-neutral-300 shrink-0 relative flex items-center justify-center overflow-hidden p-1">
+                      {imageUrl ? (
                         <Image
-                          src={getSafeImageUrl(item.image_url)}
-                          alt={item.product_name}
+                          src={getSafeImageUrl(imageUrl)}
+                          alt={item.product_name || 'Purchased Item'}
                           fill
-                          className="object-cover"
+                          sizes="80px"
+                          className="object-contain p-1"
                         />
                       ) : (
-                        <Package className="w-5 h-5 m-auto text-neutral-400 mt-5" />
+                        <div className="flex flex-col items-center justify-center text-neutral-400">
+                          <Package className="w-5 h-5 mb-0.5" />
+                          <span className="text-[8px] font-mono font-bold tracking-widest uppercase">BOOM</span>
+                        </div>
                       )}
                     </div>
-                    <div className="flex-grow text-xs">
-                      <p className="font-bold line-clamp-1">{item.product_name}</p>
-                      <div className="flex items-center gap-1.5 mt-1 text-[10px]">
-                        <span className="bg-black text-white font-mono px-1.5 py-0.5 uppercase">
-                          Size: {varInfo.size || 'M'}
-                        </span>
-                        <span className="bg-neutral-200 text-neutral-800 font-semibold px-1.5 py-0.5 uppercase">
+                    <div className="flex-grow text-xs min-w-0">
+                      <p className="font-bold line-clamp-1 uppercase text-black">{item.product_name}</p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px]">
+                        {varInfo.size && (
+                          <span className="bg-black text-white font-mono px-1.5 py-0.5 uppercase font-bold">
+                            Size: {varInfo.size}
+                          </span>
+                        )}
+                        {varInfo.color && (
+                          <span className="bg-neutral-200 text-neutral-800 font-semibold px-1.5 py-0.5 uppercase">
+                            Color: {varInfo.color}
+                          </span>
+                        )}
+                        <span className="bg-neutral-100 border border-neutral-300 text-neutral-700 font-semibold px-1.5 py-0.5 uppercase">
                           Qty: {item.quantity}
                         </span>
-                        {varInfo.color && (
-                          <span className="text-neutral-500 uppercase">{varInfo.color}</span>
-                        )}
                       </div>
                     </div>
-                    <span className="text-xs font-black shrink-0">
+                    <span className="text-xs font-black font-mono shrink-0">
                       ₹{(item.total_amount || item.selling_price * item.quantity).toLocaleString('en-IN')}
                     </span>
                   </div>
@@ -503,38 +518,47 @@ export function PaymentRecoveryClient({
             <span className="text-[11px] font-mono text-neutral-500">Locked for Retry</span>
           </div>
 
-          <div className="divide-y divide-neutral-200 space-y-3 max-h-72 overflow-y-auto pr-1">
+          <div className="divide-y divide-neutral-200 space-y-3 max-h-80 overflow-y-auto pr-1">
             {items.map((item: any, idx: number) => {
               const varInfo = item.variant_info || {}
+              const imageUrl = item.image_url || varInfo.image_url || null
               return (
-                <div key={item.id || idx} className="pt-3 flex items-start gap-3">
-                  <div className="w-12 h-16 bg-neutral-200 border shrink-0 overflow-hidden relative">
-                    {item.image_url ? (
+                <div key={item.id || idx} className="pt-3 flex items-center gap-3.5">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 bg-neutral-100 border border-neutral-300 shrink-0 relative flex items-center justify-center overflow-hidden p-1">
+                    {imageUrl ? (
                       <Image
-                        src={getSafeImageUrl(item.image_url)}
-                        alt={item.product_name}
+                        src={getSafeImageUrl(imageUrl)}
+                        alt={item.product_name || 'Preserved Item'}
                         fill
-                        className="object-cover"
+                        sizes="80px"
+                        className="object-contain p-1"
                       />
                     ) : (
-                      <Package className="w-5 h-5 m-auto text-neutral-400 mt-5" />
+                      <div className="flex flex-col items-center justify-center text-neutral-400">
+                        <Package className="w-5 h-5 mb-0.5" />
+                        <span className="text-[8px] font-mono font-bold tracking-widest uppercase">BOOM</span>
+                      </div>
                     )}
                   </div>
-                  <div className="flex-grow text-xs">
-                    <p className="font-bold line-clamp-1">{item.product_name}</p>
-                    <div className="flex items-center gap-1.5 mt-1 text-[10px]">
-                      <span className="bg-black text-white font-mono px-1.5 py-0.5 uppercase">
-                        Size: {varInfo.size || 'M'}
-                      </span>
-                      <span className="bg-neutral-200 text-neutral-800 font-semibold px-1.5 py-0.5 uppercase">
+                  <div className="flex-grow text-xs min-w-0">
+                    <p className="font-bold line-clamp-1 uppercase text-black">{item.product_name}</p>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px]">
+                      {varInfo.size && (
+                        <span className="bg-black text-white font-mono px-1.5 py-0.5 uppercase font-bold">
+                          Size: {varInfo.size}
+                        </span>
+                      )}
+                      {varInfo.color && (
+                        <span className="bg-neutral-200 text-neutral-800 font-semibold px-1.5 py-0.5 uppercase">
+                          Color: {varInfo.color}
+                        </span>
+                      )}
+                      <span className="bg-neutral-100 border border-neutral-300 text-neutral-700 font-semibold px-1.5 py-0.5 uppercase">
                         Qty: {item.quantity}
                       </span>
-                      {varInfo.color && (
-                        <span className="text-neutral-500 uppercase">{varInfo.color}</span>
-                      )}
                     </div>
                   </div>
-                  <span className="text-xs font-black shrink-0">
+                  <span className="text-xs font-black font-mono shrink-0">
                     ₹{(item.total_amount || item.selling_price * item.quantity).toLocaleString('en-IN')}
                   </span>
                 </div>

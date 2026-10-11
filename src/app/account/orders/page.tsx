@@ -4,8 +4,10 @@ import { getCurrentUser } from '@/lib/auth'
 import { getOrdersByUserId } from '@/lib/orders'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { AccountNav } from '@/components/account/account-nav'
 import { ArrowRight, Package, Download } from 'lucide-react'
+import { getSafeImageUrl } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -90,6 +92,39 @@ export default async function OrdersPage() {
                         </div>
                       </div>
 
+                      {/* Items Preview Strip */}
+                      {Array.isArray((ord as any).order_items) && (ord as any).order_items.length > 0 && (
+                        <div className="py-3 border-b border-neutral-200 flex flex-wrap items-center gap-3">
+                          {(ord as any).order_items.map((item: any, idx: number) => {
+                            const v = item.variant_info || {}
+                            const img = item.image_url || v.image_url || null
+                            return (
+                              <div key={item.id || idx} className="flex items-center gap-2 bg-[#F8F8F6] border border-neutral-200 p-1.5 pr-3">
+                                <div className="w-12 h-12 bg-neutral-100 border border-neutral-300 shrink-0 relative flex items-center justify-center overflow-hidden p-0.5">
+                                  {img ? (
+                                    <Image
+                                      src={getSafeImageUrl(img)}
+                                      alt={item.product_name || 'Item'}
+                                      fill
+                                      sizes="48px"
+                                      className="object-contain p-0.5"
+                                    />
+                                  ) : (
+                                    <Package className="w-4 h-4 text-neutral-400" />
+                                  )}
+                                </div>
+                                <div className="text-xs">
+                                  <p className="font-bold line-clamp-1 uppercase text-black max-w-[150px]">{item.product_name}</p>
+                                  <p className="text-[10px] text-neutral-500 font-mono">
+                                    {v.size ? `Size: ${v.size}` : ''} {v.color ? `• ${v.color}` : ''} • Qty: {item.quantity}
+                                  </p>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
                       <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="text-xs text-neutral-600 font-mono flex flex-wrap items-center gap-2">
                           <span>Payment: <strong>{ord.payment_method.toUpperCase()}</strong></span>
@@ -97,12 +132,18 @@ export default async function OrdersPage() {
                             className={`px-2 py-0.5 text-[10px] font-bold uppercase ${
                               ord.payment_status === 'paid'
                                 ? 'bg-black text-white'
+                                : ord.payment_method === 'cod'
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                 : ord.payment_status === 'failed'
                                 ? 'bg-red-100 text-red-800 border border-red-300'
                                 : 'bg-neutral-100 text-neutral-700'
                             }`}
                           >
-                            {ord.payment_status === 'paid' ? 'PAID ✓' : ord.payment_status.toUpperCase()}
+                            {ord.payment_status === 'paid'
+                              ? 'PAID ✓'
+                              : ord.payment_method === 'cod'
+                              ? 'COLLECTION PENDING (COD)'
+                              : ord.payment_status.toUpperCase()}
                           </span>
                           {ord.tracking_number && (
                             <span className="block sm:inline sm:ml-2 text-black font-bold">

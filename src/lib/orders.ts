@@ -7,6 +7,7 @@ import { createCashfreeOrder, getCashfreeConfig, getPaymentStatus } from '@/lib/
 import { sendOrderShippedEmail, sendOrderDeliveredEmail } from '@/lib/emails/resend'
 import { isAdmin } from '@/lib/auth'
 import { MOCK_PRODUCTS, MOCK_ORDERS } from '@/lib/mock-data'
+import { getDevProducts } from '@/lib/products'
 import { parseProductImage, findImageForVariantColor, normalizeColor } from '@/lib/utils'
 import fs from 'fs'
 import path from 'path'
@@ -149,6 +150,129 @@ export function isValidOrderStatusTransition(currentStatus: OrderStatus, newStat
 }
 
 /**
+ * Resolves the primary or color-accurate image URL for an order item.
+ * Checks item.image_url first, then variant_info.image_url.
+ */
+export function resolveOrderItemImage(item: any): string | null {
+  if (!item) return null
+  const direct = item.image_url || item.variant_info?.image_url
+  if (direct && typeof direct === 'string' && direct.trim().length > 0) {
+    return direct.trim()
+  }
+  return null
+}
+
+/**
+ * Hydrates order items with their color-accurate product images.
+ * If an order item already contains an image in variant_info or image_url, it is preserved.
+ * Otherwise, dynamically resolves the matching color variant image from products/product_images
+ * falling back to the primary product image.
+ */
+export async function hydrateOrderItemsWithImages(
+  items: any[],
+  supabaseClient?: any
+): Promise<any[]> {
+  if (!items || items.length === 0) return items
+
+  // Check which items are missing an image
+  const missingItems = items.filter((item) => !resolveOrderItemImage(item))
+
+  if (missingItems.length === 0) {
+    // Standardize: ensure both item.image_url and item.variant_info.image_url are uniformly set
+    return items.map((item) => {
+      const img = resolveOrderItemImage(item)
+      return {
+        ...item,
+        image_url: img,
+        variant_info: {
+          ...(item.variant_info || {}),
+          image_url: img || item.variant_info?.image_url || null,
+        },
+      }
+    })
+  }
+
+  // If Supabase is configured, batch query the missing products
+  if (isSupabaseConfigured()) {
+    try {
+      const client = supabaseClient || (await createServiceClient())
+      const productIds = Array.from(new Set(missingItems.map((i) => i.product_id).filter(Boolean)))
+
+      if (productIds.length > 0) {
+        const { data: dbProducts } = await client
+          .from('products')
+          .select(`
+            id,
+            images:product_images (
+              id,
+              product_id,
+              image_url,
+              alt_text,
+              sort_order,
+              storage_path
+            )
+          `)
+          .in('id', productIds)
+
+        const prodMap = new Map<string, any>()
+        for (const p of dbProducts || []) {
+          prodMap.set(p.id, p)
+        }
+
+        return items.map((item) => {
+          let resolved = resolveOrderItemImage(item)
+          if (!resolved && item.product_id && prodMap.has(item.product_id)) {
+            const p = prodMap.get(item.product_id)
+            const itemColor = item.variant_info?.color || null
+            const matchedImg = findImageForVariantColor(p.images || [], itemColor)
+            resolved = matchedImg?.image_url || null
+          }
+
+          return {
+            ...item,
+            image_url: resolved,
+            variant_info: {
+              ...(item.variant_info || {}),
+              image_url: resolved || item.variant_info?.image_url || null,
+            },
+          }
+        })
+      }
+    } catch (e) {
+      console.warn('[hydrateOrderItemsWithImages] Error resolving images from Supabase:', e)
+    }
+  }
+
+  // Dev / Mock fallback
+  let devProducts: any[] = []
+  try {
+    devProducts = getDevProducts()
+  } catch {}
+  const allProducts = [...devProducts, ...MOCK_PRODUCTS]
+
+  return items.map((item) => {
+    let resolved = resolveOrderItemImage(item)
+    if (!resolved && item.product_id) {
+      const prod = allProducts.find((p) => p.id === item.product_id)
+      if (prod) {
+        const itemColor = item.variant_info?.color || null
+        const matchedImg = findImageForVariantColor(prod.images || [], itemColor)
+        resolved = matchedImg?.image_url || null
+      }
+    }
+
+    return {
+      ...item,
+      image_url: resolved,
+      variant_info: {
+        ...(item.variant_info || {}),
+        image_url: resolved || item.variant_info?.image_url || null,
+      },
+    }
+  })
+}
+
+/**
  * Server-authoritative order creation:
  * - Revalidates all prices and publication states from the database.
  * - Enforces Indian phone and PIN code validation.
@@ -175,10 +299,16 @@ export async function createOrder(input: CreateOrderInput) {
     let subtotalPaise = 0
     const itemSnapshots: any[] = []
 
+    let devProducts: any[] = []
+    try {
+      devProducts = getDevProducts()
+    } catch {}
+    const allProducts = [...devProducts, ...MOCK_PRODUCTS]
+
     for (const item of input.cart_items) {
       let foundVariant: any = null
       let foundProduct: any = null
-      for (const p of MOCK_PRODUCTS) {
+      for (const p of allProducts) {
         const v = p.variants?.find((vr: any) => vr.id === item.variant_id)
         if (v) {
           foundVariant = v
@@ -195,9 +325,7 @@ export async function createOrder(input: CreateOrderInput) {
       const itemTotalPaise = sellingPricePaise * item.quantity
       subtotalPaise += itemTotalPaise
 
-      const prodImages = (foundProduct.images || []) as Array<{ image_url: string; color?: string | null }>
-      const variantColor = (foundVariant.color || '').trim().toLowerCase()
-      const colorImg = prodImages.find((img) => img.color && img.color.trim().toLowerCase() === variantColor) || prodImages[0]
+      const colorImg = findImageForVariantColor(foundProduct.images || [], foundVariant.color)
       const imageUrl = colorImg?.image_url || null
 
       itemSnapshots.push({
@@ -206,6 +334,7 @@ export async function createOrder(input: CreateOrderInput) {
         product_id: foundProduct.id,
         variant_id: foundVariant.id,
         product_name: foundProduct.name,
+        image_url: imageUrl,
         variant_info: {
           sku: foundVariant.sku,
           color: foundVariant.color,
@@ -733,9 +862,10 @@ export async function getOrderById(orderId: string) {
     const orders = getDevOrders()
     const found = orders.find((o) => o.id === orderId || o.order_number === orderId)
     if (!found) return null
+    const hydratedItems = await hydrateOrderItemsWithImages(found.order_items || [])
     return {
       ...found,
-      order_items: found.order_items || [],
+      order_items: hydratedItems,
       payments: found.payments || [],
     }
   }
@@ -787,9 +917,11 @@ export async function getOrderById(orderId: string) {
       .eq('order_id', order.id),
   ])
 
+  const hydratedItems = await hydrateOrderItemsWithImages(itemsRes.data || [], supabase)
+
   return {
     ...order,
-    order_items: itemsRes.data || [],
+    order_items: hydratedItems,
     payments: paymentsRes.data || [],
   }
 }
@@ -800,8 +932,14 @@ export async function getOrdersByUserId(userId: string): Promise<Order[]> {
     const userOrders = orders.filter((o) => o.user_id === userId)
     const candidates = userOrders.length > 0 ? userOrders : orders.filter((o) => !o.user_id || o.user_id === userId)
     // Only return successfully paid orders or COD orders in customer My Orders
-    return candidates.filter(
+    const validOrders = candidates.filter(
       (o) => o.payment_status === 'paid' || o.payment_method === 'cod'
+    )
+    return Promise.all(
+      validOrders.map(async (o) => ({
+        ...o,
+        order_items: await hydrateOrderItemsWithImages(o.order_items || []),
+      }))
     )
   }
 
@@ -814,14 +952,40 @@ export async function getOrdersByUserId(userId: string): Promise<Order[]> {
     .or('payment_status.eq.paid,payment_method.eq.cod')
     .order('created_at', { ascending: false })
 
-  if (error) {
-    console.warn('[getOrdersByUserId] Supabase error:', error)
+  if (error || !data) {
+    if (error) console.warn('[getOrdersByUserId] Supabase error:', error)
     return []
   }
 
   // Ensure double-safety filter in memory
-  return (data || []).filter(
+  const validOrders = data.filter(
     (o) => o.payment_status === 'paid' || o.payment_method === 'cod'
+  )
+
+  if (validOrders.length === 0) return []
+
+  const orderIds = validOrders.map((o) => o.id)
+  const { data: allItems } = await supabase
+    .from('order_items')
+    .select('*')
+    .in('order_id', orderIds)
+
+  const itemsByOrderId = new Map<string, any[]>()
+  for (const itm of allItems || []) {
+    const list = itemsByOrderId.get(itm.order_id) || []
+    list.push(itm)
+    itemsByOrderId.set(itm.order_id, list)
+  }
+
+  return Promise.all(
+    validOrders.map(async (o) => {
+      const items = itemsByOrderId.get(o.id) || []
+      const hydratedItems = await hydrateOrderItemsWithImages(items, supabase)
+      return {
+        ...o,
+        order_items: hydratedItems,
+      }
+    })
   )
 }
 
@@ -1458,8 +1622,10 @@ export async function getOrderByTracking(
       }
     }
 
+    const hydratedItems = await hydrateOrderItemsWithImages(order.order_items || [])
     const maskedOrder = {
       ...order,
+      order_items: hydratedItems,
       tracking_url: getCourierTrackingUrl(order.carrier, order.tracking_number, order.tracking_url),
       shipping_address: {
         city: address?.city,
@@ -1500,14 +1666,7 @@ export async function getOrderByTracking(
       guest_phone,
       shipping_address,
       billing_address,
-      status_history,
-      order_items (
-        id,
-        product_name,
-        quantity,
-        variant_info,
-        total_amount
-      )
+      status_history
     `)
 
   if (isUuid) {
@@ -1536,14 +1695,7 @@ export async function getOrderByTracking(
         guest_phone,
         shipping_address,
         billing_address,
-        cancellation_reason,
-        order_items (
-          id,
-          product_name,
-          quantity,
-          variant_info,
-          total_amount
-        )
+        cancellation_reason
       `)
 
     if (isUuid) {
@@ -1611,9 +1763,17 @@ export async function getOrderByTracking(
     }
   }
 
+  const { data: orderItems } = await supabase
+    .from('order_items')
+    .select('*')
+    .eq('order_id', order.id)
+
+  const hydratedItems = await hydrateOrderItemsWithImages(orderItems || [], supabase)
+
   // Mask sensitive address details for public lookup
   const maskedOrder = {
     ...order,
+    order_items: hydratedItems,
     tracking_url: getCourierTrackingUrl(order.carrier, order.tracking_number, order.tracking_url),
     shipping_address: {
       city: address?.city,

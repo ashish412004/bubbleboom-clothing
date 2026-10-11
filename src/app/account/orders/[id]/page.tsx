@@ -7,6 +7,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { OrderActions } from './order-actions'
 import { CheckCircle2, Package, Truck, Clock, ShieldCheck, ArrowLeft, ExternalLink, Mail, AlertTriangle } from 'lucide-react'
+import { getSafeImageUrl } from '@/lib/utils'
 
 interface OrderDetailPageProps {
   params: Promise<{ id: string }>
@@ -202,17 +203,28 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
               <div className="divide-y divide-neutral-200">
                 {items.map((item) => {
                   const variantInfo = (item.variant_info as any) || {}
-                  const img = variantInfo.image_url || item.variant?.product?.images?.[0]?.image_url
+                  const img = item.image_url || variantInfo.image_url || item.variant?.product?.images?.[0]?.image_url
 
                   return (
                     <div key={item.id} className="py-4 flex gap-4 items-center">
-                      {img && (
-                        <div className="relative w-16 h-20 bg-neutral-100 border border-neutral-200 shrink-0 overflow-hidden print:hidden">
-                          <Image src={img} alt={item.product_name} fill className="object-cover" />
-                        </div>
-                      )}
+                      <div className="relative w-16 h-16 sm:w-20 sm:h-20 bg-neutral-100 border border-neutral-300 shrink-0 flex items-center justify-center overflow-hidden p-1 print:hidden">
+                        {img ? (
+                          <Image
+                            src={getSafeImageUrl(img)}
+                            alt={item.product_name}
+                            fill
+                            sizes="80px"
+                            className="object-contain p-1"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-neutral-400">
+                            <Package className="w-5 h-5 mb-0.5" />
+                            <span className="text-[8px] font-mono font-bold tracking-widest uppercase text-neutral-400">BOOM</span>
+                          </div>
+                        )}
+                      </div>
 
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <h4 className="text-sm font-bold uppercase">{item.product_name}</h4>
                         <p className="text-xs text-neutral-500 font-mono mt-0.5">
                           Size: {variantInfo.size || 'Standard'} | Color: {variantInfo.color || 'Standard'} {variantInfo.sku ? `| SKU: ${variantInfo.sku}` : ''}
@@ -222,7 +234,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                         </p>
                       </div>
 
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         <span className="font-mono font-bold text-sm">
                           ₹{item.total_amount?.toLocaleString('en-IN')}
                         </span>
@@ -277,7 +289,9 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                   <span>{order.shipping_amount === 0 ? 'FREE' : `₹${order.shipping_amount?.toLocaleString('en-IN')}`}</span>
                 </div>
                 <div className="pt-3 border-t-2 border-black flex justify-between text-base font-black font-mono">
-                  <span className="uppercase">Total Paid</span>
+                  <span className="uppercase">
+                    {order.payment_method === 'cod' && order.payment_status !== 'paid' ? 'Due on Delivery' : 'Total Paid'}
+                  </span>
                   <span>₹{order.total_amount?.toLocaleString('en-IN')}</span>
                 </div>
               </div>

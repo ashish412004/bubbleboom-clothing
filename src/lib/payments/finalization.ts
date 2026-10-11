@@ -2,7 +2,7 @@ import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server
 import { confirmStockReservation, releaseStockReservation } from '@/lib/inventory'
 import { recordCouponUsage } from '@/lib/coupons'
 import { sendOrderConfirmationEmail } from '@/lib/emails/resend'
-import { getDevOrders, saveDevOrder } from '@/lib/orders'
+import { getDevOrders, saveDevOrder, hydrateOrderItemsWithImages } from '@/lib/orders'
 
 export interface FinalizationParams {
   orderNumber: string
@@ -287,6 +287,11 @@ export async function finalizeOrderPayment(
     }
 
     // E. Queue order confirmation email
+    const hydratedItems = await hydrateOrderItemsWithImages(
+      (orderItems as any[]) || ((order as any)?.order_items as any[]) || [],
+      supabase
+    )
+
     const customerEmail = order.guest_email || (order.shipping_address as any)?.email
     const customerName = (order.shipping_address as any)?.full_name || 'Customer'
     if (customerEmail) {
@@ -310,7 +315,7 @@ export async function finalizeOrderPayment(
           orderId: order.order_number,
           customerName: customerName,
           totalAmount: order.total_amount,
-          items: (orderItems as any[]) || ((order as any)?.order_items as any[]) || [],
+          items: hydratedItems,
           shippingAddress: order.shipping_address,
         }).catch((e) =>
           console.warn('[finalizeOrderPayment] Direct email send error (queued in outbox):', e)
@@ -324,7 +329,11 @@ export async function finalizeOrderPayment(
       success: true,
       paymentStatus: 'paid',
       orderNumber: baseOrderNumber,
-      order: updatedOrder || order,
+      order: {
+        ...(updatedOrder || order),
+        order_items: hydratedItems,
+        payments: payments || [],
+      },
       message: 'Payment verified and order confirmed successfully.',
     }
   }

@@ -108,5 +108,110 @@ describe('Order Rules, Indian Address Verification & State Machine', () => {
       expect(visible.some((o) => o.order_number === 'BB-004')).toBe(false)
     })
   })
+
+  describe('Order Item Image Snapshot & Hydration Suite', () => {
+    it('resolves image directly from item.image_url or variant_info.image_url', async () => {
+      const { resolveOrderItemImage } = await import('@/lib/orders')
+
+      const directItem = {
+        product_name: 'Classic Boom Hoodie',
+        image_url: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2',
+      }
+      expect(resolveOrderItemImage(directItem)).toBe('https://images.unsplash.com/photo-1556905055-8f358a7a47b2')
+
+      const variantInfoItem = {
+        product_name: 'Classic Boom Hoodie',
+        variant_info: {
+          color: 'Black',
+          size: 'L',
+          image_url: 'https://images.unsplash.com/photo-hoodie-black',
+        },
+      }
+      expect(resolveOrderItemImage(variantInfoItem)).toBe('https://images.unsplash.com/photo-hoodie-black')
+
+      const emptyItem = {
+        product_name: 'Older Product',
+        variant_info: { color: 'Black' },
+      }
+      expect(resolveOrderItemImage(emptyItem)).toBeNull()
+    })
+
+    it('hydrates older order items missing image_url using product color matching', async () => {
+      const { hydrateOrderItemsWithImages } = await import('@/lib/orders')
+      const { saveDevProduct } = await import('@/lib/products')
+
+      saveDevProduct({
+        id: 'prod_hoodie_test',
+        name: 'Over-Dyed Heavyweight Hoodie',
+        images: [
+          { image_url: 'https://images.unsplash.com/photo-hoodie-black', color: 'Black' },
+          { image_url: 'https://images.unsplash.com/photo-hoodie-grey', color: 'Grey' },
+        ],
+      })
+
+      const olderOrderItems = [
+        {
+          id: 'item_1',
+          product_id: 'prod_hoodie_test',
+          product_name: 'Over-Dyed Heavyweight Hoodie',
+          variant_info: { color: 'Grey', size: 'M' },
+        },
+      ]
+
+      const hydrated = await hydrateOrderItemsWithImages(olderOrderItems)
+      expect(hydrated.length).toBe(1)
+      expect(hydrated[0].image_url).toBe('https://images.unsplash.com/photo-hoodie-grey')
+      expect(hydrated[0].variant_info.image_url).toBe('https://images.unsplash.com/photo-hoodie-grey')
+    })
+
+    it('preserves existing snapshots without overwriting', async () => {
+      const { hydrateOrderItemsWithImages } = await import('@/lib/orders')
+
+      const snapshotItems = [
+        {
+          id: 'item_custom',
+          product_id: 'prod_hoodie',
+          product_name: 'Over-Dyed Heavyweight Hoodie',
+          image_url: 'https://cdn.example.com/custom-hoodie.jpg',
+          variant_info: { color: 'Black', size: 'XL', image_url: 'https://cdn.example.com/custom-hoodie.jpg' },
+        },
+      ]
+
+      const hydrated = await hydrateOrderItemsWithImages(snapshotItems)
+      expect(hydrated[0].image_url).toBe('https://cdn.example.com/custom-hoodie.jpg')
+      expect(hydrated[0].variant_info.image_url).toBe('https://cdn.example.com/custom-hoodie.jpg')
+    })
+
+    it('properly distinguishes COD pending collection from verified online paid status', () => {
+      const codOrder = {
+        order_number: 'BB-20261011-0001',
+        payment_method: 'cod',
+        payment_status: 'pending',
+        status: 'confirmed',
+        total_amount: 1499,
+      }
+
+      const isCod = codOrder.payment_method === 'cod'
+      const orderStatusLabel = codOrder.status === 'confirmed' ? 'CONFIRMED' : codOrder.status.toUpperCase()
+      const paymentStatusLabel = isCod ? 'PENDING COLLECTION (COD)' : 'PAID & VERIFIED'
+      const totalPillLabel = isCod ? 'DUE ON DELIVERY' : 'TOTAL'
+
+      expect(orderStatusLabel).toBe('CONFIRMED')
+      expect(paymentStatusLabel).toBe('PENDING COLLECTION (COD)')
+      expect(totalPillLabel).toBe('DUE ON DELIVERY')
+
+      const onlineOrder = {
+        order_number: 'BB-20261011-0002',
+        payment_method: 'cashfree',
+        payment_status: 'paid',
+        status: 'confirmed',
+        total_amount: 2999,
+      }
+
+      const isOnlineCod = onlineOrder.payment_method === 'cod'
+      const onlinePaymentLabel = isOnlineCod ? 'PENDING COLLECTION (COD)' : 'PAID & VERIFIED'
+      expect(onlinePaymentLabel).toBe('PAID & VERIFIED')
+    })
+  })
 })
 

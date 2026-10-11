@@ -58,14 +58,22 @@ export async function sendOrderConfirmationEmail(
           const color = v.color || it.color || ''
           const qty = it.quantity || 1
           const amt = it.total_amount || (it.price ? it.price * qty : 0)
+          const img = it.image_url || v.image_url || null
           return `
             <tr style="border-bottom: 1px solid #eee;">
               <td style="padding: 10px 0; font-size: 13px;">
-                <strong>${name}</strong><br/>
-                <span style="color: #666; font-size: 11px;">${size ? `Size: ${size}` : ''} ${color ? `• Color: ${color}` : ''}</span>
+                <table style="border-collapse: collapse;">
+                  <tr>
+                    ${img ? `<td style="padding-right: 10px; vertical-align: middle;"><img src="${img}" alt="${name}" width="48" height="48" style="width: 48px; height: 48px; object-fit: contain; border: 1px solid #eee; background: #fafafa; display: block;" /></td>` : ''}
+                    <td style="vertical-align: middle;">
+                      <strong>${name}</strong><br/>
+                      <span style="color: #666; font-size: 11px;">${size ? `Size: ${size}` : ''} ${color ? `• Color: ${color}` : ''}</span>
+                    </td>
+                  </tr>
+                </table>
               </td>
-              <td style="padding: 10px 0; text-align: center; font-size: 13px;">× ${qty}</td>
-              <td style="padding: 10px 0; text-align: right; font-size: 13px; font-weight: bold;">${amt ? `₹${amt.toLocaleString('en-IN')}` : ''}</td>
+              <td style="padding: 10px 0; text-align: center; font-size: 13px; vertical-align: middle;">× ${qty}</td>
+              <td style="padding: 10px 0; text-align: right; font-size: 13px; font-weight: bold; vertical-align: middle;">${amt ? `₹${amt.toLocaleString('en-IN')}` : ''}</td>
             </tr>
           `
         }).join('')

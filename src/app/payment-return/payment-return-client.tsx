@@ -150,8 +150,14 @@ export function PaymentReturnClient({
             <span className="bg-[#F8F8F6] border border-black px-3.5 py-1.5">
               DATE: {new Date(order?.created_at || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
             </span>
-            <span className="bg-black text-white px-3.5 py-1.5 uppercase">
-              STATUS: {order?.status || 'CONFIRMED'}
+            <span className="bg-[#F8F8F6] border border-black px-3.5 py-1.5">
+              ORDER STATUS: <span className="text-black uppercase">{order?.status || 'CONFIRMED'}</span>
+            </span>
+            <span className="bg-[#F8F8F6] border border-black px-3.5 py-1.5">
+              PAYMENT:{' '}
+              <span className={order?.payment_method === 'cod' ? 'text-amber-800 uppercase font-black' : 'text-black uppercase'}>
+                {order?.payment_method === 'cod' ? 'PENDING COLLECTION (COD)' : 'PAID & VERIFIED'}
+              </span>
             </span>
           </div>
         </div>
@@ -165,15 +171,44 @@ export function PaymentReturnClient({
           <div className="border border-black divide-y divide-neutral-200">
             {items.map((item) => {
               const v = item.variant_info || {}
+              const imageUrl = item.image_url || v.image_url || null
               return (
-                <div key={item.id} className="p-4 flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-bold uppercase text-black">{item.product_name}</p>
-                    <p className="text-neutral-500 font-mono text-[11px] mt-0.5">
-                      Size: {v.size || 'Standard'} • Color: {v.color || 'Standard'} • Qty: {item.quantity}
-                    </p>
+                <div key={item.id} className="p-4 flex items-center justify-between gap-4 text-xs">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-neutral-100 border border-neutral-300 shrink-0 relative flex items-center justify-center overflow-hidden p-1">
+                      {imageUrl ? (
+                        <Image
+                          src={getSafeImageUrl(imageUrl)}
+                          alt={item.product_name || 'Purchased Item'}
+                          fill
+                          sizes="80px"
+                          className="object-contain p-1"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-neutral-400">
+                          <Package className="w-5 h-5 mb-0.5" />
+                          <span className="text-[8px] font-mono font-bold tracking-widest uppercase">BOOM</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold uppercase text-black line-clamp-1">{item.product_name}</p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1 font-mono text-[11px]">
+                        {v.size && (
+                          <span className="bg-black text-white px-1.5 py-0.5 uppercase font-bold text-[10px]">
+                            Size: {v.size}
+                          </span>
+                        )}
+                        {v.color && (
+                          <span className="bg-neutral-200 text-neutral-800 font-semibold px-1.5 py-0.5 uppercase text-[10px]">
+                            Color: {v.color}
+                          </span>
+                        )}
+                        <span className="text-neutral-500">Qty: {item.quantity}</span>
+                      </div>
+                    </div>
                   </div>
-                  <span className="font-bold font-mono">
+                  <span className="font-bold font-mono shrink-0">
                     {formatPrice(item.total_amount)}
                   </span>
                 </div>
@@ -220,7 +255,7 @@ export function PaymentReturnClient({
               <span className="uppercase font-bold text-black">{order?.payment_method}</span>
             </div>
             <div className="pt-2 border-t border-black flex justify-between font-black text-sm text-black">
-              <span>Total Paid</span>
+              <span>{order?.payment_method === 'cod' ? 'Due on Delivery' : 'Total Paid'}</span>
               <span>₹{order?.total_amount?.toLocaleString('en-IN')}</span>
             </div>
           </div>

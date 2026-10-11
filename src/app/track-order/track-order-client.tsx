@@ -17,6 +17,8 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
+import { getSafeImageUrl } from '@/lib/utils'
 
 interface TrackedOrder {
   id: string
@@ -452,20 +454,42 @@ export function TrackOrderClient() {
               Items in Shipment
             </span>
             <div className="divide-y divide-neutral-200 mt-2">
-              {order.order_items.map((item) => (
-                <div key={item.id} className="py-2.5 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-bold uppercase">{item.product_name}</span>
-                    {item.variant_info && (
-                      <span className="text-neutral-500 ml-2 font-mono">
-                        ({item.variant_info.size} / {item.variant_info.color})
-                      </span>
-                    )}
-                    <span className="text-neutral-500 ml-2">Qty: {item.quantity}</span>
+              {order.order_items.map((item) => {
+                const img = (item as any).image_url || (item.variant_info as any)?.image_url
+                return (
+                  <div key={item.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="relative w-12 h-12 bg-neutral-100 border border-neutral-300 shrink-0 flex items-center justify-center overflow-hidden p-0.5">
+                        {img ? (
+                          <Image
+                            src={getSafeImageUrl(img)}
+                            alt={item.product_name}
+                            fill
+                            sizes="48px"
+                            className="object-contain p-0.5"
+                          />
+                        ) : (
+                          <Package className="w-5 h-5 text-neutral-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="font-bold uppercase text-black line-clamp-1">{item.product_name}</span>
+                        <div className="text-[11px] text-neutral-500 font-mono mt-0.5">
+                          {item.variant_info && (
+                            <span>
+                              {item.variant_info.size ? `Size: ${item.variant_info.size}` : ''}
+                              {item.variant_info.color ? ` • ${item.variant_info.color}` : ''}
+                              {' • '}
+                            </span>
+                          )}
+                          <span>Qty: {item.quantity}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="font-mono font-bold shrink-0">₹{item.total_amount.toLocaleString('en-IN')}</span>
                   </div>
-                  <span className="font-mono font-bold">₹{item.total_amount.toLocaleString('en-IN')}</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="mt-4 pt-4 border-t border-black flex justify-between items-center text-sm font-black">
