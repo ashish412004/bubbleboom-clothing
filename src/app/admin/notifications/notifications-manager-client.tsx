@@ -90,6 +90,12 @@ const NOTIFICATION_EVENTS: Array<{
     title: 'Refund Completed',
     description: 'Sent when refunded amount is credited back to customer account.',
   },
+  {
+    id: 'admin_new_order',
+    key: 'notify_admin_new_order',
+    title: 'Admin New Order Alert',
+    description: 'Sent automatically to admin Gmail (bubbleboomstore2026@gmail.com) on COD order creation or prepaid payment confirmation.',
+  },
 ]
 
 export function NotificationsManagerClient({
@@ -128,6 +134,40 @@ export function NotificationsManagerClient({
   // Process Outbox State
   const [isProcessingOutbox, setIsProcessingOutbox] = useState(false)
   const [processFeedback, setProcessFeedback] = useState<{ success: boolean; message: string } | null>(null)
+
+  // Admin New Order Alert Test State
+  const [isAdminTestSending, setIsAdminTestSending] = useState(false)
+  const [adminTestFeedback, setAdminTestFeedback] = useState<{ success: boolean; message: string } | null>(null)
+
+  async function handleSendAdminTest() {
+    const targetEmail = settings.admin_notification_email || 'bubbleboomstore2026@gmail.com'
+    setIsAdminTestSending(true)
+    setAdminTestFeedback(null)
+    try {
+      const res = await fetch('/api/admin/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipientEmail: targetEmail, event: 'admin_new_order' }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setAdminTestFeedback({
+          success: true,
+          message: `Test admin alert sent to ${targetEmail}! ${data.simulated ? '(Simulated mode)' : `(Message ID: ${data.messageId || 'sent'})`}`,
+        })
+        fetchHistory()
+      } else {
+        setAdminTestFeedback({
+          success: false,
+          message: data.error || 'Failed to send test admin email.',
+        })
+      }
+    } catch (err: any) {
+      setAdminTestFeedback({ success: false, message: err.message || 'Error sending test admin email.' })
+    } finally {
+      setIsAdminTestSending(false)
+    }
+  }
 
   // Save Settings Handler
   async function handleSaveSettings() {
@@ -302,6 +342,9 @@ export function NotificationsManagerClient({
     event: previewEvent,
     recipient_email: 'customer@bubbleboom.in',
     customer_name: 'Alex Mercer',
+    customer_email: 'alex.mercer@example.com',
+    customer_phone: '+91 98765 43210',
+    order_date_ist: '12 Oct 2026, 12:30 AM IST',
     total_amount: 3499,
     subtotal: 3499,
     shipping_amount: 0,
@@ -350,6 +393,8 @@ export function NotificationsManagerClient({
     if (historyFilter === 'all') return true
     return j.status === historyFilter
   })
+
+  const latestAdminJob = history.find((j) => j.event_type === 'admin_new_order')
 
   return (
     <div className="space-y-6">
@@ -454,8 +499,151 @@ export function NotificationsManagerClient({
       {/* TAB 1: SETTINGS */}
       {activeTab === 'settings' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column: Toggles */}
+          {/* Left Column: Toggles & Admin Alerts */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Dedicated Card: Admin New Order Email Alerts */}
+            <div className="bg-black text-white p-6 border border-neutral-800 space-y-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono bg-white text-black px-2 py-0.5 font-bold uppercase tracking-wider">
+                      ADMIN ALERT
+                    </span>
+                    <h3 className="text-base font-black uppercase tracking-tight text-white">
+                      Automatic New Order Email Notification
+                    </h3>
+                  </div>
+                  <p className="text-xs text-neutral-400 font-mono mt-1">
+                    Dispatches an editorial order summary directly to store admin Gmail immediately upon COD creation or verified Cashfree payment.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer bg-neutral-900 border border-neutral-700 px-3 py-1.5 hover:border-neutral-500 transition-colors shrink-0">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-200">
+                    {settings.notify_admin_new_order !== false ? 'ENABLED' : 'DISABLED'}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.notify_admin_new_order !== false}
+                    onChange={(e) =>
+                      setSettings({ ...settings, notify_admin_new_order: e.target.checked })
+                    }
+                    className="w-4 h-4 accent-white cursor-pointer"
+                  />
+                </label>
+              </div>
+
+              {/* Destination Admin Email & Test Button */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-neutral-800">
+                <div>
+                  <label className="text-[11px] font-mono uppercase font-bold text-neutral-300 block mb-1">
+                    Destination Admin Gmail Address
+                  </label>
+                  <input
+                    type="email"
+                    value={settings.admin_notification_email ?? 'bubbleboomstore2026@gmail.com'}
+                    onChange={(e) =>
+                      setSettings({ ...settings, admin_notification_email: e.target.value })
+                    }
+                    placeholder="bubbleboomstore2026@gmail.com"
+                    className="w-full bg-neutral-950 border border-neutral-700 text-white px-3 py-2 text-xs font-mono focus:outline-none focus:border-white"
+                  />
+                  <p className="text-[10px] font-mono text-neutral-500 mt-1">
+                    Default: bubbleboomstore2026@gmail.com
+                  </p>
+                </div>
+
+                {/* Send Test Email Action */}
+                <div>
+                  <label className="text-[11px] font-mono uppercase font-bold text-neutral-300 block mb-1">
+                    Verify Admin Alerts
+                  </label>
+                  <button
+                    onClick={handleSendAdminTest}
+                    disabled={isAdminTestSending}
+                    className="w-full bg-white text-black py-2 px-4 text-xs font-mono font-bold uppercase tracking-wider hover:bg-neutral-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isAdminTestSending ? 'Sending Preview...' : 'Send Test Admin Alert'}</span>
+                  </button>
+                  {adminTestFeedback && (
+                    <p
+                      className={`text-[11px] font-mono mt-1.5 ${
+                        adminTestFeedback.success ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {adminTestFeedback.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Latest Admin Alert Status */}
+              <div className="pt-3 border-t border-neutral-800 text-xs font-mono">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-neutral-400 uppercase tracking-wider text-[10px] font-bold">
+                    Latest Admin Notification Status
+                  </span>
+                  <button
+                    onClick={fetchHistory}
+                    disabled={isRefreshingHistory}
+                    className="text-[10px] text-neutral-400 hover:text-white uppercase flex items-center gap-1 font-mono"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isRefreshingHistory ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+
+                {latestAdminJob ? (
+                  <div className="bg-neutral-900 border border-neutral-800 p-3 rounded-none flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white uppercase">
+                          Order #{latestAdminJob.payload?.order_number || latestAdminJob.order_id}
+                        </span>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 uppercase font-bold ${
+                            latestAdminJob.status === 'completed' || latestAdminJob.status === 'sent'
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                              : latestAdminJob.status === 'failed'
+                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                              : 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                          }`}
+                        >
+                          {latestAdminJob.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-neutral-400 mt-1">
+                        To: {latestAdminJob.customer_email || 'bubbleboomstore2026@gmail.com'} •{' '}
+                        {new Date(latestAdminJob.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
+                      </p>
+                      {latestAdminJob.last_error && (
+                        <p className="text-[11px] text-rose-400 mt-1 max-w-md truncate">
+                          Error: {latestAdminJob.last_error}
+                        </p>
+                      )}
+                    </div>
+
+                    {latestAdminJob.status === 'failed' && (
+                      <button
+                        onClick={() => handleRetryJob(latestAdminJob.id)}
+                        disabled={retryingJobId === latestAdminJob.id}
+                        className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 text-xs font-mono uppercase font-bold tracking-wider transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        <RotateCcw
+                          className={`w-3 h-3 ${retryingJobId === latestAdminJob.id ? 'animate-spin' : ''}`}
+                        />
+                        <span>{retryingJobId === latestAdminJob.id ? 'Retrying...' : 'Retry Email'}</span>
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-neutral-900 border border-neutral-800 p-3 text-neutral-400 text-xs">
+                    No admin order alert has been recorded yet. Will automatically trigger when a new order is placed or payment verified.
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="bg-white border border-black p-6 space-y-6">
               <div className="flex items-center justify-between pb-4 border-b border-neutral-200">
                 <div>

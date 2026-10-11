@@ -2,7 +2,7 @@ import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server
 import { confirmStockReservation, releaseStockReservation } from '@/lib/inventory'
 import { recordCouponUsage } from '@/lib/coupons'
 import { sendOrderConfirmationEmail } from '@/lib/emails/resend'
-import { queueOrderNotification } from '@/lib/emails/notifications'
+import { queueOrderNotification, queueAdminNewOrderNotification } from '@/lib/emails/notifications'
 import { getDevOrders, saveDevOrder, hydrateOrderItemsWithImages } from '@/lib/orders'
 
 export interface FinalizationParams {
@@ -66,6 +66,12 @@ export async function finalizeOrderPayment(
       devOrder.cancellation_reason = null
       devOrder.cancelled_at = null
       saveDevOrder(devOrder)
+
+      // Queue Admin New Order Notification
+      queueAdminNewOrderNotification(devOrder, { immediate: true }).catch((e) =>
+        console.warn('[finalizeOrderPayment:dev] Admin new order email warning:', e)
+      )
+
       return {
         success: true,
         paymentStatus: 'paid',
@@ -347,6 +353,20 @@ export async function finalizeOrderPayment(
           shipping_address: order.shipping_address as any,
         }).catch((e) =>
           console.warn('[finalizeOrderPayment] Outbox order_confirmed error:', e)
+        )
+
+        // 3. Queue Admin New Order Notification
+        queueAdminNewOrderNotification(
+          {
+            ...(updatedOrder || order),
+            order_items: hydratedItems,
+            customer_email: customerEmail,
+            customer_name: customerName,
+            customer_phone: (order.shipping_address as any)?.phone || order.guest_phone,
+          },
+          { immediate: true }
+        ).catch((e) =>
+          console.warn('[finalizeOrderPayment] Admin new order notification error:', e)
         )
       } catch (emailErr) {
         console.warn('[finalizeOrderPayment] Outbox email queue warning:', emailErr)

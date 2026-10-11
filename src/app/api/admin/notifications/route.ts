@@ -105,6 +105,7 @@ export async function POST(req: NextRequest) {
       'order_delivered',
       'order_cancelled',
       'refund_completed',
+      'admin_new_order',
     ]
 
     const targetEvent = validEvents.includes(event) ? event : 'order_confirmed'

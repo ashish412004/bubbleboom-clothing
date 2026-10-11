@@ -574,6 +574,27 @@ export function SettingsClient({
         </div>
       </div>
 
+      {/* 5. EMAIL NOTIFICATIONS QUICK LINK */}
+      <div className="border border-black bg-neutral-50 p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <span className="text-[10px] font-mono bg-black text-white px-2 py-0.5 font-bold uppercase tracking-wider inline-block mb-1">
+            EMAIL & NOTIFICATIONS
+          </span>
+          <h3 className="text-sm font-black uppercase tracking-tight text-black">
+            Automatic Order & Admin Email Notifications
+          </h3>
+          <p className="text-xs text-neutral-600 font-mono mt-0.5">
+            Manage Gmail SMTP credentials, Admin new order alerts to bubbleboomstore2026@gmail.com, and customer lifecycle emails.
+          </p>
+        </div>
+        <a
+          href="/admin/notifications"
+          className="inline-flex items-center gap-2 bg-black text-white px-4 py-2.5 text-xs font-mono font-bold uppercase tracking-wider hover:bg-neutral-800 transition-colors shrink-0"
+        >
+          <span>Open Email Settings</span>
+        </a>
+      </div>
+
       <div className="flex justify-end">
         <button
           type="submit"

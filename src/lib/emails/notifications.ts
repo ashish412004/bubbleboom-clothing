@@ -372,6 +372,67 @@ export async function queueOrderNotification(
 }
 
 /**
+ * Queue Admin New Order Notification
+ * Automatically notifies the store admin (bubbleboomstore2026@gmail.com)
+ * when a new order is confirmed or placed.
+ */
+export async function queueAdminNewOrderNotification(
+  order: any,
+  options?: { immediate?: boolean }
+): Promise<{ success: boolean; jobId?: string; skipped?: boolean; reason?: string; sendResult?: SendEmailResult }> {
+  try {
+    const settings = await getStoreSettings<StoreNotificationSettings>('email_notifications')
+    const adminEmail = (settings?.admin_notification_email || 'bubbleboomstore2026@gmail.com').trim()
+
+    const shippingAddr = (order.shipping_address as any) || {}
+    const customerName = shippingAddr.full_name || order.customer_name || 'Customer'
+    const customerEmail = order.guest_email || shippingAddr.email || order.customer_email || null
+    const customerPhone = shippingAddr.phone || order.guest_phone || order.customer_phone || null
+
+    const rawItems = order.order_items || order.items || []
+    const items = (rawItems as any[]).map((it: any) => {
+      const v = it.variant_info || {}
+      return {
+        product_id: it.product_id || it.id,
+        product_name: it.product_name || it.name || 'Bubble Boom Apparel',
+        size: v.size || it.size || null,
+        color: v.color || it.color || null,
+        quantity: it.quantity || 1,
+        price: it.selling_price || it.price || 0,
+        total_amount: it.total_amount || (it.price ? it.price * (it.quantity || 1) : 0),
+        image_url: it.image_url || v.image_url || null,
+      }
+    })
+
+    const isPaid = order.payment_status?.toLowerCase() === 'paid'
+    const payload: OrderNotificationPayload = {
+      order_id: order.id,
+      order_number: order.order_number || order.id,
+      event: 'admin_new_order',
+      recipient_email: adminEmail,
+      customer_name: customerName,
+      customer_email: customerEmail,
+      customer_phone: customerPhone,
+      order_date_ist: order.created_at || new Date().toISOString(),
+      total_amount: order.total_amount || 0,
+      subtotal: order.subtotal_amount || order.subtotal || order.total_amount || 0,
+      shipping_amount: order.shipping_amount || 0,
+      cod_amount: order.payment_method === 'cod' ? (order.cod_fee || 0) : 0,
+      discount_amount: order.coupon_discount || order.discount_amount || 0,
+      payment_method: order.payment_method || (isPaid ? 'cashfree' : 'cod'),
+      payment_status: order.payment_status || (order.payment_method === 'cod' ? 'pending' : 'paid'),
+      items,
+      shipping_address: shippingAddr,
+    }
+
+    return queueOrderNotification(payload, { immediate: options?.immediate ?? true })
+  } catch (err: any) {
+    console.error('[Outbox] Error queueing admin new order email:', err)
+    return { success: false, reason: err.message || 'Queuing failed' }
+  }
+}
+
+/**
  * Process a specific job from outbox
  */
 export async function processOutboxJob(jobId: string): Promise<SendEmailResult> {
@@ -659,6 +720,9 @@ export async function sendTestOrderEmail(
     event,
     recipient_email: recipientEmail,
     customer_name: 'Alex Mercer',
+    customer_email: 'alex.mercer@example.com',
+    customer_phone: '+91 98765 43210',
+    order_date_ist: new Date().toISOString(),
     total_amount: 3499,
     subtotal: 3499,
     shipping_amount: 0,

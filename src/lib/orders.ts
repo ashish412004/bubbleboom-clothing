@@ -412,7 +412,7 @@ export async function createOrder(input: CreateOrderInput) {
     saveDevOrder(devOrderFull)
     MOCK_ORDERS.unshift(devOrderFull)
 
-    return { data: orderRecord }
+    return { data: devOrderFull }
   }
 
   const supabase = await createServiceClient()
@@ -631,7 +631,7 @@ export async function createOrder(input: CreateOrderInput) {
     await confirmStockReservation(order.id)
   }
 
-  return { data: order }
+  return { data: { ...order, order_items: itemsToInsert } }
 }
 
 /**

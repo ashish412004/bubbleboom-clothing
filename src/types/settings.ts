@@ -103,6 +103,7 @@ export const DEFAULT_ORDER_SETTINGS: StoreOrderSettings = {
 
 export interface StoreNotificationSettings {
   enabled: boolean
+  notify_admin_new_order?: boolean
   notify_order_placed: boolean
   notify_order_confirmed: boolean
   notify_order_packed: boolean
@@ -123,6 +124,7 @@ export interface StoreNotificationSettings {
 
 export const DEFAULT_NOTIFICATION_SETTINGS: StoreNotificationSettings = {
   enabled: true,
+  notify_admin_new_order: true,
   notify_order_placed: true,
   notify_order_confirmed: true,
   notify_order_packed: true,

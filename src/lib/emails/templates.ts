@@ -7,6 +7,7 @@ export type OrderNotificationEvent =
   | 'order_delivered'
   | 'order_cancelled'
   | 'refund_completed'
+  | 'admin_new_order'
 
 export interface OrderItemNotificationData {
   product_id?: string
@@ -27,6 +28,7 @@ export interface ShippingAddressData {
   city: string
   state: string
   pin_code: string
+  email?: string | null
 }
 
 export interface OrderNotificationPayload {
@@ -35,6 +37,9 @@ export interface OrderNotificationPayload {
   event: OrderNotificationEvent
   recipient_email: string
   customer_name: string
+  customer_email?: string | null
+  customer_phone?: string | null
+  order_date_ist?: string | null
   total_amount: number
   subtotal?: number
   shipping_amount?: number
@@ -85,10 +90,26 @@ export function renderNotificationHtml(
 ): { subject: string; html: string; text: string } {
   const cleanSiteUrl = SITE_URL.replace(/\/+$/, '')
   const customerName = data.customer_name || 'Customer'
+  const customerPhone = data.customer_phone || data.shipping_address?.phone || ''
+  const customerEmail = data.customer_email || data.shipping_address?.email || ''
   const orderNumber = data.order_number || data.order_id
   const totalFmt = `₹${(data.total_amount || 0).toLocaleString('en-IN')}`
   const isCod = data.payment_method?.toLowerCase() === 'cod'
-  const isPaid = !isCod && data.payment_status?.toLowerCase() === 'paid'
+  const isPaid = data.payment_status?.toLowerCase() === 'paid'
+  const isAdminAlert = event === 'admin_new_order'
+
+  // Format order date in IST
+  const orderDateIST =
+    data.order_date_ist ||
+    new Date(data.created_at || Date.now()).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }) + ' IST'
 
   let eventTitle = 'ORDER STATUS UPDATE'
   let eventHeadline = 'YOUR BUBBLE BOOM ORDER'
@@ -98,6 +119,14 @@ export function renderNotificationHtml(
   let subject = `Update: #${orderNumber} | BUBBLE BOOM`
 
   switch (event) {
+    case 'admin_new_order':
+      subject = `🛍️ NEW ORDER RECEIVED – BUBBLE BOOM | Order #${orderNumber}`
+      eventTitle = 'ADMIN ALERT • NEW ORDER'
+      eventHeadline = 'NEW ORDER RECEIVED'
+      eventMessage = `A customer has just placed a new order #${orderNumber} on Bubble Boom Store. Order specifications and customer delivery details are provided below.`
+      statusBadgeBg = '#000000'
+      statusBadgeText = '#ffffff'
+      break
     case 'order_placed':
       subject = `Order Placed: #${orderNumber} | BUBBLE BOOM`
       eventTitle = 'ORDER RECEIVED'
@@ -256,7 +285,7 @@ export function renderNotificationHtml(
                 BUBBLE BOOM
               </h1>
               <p style="margin: 4px 0 0 0; font-size: 10px; text-transform: uppercase; letter-spacing: 3px; color: #cccccc; font-weight: 700;">
-                Streetwear • Official Drop
+                ${isAdminAlert ? 'ADMIN STORE NOTIFICATION • NEW ORDER DROP' : 'Streetwear • Official Drop'}
               </p>
             </td>
           </tr>
@@ -274,7 +303,7 @@ export function renderNotificationHtml(
                       ${eventHeadline}
                     </h2>
                     <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #333333;">
-                      Hi <strong>${customerName}</strong>, ${eventMessage}
+                      ${isAdminAlert ? eventMessage : `Hi <strong>${customerName}</strong>, ${eventMessage}`}
                     </p>
                   </td>
                 </tr>
@@ -289,11 +318,25 @@ export function renderNotificationHtml(
                 <tr>
                   <td style="font-size: 12px; line-height: 1.6; padding: 4px 0;">
                     <div><strong>Order Number:</strong> #${orderNumber}</div>
+                    <div><strong>Order Date (IST):</strong> ${orderDateIST}</div>
+                    ${
+                      isAdminAlert
+                        ? `
+                        <div><strong>Customer Name:</strong> ${customerName}</div>
+                        <div><strong>Customer Email:</strong> ${data.customer_email || address?.email || 'N/A'}</div>
+                        <div><strong>Customer Phone:</strong> ${data.customer_phone || address?.phone || 'N/A'}</div>
+                        `
+                        : ''
+                    }
                     <div><strong>Payment Method:</strong> ${isCod ? 'Cash on Delivery (COD)' : 'Prepaid Online (Cashfree)'}</div>
                     <div>
                       <strong>Payment Status:</strong> 
-                      <span style="display: inline-block; font-size: 10px; font-weight: 900; letter-spacing: 1px; padding: 2px 6px; background-color: ${isPaid ? '#000000' : '#444444'}; color: #ffffff; text-transform: uppercase;">
-                        ${isPaid ? 'PAID' : (isCod ? 'PAY AT DOORSTEP' : (data.payment_status || 'PENDING').toUpperCase())}
+                      <span style="display: inline-block; font-size: 10px; font-weight: 900; letter-spacing: 1px; padding: 2px 6px; background-color: ${isPaid ? '#000000' : (isCod ? '#92400e' : '#444444')}; color: #ffffff; text-transform: uppercase;">
+                        ${
+                          isAdminAlert
+                            ? (isPaid ? (isCod ? 'PAID (COD VERIFIED)' : 'PAID & VERIFIED') : (isCod ? 'PENDING (COLLECT ON DELIVERY)' : (data.payment_status || 'PENDING').toUpperCase()))
+                            : (isPaid ? 'PAID' : (isCod ? 'PAY AT DOORSTEP' : (data.payment_status || 'PENDING').toUpperCase()))
+                        }
                       </span>
                     </div>
                   </td>
@@ -307,7 +350,7 @@ export function renderNotificationHtml(
               </table>
 
               ${
-                hasTracking
+                !isAdminAlert && hasTracking
                   ? `
                   <div style="margin-top: 16px; border: 1px solid #000; background: #fff; padding: 14px 16px; font-size: 12px; line-height: 1.6;">
                     <div style="font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; color: #444; margin-bottom: 4px;">
@@ -377,12 +420,22 @@ export function renderNotificationHtml(
 
               <!-- Action Buttons -->
               <div style="margin: 28px 0 12px 0; text-align: center;">
-                <a href="${cleanSiteUrl}/account/orders/${orderNumber}" style="display: inline-block; background-color: #000000; color: #ffffff; text-decoration: none; padding: 14px 24px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; margin: 4px;">
-                  View Order Details
-                </a>
-                <a href="${cleanSiteUrl}/account/orders" style="display: inline-block; background-color: #ffffff; color: #000000; border: 1px solid #000000; text-decoration: none; padding: 13px 20px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; margin: 4px;">
-                  My Orders
-                </a>
+                ${
+                  isAdminAlert
+                    ? `
+                      <a href="${cleanSiteUrl}/admin/orders/${data.order_id || orderNumber}" style="display: inline-block; background-color: #000000; color: #ffffff; text-decoration: none; padding: 16px 32px; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; border: 2px solid #000000; box-shadow: 4px 4px 0px 0px #000000;">
+                        VIEW ORDER IN ADMIN PANEL &rarr;
+                      </a>
+                    `
+                    : `
+                      <a href="${cleanSiteUrl}/account/orders/${orderNumber}" style="display: inline-block; background-color: #000000; color: #ffffff; text-decoration: none; padding: 14px 24px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; margin: 4px;">
+                        View Order Details
+                      </a>
+                      <a href="${cleanSiteUrl}/account/orders" style="display: inline-block; background-color: #ffffff; color: #000000; border: 1px solid #000000; text-decoration: none; padding: 13px 20px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; margin: 4px;">
+                        My Orders
+                      </a>
+                    `
+                }
               </div>
             </td>
           </tr>
@@ -394,10 +447,18 @@ export function renderNotificationHtml(
                 BUBBLE BOOM APPAREL
               </p>
               <p style="margin: 0 0 8px 0;">
-                Need help? Reach out directly to <a href="mailto:${SUPPORT_EMAIL}" style="color: #000000; font-weight: bold; text-decoration: underline;">${SUPPORT_EMAIL}</a>
+                ${
+                  isAdminAlert
+                    ? `Admin notification sent to <a href="mailto:${SUPPORT_EMAIL}" style="color: #000000; font-weight: bold; text-decoration: underline;">${SUPPORT_EMAIL}</a>`
+                    : `Need help? Reach out directly to <a href="mailto:${SUPPORT_EMAIL}" style="color: #000000; font-weight: bold; text-decoration: underline;">${SUPPORT_EMAIL}</a>`
+                }
               </p>
               <p style="margin: 0; font-size: 10px; color: #999999;">
-                Official order notification sent by Bubble Boom. Tax invoices are accessible anytime in your customer account.
+                ${
+                  isAdminAlert
+                    ? 'Automated store notification for Bubble Boom operations • Protected admin session'
+                    : 'Official order notification sent by Bubble Boom. Tax invoices are accessible anytime in your customer account.'
+                }
               </p>
             </td>
           </tr>
@@ -410,7 +471,38 @@ export function renderNotificationHtml(
 </html>
   `
 
-  const text = `
+  const text = isAdminAlert
+    ? `
+🛍️ NEW ORDER RECEIVED - BUBBLE BOOM
+========================================
+Order Number: #${orderNumber}
+Order Date (IST): ${orderDateIST}
+Total Amount: ${totalFmt}
+Payment Method: ${isCod ? 'Cash on Delivery (COD)' : 'Prepaid Online (Cashfree)'}
+Payment Status: ${isPaid ? (isCod ? 'PAID (COD VERIFIED)' : 'PAID & VERIFIED') : (isCod ? 'PENDING COLLECTION (COD)' : (data.payment_status || 'PENDING').toUpperCase())}
+
+CUSTOMER & DELIVERY DETAILS:
+Name: ${customerName}
+Email: ${customerEmail || 'On file'}
+Phone: ${customerPhone ? `+91 ${customerPhone}` : 'On file'}
+${address ? `Address: ${address.address_line1 || ''}, ${address.city || ''}, ${address.state || ''} - ${address.pin_code || ''}` : 'Address: On file'}
+
+PURCHASED ITEMS:
+${(data.items || [])
+  .map(
+    (i) =>
+      `- ${i.product_name} x ${i.quantity} (${[i.size ? `Size: ${i.size}` : '', i.color ? `Color: ${i.color}` : ''].filter(Boolean).join(' • ')}) - ₹${(i.total_amount || i.price * i.quantity).toLocaleString('en-IN')}`
+  )
+  .join('\n')}
+
+FINANCIAL BREAKDOWN:
+Subtotal: ${subtotalFmt}
+${discountFmt ? `Discount: ${discountFmt}\n` : ''}Shipping: ${shippingFmt}
+${codFmt ? `COD Fee: ${codFmt}\n` : ''}Total Amount: ${totalFmt}
+
+View Order in Admin Panel: ${cleanSiteUrl}/admin/orders/${data.order_id || orderNumber}
+    `.trim()
+    : `
 BUBBLE BOOM - ${eventTitle}
 ----------------------------------------
 Hi ${customerName},

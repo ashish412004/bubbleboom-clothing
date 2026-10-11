@@ -5,7 +5,7 @@ import { createOrder, createCashfreeSessionForOrder } from '@/lib/orders'
 import { getCart, clearCart } from '@/lib/cart'
 import { releaseStockReservation } from '@/lib/inventory'
 import { sendOrderConfirmationEmail } from '@/lib/emails/resend'
-import { queueOrderNotification } from '@/lib/emails/notifications'
+import { queueOrderNotification, queueAdminNewOrderNotification } from '@/lib/emails/notifications'
 
 export async function POST(request: NextRequest) {
   try {
@@ -194,6 +194,17 @@ export async function POST(request: NextRequest) {
         })),
         shipping_address: order.shipping_address as any,
       }).catch((e) => console.warn('[checkout] COD order_placed email warning:', e))
+
+      // Queue automatic New Order Notification to Store Admin Gmail
+      queueAdminNewOrderNotification(
+        {
+          ...order,
+          customer_name: full_name,
+          customer_email: email,
+          customer_phone: phone,
+        },
+        { immediate: true }
+      ).catch((e) => console.warn('[checkout] COD admin_new_order email warning:', e))
 
       sendOrderConfirmationEmail({
         email,
