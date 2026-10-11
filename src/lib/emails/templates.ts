@@ -54,16 +54,22 @@ export interface OrderNotificationPayload {
 
 export interface OutboxJobRecord {
   id: string
-  job_type: string
-  payload: OrderNotificationPayload
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'simulated'
-  retry_count: number
-  max_retries: number
+  order_id: string
+  customer_email: string
+  event_type: OrderNotificationEvent
+  status: 'pending' | 'processing' | 'sent' | 'completed' | 'failed' | 'simulated'
+  attempts: number
   last_error: string | null
-  scheduled_at: string
   created_at: string
-  updated_at: string
+  sent_at: string | null
+  unique_event_id: string
+  payload: OrderNotificationPayload
   message_id?: string | null
+  job_type?: string
+  retry_count?: number
+  max_retries?: number
+  scheduled_at?: string
+  updated_at?: string
 }
 
 const SITE_URL =
@@ -82,7 +88,7 @@ export function renderNotificationHtml(
   const orderNumber = data.order_number || data.order_id
   const totalFmt = `₹${(data.total_amount || 0).toLocaleString('en-IN')}`
   const isCod = data.payment_method?.toLowerCase() === 'cod'
-  const isPaid = data.payment_status?.toLowerCase() === 'paid'
+  const isPaid = !isCod && data.payment_status?.toLowerCase() === 'paid'
 
   let eventTitle = 'ORDER STATUS UPDATE'
   let eventHeadline = 'YOUR BUBBLE BOOM ORDER'
