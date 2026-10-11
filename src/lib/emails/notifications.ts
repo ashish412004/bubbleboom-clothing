@@ -10,8 +10,14 @@ import {
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
+import crypto from 'crypto'
 
 export * from '@/lib/emails/templates'
+
+function isValidUuid(val?: string | null): boolean {
+  if (!val) return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val)
+}
 
 function getOutboxDiskPath() {
   return path.join(os.tmpdir(), 'bb_email_notification_outbox.json')
@@ -46,59 +52,83 @@ async function persistJobToSupabase(job: OutboxJobRecord) {
   if (!isSupabaseConfigured()) return
   try {
     const supabase = await createServiceClient()
-    const { error: outboxErr } = await (supabase as any)
-      .from('email_notification_outbox')
-      .insert({
-      id: job.id,
-      order_id: job.order_id,
-      customer_email: job.customer_email,
-      event_type: job.event_type,
-      status:
+    const uuidId = isValidUuid(job.id) ? job.id : crypto.randomUUID()
+    job.id = uuidId
+
+    let resolvedOrderId = job.order_id
+    if (!isValidUuid(resolvedOrderId)) {
+      const { data: ord } = await supabase
+        .from('orders')
+        .select('id')
+        .or(`id.eq.${resolvedOrderId},order_number.eq.${resolvedOrderId}`)
+        .maybeSingle()
+      if (ord?.id) {
+        resolvedOrderId = ord.id
+        job.order_id = ord.id
+      }
+    }
+
+    if (isValidUuid(resolvedOrderId)) {
+      const dbStatus =
         job.status === 'completed' || job.status === 'sent'
           ? 'sent'
           : job.status === 'failed' || job.status === 'simulated'
           ? 'failed'
           : job.status === 'processing'
           ? 'processing'
-          : 'pending',
-      attempts: job.attempts || 0,
-      last_error: job.last_error || null,
-      created_at: job.created_at,
-      sent_at: job.sent_at || null,
-      unique_event_id: job.unique_event_id,
-      payload: job.payload as any,
-      message_id: job.message_id || null,
-    })
+          : 'pending'
 
-    if (!outboxErr) return
+      const { error: outboxErr } = await (supabase as any)
+        .from('email_notification_outbox')
+        .upsert(
+          {
+            id: uuidId,
+            order_id: resolvedOrderId,
+            customer_email: job.customer_email,
+            event_type: job.event_type,
+            status: dbStatus,
+            attempts: job.attempts || 0,
+            last_error: job.last_error || null,
+            created_at: job.created_at,
+            sent_at: job.sent_at || null,
+            unique_event_id: job.unique_event_id,
+            payload: job.payload as any,
+            message_id: job.message_id || null,
+          },
+          { onConflict: 'unique_event_id', ignoreDuplicates: false }
+        )
 
-    // Fallback: If email_notification_outbox table doesn't exist, store in store_settings
-    if (
-      outboxErr.message?.includes('email_notification_outbox') ||
-      outboxErr.code === 'PGRST205' ||
-      outboxErr.message?.includes('schema cache')
-    ) {
-      const { data: existing } = await supabase
-        .from('store_settings')
-        .select('value')
-        .eq('key', 'email_notification_outbox')
-        .maybeSingle()
+      if (!outboxErr) return
+      console.warn('[Outbox] Supabase insert warning:', outboxErr.message)
 
-      const currentJobs: OutboxJobRecord[] =
-        Array.isArray((existing?.value as any)?.jobs)
-          ? (existing!.value as any).jobs
-          : []
+      // Fallback: If email_notification_outbox table doesn't exist, store in store_settings
+      if (
+        outboxErr.message?.includes('email_notification_outbox') ||
+        outboxErr.code === 'PGRST205' ||
+        outboxErr.message?.includes('schema cache')
+      ) {
+        const { data: existing } = await supabase
+          .from('store_settings')
+          .select('value')
+          .eq('key', 'email_notification_outbox')
+          .maybeSingle()
 
-      const updatedJobs = [
-        job,
-        ...currentJobs.filter((j) => j.id !== job.id && j.unique_event_id !== job.unique_event_id),
-      ].slice(0, 200)
+        const currentJobs: OutboxJobRecord[] =
+          Array.isArray((existing?.value as any)?.jobs)
+            ? (existing!.value as any).jobs
+            : []
 
-      await supabase.from('store_settings').upsert({
-        key: 'email_notification_outbox',
-        value: { jobs: updatedJobs } as any,
-        updated_at: new Date().toISOString(),
-      })
+        const updatedJobs = [
+          job,
+          ...currentJobs.filter((j) => j.id !== job.id && j.unique_event_id !== job.unique_event_id),
+        ].slice(0, 200)
+
+        await supabase.from('store_settings').upsert({
+          key: 'email_notification_outbox',
+          value: { jobs: updatedJobs } as any,
+          updated_at: new Date().toISOString(),
+        })
+      }
     }
   } catch (err: any) {
     console.warn('[Outbox] Supabase persist notice:', err.message)
@@ -109,24 +139,30 @@ async function updateJobInSupabase(job: OutboxJobRecord) {
   if (!isSupabaseConfigured()) return
   try {
     const supabase = await createServiceClient()
-    const { error: outboxErr } = await (supabase as any)
-      .from('email_notification_outbox')
-      .update({
-        status:
-          job.status === 'completed' || job.status === 'sent'
-            ? 'sent'
-            : job.status === 'failed' || job.status === 'simulated'
-            ? 'failed'
-            : job.status === 'processing'
-            ? 'processing'
-            : 'pending',
-        attempts: job.attempts,
-        last_error: job.last_error,
-        sent_at: job.sent_at,
-        message_id: job.message_id,
-      })
-      .eq('id', job.id)
+    const dbStatus =
+      job.status === 'completed' || job.status === 'sent'
+        ? 'sent'
+        : job.status === 'failed' || job.status === 'simulated'
+        ? 'failed'
+        : job.status === 'processing'
+        ? 'processing'
+        : 'pending'
 
+    let updateQuery = (supabase as any).from('email_notification_outbox').update({
+      status: dbStatus,
+      attempts: job.attempts,
+      last_error: job.last_error,
+      sent_at: job.sent_at,
+      message_id: job.message_id,
+    })
+
+    if (isValidUuid(job.id)) {
+      updateQuery = updateQuery.eq('id', job.id)
+    } else if (job.unique_event_id) {
+      updateQuery = updateQuery.eq('unique_event_id', job.unique_event_id)
+    }
+
+    const { error: outboxErr } = await updateQuery
     if (!outboxErr) return
 
     // Fallback: update in store_settings
@@ -274,7 +310,7 @@ export async function queueOrderNotification(
       return { success: true, skipped: true, reason: 'Already delivered (database deduplicated)' }
     }
 
-    const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const jobId = crypto.randomUUID()
     const now = new Date().toISOString()
     const jobRecord: OutboxJobRecord = {
       id: jobId,
