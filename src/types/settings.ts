@@ -115,6 +115,10 @@ export interface StoreNotificationSettings {
   from_email: string
   support_email: string
   admin_notification_email?: string
+  smtp_host?: string
+  smtp_port?: number
+  smtp_user?: string
+  smtp_pass?: string
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: StoreNotificationSettings = {
@@ -131,4 +135,8 @@ export const DEFAULT_NOTIFICATION_SETTINGS: StoreNotificationSettings = {
   from_email: 'bubbleboomstore2026@gmail.com',
   support_email: 'bubbleboomstore2026@gmail.com',
   admin_notification_email: 'bubbleboomstore2026@gmail.com',
+  smtp_host: 'smtp.gmail.com',
+  smtp_port: 465,
+  smtp_user: 'bubbleboomstore2026@gmail.com',
+  smtp_pass: '',
 }

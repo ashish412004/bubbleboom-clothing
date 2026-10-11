@@ -9,12 +9,12 @@ import {
 } from '@/lib/emails/templates'
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 
 export * from '@/lib/emails/templates'
 
 function getOutboxDiskPath() {
-  const dir = path.join(process.cwd(), '.next')
-  return path.join(dir, 'bb_email_outbox.json')
+  return path.join(os.tmpdir(), 'bb_email_outbox.json')
 }
 
 let inMemoryOutbox: OutboxJobRecord[] = []
@@ -38,11 +38,143 @@ function saveDiskOutbox(jobs: OutboxJobRecord[]) {
 }
 
 /**
- * Queue order notification safely into Outbox (idempotent, non-blocking)
+ * Resilient Supabase persistence:
+ * Tries `outbox_jobs` table first. If missing (PGRST205), seamlessly persists
+ * to `store_settings` under key `email_outbox_jobs`.
+ */
+async function persistJobToSupabase(job: OutboxJobRecord) {
+  if (!isSupabaseConfigured()) return
+  try {
+    const supabase = await createServiceClient()
+    const { error: outboxErr } = await (supabase.from('outbox_jobs') as any).insert({
+      id: job.id,
+      job_type: job.job_type,
+      payload: job.payload as any,
+      status: job.status,
+      retry_count: job.retry_count || 0,
+      max_retries: job.max_retries || 3,
+      last_error: job.last_error || null,
+      message_id: job.message_id || null,
+      scheduled_at: job.scheduled_at,
+      created_at: job.created_at,
+      updated_at: job.updated_at,
+    })
+
+    if (!outboxErr) return
+
+    // Fallback: If outbox_jobs table doesn't exist, store in store_settings
+    if (
+      outboxErr.message?.includes('outbox_jobs') ||
+      outboxErr.code === 'PGRST205' ||
+      outboxErr.message?.includes('schema cache')
+    ) {
+      const { data: existing } = await supabase
+        .from('store_settings')
+        .select('value')
+        .eq('key', 'email_outbox_jobs')
+        .maybeSingle()
+
+      const currentJobs: OutboxJobRecord[] =
+        Array.isArray((existing?.value as any)?.jobs)
+          ? (existing!.value as any).jobs
+          : []
+
+      const updatedJobs = [job, ...currentJobs.filter((j) => j.id !== job.id)].slice(0, 200)
+
+      await supabase.from('store_settings').upsert({
+        key: 'email_outbox_jobs',
+        value: { jobs: updatedJobs } as any,
+        updated_at: new Date().toISOString(),
+      })
+    }
+  } catch (err: any) {
+    console.warn('[Outbox] Supabase persist notice:', err.message)
+  }
+}
+
+async function updateJobInSupabase(job: OutboxJobRecord) {
+  if (!isSupabaseConfigured()) return
+  try {
+    const supabase = await createServiceClient()
+    const { error: outboxErr } = await (supabase.from('outbox_jobs') as any)
+      .update({
+        status: job.status,
+        retry_count: job.retry_count,
+        last_error: job.last_error,
+        message_id: job.message_id,
+        updated_at: job.updated_at,
+      })
+      .eq('id', job.id)
+
+    if (!outboxErr) return
+
+    // Fallback: update in store_settings
+    if (
+      outboxErr.message?.includes('outbox_jobs') ||
+      outboxErr.code === 'PGRST205' ||
+      outboxErr.message?.includes('schema cache')
+    ) {
+      const { data: existing } = await supabase
+        .from('store_settings')
+        .select('value')
+        .eq('key', 'email_outbox_jobs')
+        .maybeSingle()
+
+      const currentJobs: OutboxJobRecord[] =
+        Array.isArray((existing?.value as any)?.jobs)
+          ? (existing!.value as any).jobs
+          : []
+
+      const updatedJobs = currentJobs.map((j) => (j.id === job.id ? job : j))
+      if (!updatedJobs.some((j) => j.id === job.id)) {
+        updatedJobs.unshift(job)
+      }
+
+      await supabase.from('store_settings').upsert({
+        key: 'email_outbox_jobs',
+        value: { jobs: updatedJobs.slice(0, 200) } as any,
+        updated_at: new Date().toISOString(),
+      })
+    }
+  } catch (err: any) {
+    console.warn('[Outbox] Supabase update notice:', err.message)
+  }
+}
+
+async function loadSupabaseOutboxJobs(): Promise<OutboxJobRecord[]> {
+  if (!isSupabaseConfigured()) return []
+  try {
+    const supabase = await createServiceClient()
+    const { data: outboxRows, error } = await (supabase.from('outbox_jobs') as any)
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (!error && Array.isArray(outboxRows) && outboxRows.length > 0) {
+      return outboxRows as OutboxJobRecord[]
+    }
+
+    // Fallback: query store_settings
+    const { data: settingRow } = await supabase
+      .from('store_settings')
+      .select('value')
+      .eq('key', 'email_outbox_jobs')
+      .maybeSingle()
+
+    if (Array.isArray((settingRow?.value as any)?.jobs)) {
+      return (settingRow!.value as any).jobs as OutboxJobRecord[]
+    }
+  } catch {}
+  return []
+}
+
+/**
+ * Queue order notification safely into Outbox (idempotent, resilient)
  */
 export async function queueOrderNotification(
-  payload: OrderNotificationPayload
-): Promise<{ success: boolean; jobId?: string; skipped?: boolean; reason?: string }> {
+  payload: OrderNotificationPayload,
+  options?: { immediate?: boolean }
+): Promise<{ success: boolean; jobId?: string; skipped?: boolean; reason?: string; sendResult?: SendEmailResult }> {
   try {
     const orderNumber = payload.order_number || payload.order_id
     const recipient = payload.recipient_email?.trim()
@@ -61,12 +193,12 @@ export async function queueOrderNotification(
       return { success: true, skipped: true, reason: `Notification for ${payload.event} is disabled in store settings` }
     }
 
-    // 2. Deduplication check (memory and disk)
+    // 2. Deduplication check (memory, disk, and database)
     const existingMemory = inMemoryOutbox.find(
       (j) =>
         (j.payload.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
         j.payload.event === payload.event &&
-        j.status === 'completed'
+        (j.status === 'completed' || j.status === 'simulated')
     )
     if (existingMemory) {
       return { success: true, skipped: true, reason: 'Already delivered (in-memory deduplicated)' }
@@ -77,10 +209,21 @@ export async function queueOrderNotification(
       (j) =>
         (j.payload.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
         j.payload.event === payload.event &&
-        j.status === 'completed'
+        (j.status === 'completed' || j.status === 'simulated')
     )
     if (existingDisk) {
       return { success: true, skipped: true, reason: 'Already delivered (disk deduplicated)' }
+    }
+
+    const dbJobs = await loadSupabaseOutboxJobs()
+    const existingDb = dbJobs.find(
+      (j) =>
+        (j.payload.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
+        j.payload.event === payload.event &&
+        (j.status === 'completed' || j.status === 'simulated')
+    )
+    if (existingDb) {
+      return { success: true, skipped: true, reason: 'Already delivered (database deduplicated)' }
     }
 
     const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -103,36 +246,29 @@ export async function queueOrderNotification(
     saveDiskOutbox([jobRecord, ...diskJobs.filter((j) => j.id !== jobId)])
 
     // 3. Resilient Supabase persistence
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = await createServiceClient()
-        const { error: outboxErr } = await supabase.from('outbox_jobs').insert({
-          id: jobId,
-          job_type: jobRecord.job_type,
-          payload: jobRecord.payload as any,
-          status: 'pending',
-          retry_count: 0,
-          max_retries: 3,
-          last_error: null,
-          scheduled_at: now,
-          created_at: now,
-          updated_at: now,
-        })
+    await persistJobToSupabase(jobRecord)
 
-        if (outboxErr) {
-          console.warn('[Outbox] outbox_jobs table notice:', outboxErr.message)
-        }
-      } catch (err: any) {
-        console.warn('[Outbox] Supabase queue error (persisted to disk):', err.message)
+    // 4. In serverless runtimes (Vercel), await dispatch with race timeout so
+    // function execution is not frozen before network dispatch finishes
+    let sendResult: SendEmailResult | undefined
+    if (options?.immediate !== false) {
+      try {
+        sendResult = await Promise.race([
+          processOutboxJob(jobId),
+          new Promise<SendEmailResult>((_, reject) =>
+            setTimeout(() => reject(new Error('Email dispatch timeout (7s)')), 7000)
+          ),
+        ])
+      } catch (procErr: any) {
+        console.warn(`[Outbox] Dispatch timeout/warning for job ${jobId}:`, procErr.message)
       }
+    } else {
+      processOutboxJob(jobId).catch((procErr) => {
+        console.warn(`[Outbox] Async dispatch error for job ${jobId}:`, procErr)
+      })
     }
 
-    // 4. Asynchronously process job immediately without blocking caller
-    processOutboxJob(jobId).catch((procErr) => {
-      console.warn(`[Outbox] Async dispatch error for job ${jobId}:`, procErr)
-    })
-
-    return { success: true, jobId }
+    return { success: true, jobId, sendResult }
   } catch (err: any) {
     console.error('[Outbox] Exception queuing order notification:', err)
     return { success: false, reason: err.message || 'Queuing failed' }
@@ -144,7 +280,11 @@ export async function queueOrderNotification(
  */
 export async function processOutboxJob(jobId: string): Promise<SendEmailResult> {
   const diskJobs = loadDiskOutbox()
-  let job = inMemoryOutbox.find((j) => j.id === jobId) || diskJobs.find((j) => j.id === jobId)
+  const dbJobs = await loadSupabaseOutboxJobs()
+  let job =
+    inMemoryOutbox.find((j) => j.id === jobId) ||
+    diskJobs.find((j) => j.id === jobId) ||
+    dbJobs.find((j) => j.id === jobId)
 
   if (!job) {
     return { success: false, error: 'Job not found in outbox' }
@@ -154,6 +294,7 @@ export async function processOutboxJob(jobId: string): Promise<SendEmailResult> 
   job.status = 'processing'
   job.updated_at = new Date().toISOString()
   saveDiskOutbox([job, ...diskJobs.filter((j) => j.id !== jobId)])
+  await updateJobInSupabase(job)
 
   try {
     const rendered = renderNotificationHtml(job.payload.event, job.payload)
@@ -165,18 +306,24 @@ export async function processOutboxJob(jobId: string): Promise<SendEmailResult> 
     })
 
     if (sendRes.success) {
-      job.status = 'completed'
-      job.message_id = sendRes.messageId || null
-      job.last_error = null
+      if (sendRes.simulated) {
+        job.status = 'simulated' as any
+        job.message_id = sendRes.messageId || null
+        job.last_error = sendRes.error || 'Notice: Simulated delivery (SMTP_PASS / GMAIL_APP_PASSWORD not set)'
+      } else {
+        job.status = 'completed'
+        job.message_id = sendRes.messageId || null
+        job.last_error = null
+      }
       job.updated_at = new Date().toISOString()
 
-      // Record audit trail if Supabase configured
+      // Record audit trail in Supabase
       if (isSupabaseConfigured()) {
         try {
           const supabase = await createServiceClient()
           await supabase.from('admin_audit_logs').insert({
             admin_id: 'system',
-            action: 'ORDER_EMAIL_SENT',
+            action: sendRes.simulated ? 'ORDER_EMAIL_SIMULATED' : 'ORDER_EMAIL_SENT',
             entity: 'order',
             entity_id: job.payload.order_id,
             metadata: {
@@ -184,20 +331,13 @@ export async function processOutboxJob(jobId: string): Promise<SendEmailResult> 
               recipient: job.payload.recipient_email,
               message_id: sendRes.messageId,
               provider: sendRes.provider,
+              simulated: sendRes.simulated,
             } as any,
           })
-
-          // Also update outbox_jobs table if it exists
-          await supabase
-            .from('outbox_jobs')
-            .update({
-              status: 'completed',
-              updated_at: job.updated_at,
-            })
-            .eq('id', jobId)
         } catch {}
       }
 
+      await updateJobInSupabase(job)
       saveDiskOutbox([job, ...diskJobs.filter((j) => j.id !== jobId)])
       return sendRes
     } else {
@@ -205,6 +345,8 @@ export async function processOutboxJob(jobId: string): Promise<SendEmailResult> 
       job.retry_count = (job.retry_count || 0) + 1
       job.last_error = sendRes.error || 'Failed to send'
       job.updated_at = new Date().toISOString()
+
+      await updateJobInSupabase(job)
       saveDiskOutbox([job, ...diskJobs.filter((j) => j.id !== jobId)])
       return sendRes
     }
@@ -213,6 +355,8 @@ export async function processOutboxJob(jobId: string): Promise<SendEmailResult> 
     job.retry_count = (job.retry_count || 0) + 1
     job.last_error = err.message || 'Dispatch exception'
     job.updated_at = new Date().toISOString()
+
+    await updateJobInSupabase(job)
     saveDiskOutbox([job, ...diskJobs.filter((j) => j.id !== jobId)])
     return { success: false, error: err.message }
   }
@@ -223,13 +367,19 @@ export async function processOutboxJob(jobId: string): Promise<SendEmailResult> 
  */
 export async function retryOutboxJob(jobId: string): Promise<SendEmailResult> {
   const diskJobs = loadDiskOutbox()
-  const job = inMemoryOutbox.find((j) => j.id === jobId) || diskJobs.find((j) => j.id === jobId)
+  const dbJobs = await loadSupabaseOutboxJobs()
+  const job =
+    inMemoryOutbox.find((j) => j.id === jobId) ||
+    diskJobs.find((j) => j.id === jobId) ||
+    dbJobs.find((j) => j.id === jobId)
+
   if (!job) {
     return { success: false, error: 'Job not found' }
   }
   job.status = 'pending'
   job.updated_at = new Date().toISOString()
   saveDiskOutbox([job, ...diskJobs.filter((j) => j.id !== jobId)])
+  await updateJobInSupabase(job)
   return processOutboxJob(jobId)
 }
 
@@ -253,35 +403,12 @@ export async function getOutboxHistory(options?: {
     }
   }
 
-  // Also query Supabase outbox_jobs if present
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = await createServiceClient()
-      const { data } = await supabase
-        .from('outbox_jobs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100)
-
-      if (data && Array.isArray(data)) {
-        for (const row of data) {
-          if (!allJobs.some((j) => j.id === row.id)) {
-            allJobs.push({
-              id: row.id,
-              job_type: row.job_type,
-              payload: row.payload as any,
-              status: row.status as any,
-              retry_count: row.retry_count,
-              max_retries: row.max_retries,
-              last_error: row.last_error,
-              scheduled_at: row.scheduled_at,
-              created_at: row.created_at,
-              updated_at: row.updated_at,
-            })
-          }
-        }
-      }
-    } catch {}
+  // Load from Supabase
+  const dbJobs = await loadSupabaseOutboxJobs()
+  for (const dbj of dbJobs) {
+    if (!allJobs.some((j) => j.id === dbj.id)) {
+      allJobs.push(dbj)
+    }
   }
 
   allJobs.sort(

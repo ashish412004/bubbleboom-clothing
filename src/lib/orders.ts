@@ -991,14 +991,33 @@ export async function getOrdersByUserId(userId: string): Promise<Order[]> {
 }
 
 export async function notifyOrderStatusChange(order: any, newStatus: string) {
-  const customerEmail = order.guest_email || (order.shipping_address as any)?.email
-  if (!customerEmail) return
+  let customerEmail = order.guest_email || (order.shipping_address as any)?.email
+
+  // Fallback to customer profile email if authenticated user without guest_email
+  if (!customerEmail && order.user_id && isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('id', order.user_id)
+        .maybeSingle()
+      if (profile?.email) {
+        customerEmail = profile.email
+      }
+    } catch {}
+  }
+
+  if (!customerEmail) {
+    console.warn(`[notifyOrderStatusChange] No customer email found for order ${order.order_number || order.id}`)
+    return
+  }
 
   if (newStatus === 'shipped') {
     try {
       await sendOrderShippedEmail(
         customerEmail,
-        order.order_number,
+        order.order_number || order.id,
         order.tracking_number || 'AWB-PENDING',
         order.carrier || 'Express Courier',
         order.tracking_url || null
@@ -1011,7 +1030,7 @@ export async function notifyOrderStatusChange(order: any, newStatus: string) {
 
   if (newStatus === 'delivered') {
     try {
-      await sendOrderDeliveredEmail(customerEmail, order.order_number)
+      await sendOrderDeliveredEmail(customerEmail, order.order_number || order.id)
     } catch (e) {
       console.warn('[notifyOrderStatusChange] sendOrderDeliveredEmail error:', e)
     }
@@ -1019,7 +1038,8 @@ export async function notifyOrderStatusChange(order: any, newStatus: string) {
   }
 
   let event: OrderNotificationEvent | null = null
-  if (newStatus === 'packed') event = 'order_packed'
+  if (newStatus === 'confirmed') event = 'order_confirmed'
+  else if (newStatus === 'packed') event = 'order_packed'
   else if (newStatus === 'out_for_delivery') event = 'out_for_delivery'
   else if (newStatus === 'cancelled') event = 'order_cancelled'
   else if (newStatus === 'refunded') event = 'refund_completed'
@@ -1042,28 +1062,31 @@ export async function notifyOrderStatusChange(order: any, newStatus: string) {
       }
     })
 
-    await queueOrderNotification({
-      order_id: order.id,
-      order_number: order.order_number,
-      event,
-      recipient_email: customerEmail,
-      customer_name: (order.shipping_address as any)?.full_name || 'Customer',
-      total_amount: order.total_amount || 0,
-      subtotal: order.subtotal_amount,
-      shipping_amount: order.shipping_amount,
-      discount_amount: order.coupon_discount,
-      payment_method: order.payment_method,
-      payment_status: order.payment_status,
-      items,
-      shipping_address: order.shipping_address,
-      carrier: order.carrier,
-      tracking_number: order.tracking_number,
-      tracking_url: order.tracking_url,
-      estimated_delivery:
-        order.estimated_delivery_min && order.estimated_delivery_max
-          ? `${order.estimated_delivery_min} – ${order.estimated_delivery_max}`
-          : order.estimated_delivery_min || null,
-    })
+    await queueOrderNotification(
+      {
+        order_id: order.id,
+        order_number: order.order_number || order.id,
+        event,
+        recipient_email: customerEmail,
+        customer_name: (order.shipping_address as any)?.full_name || order.customer_name || 'Customer',
+        total_amount: order.total_amount || 0,
+        subtotal: order.subtotal_amount || order.subtotal || 0,
+        shipping_amount: order.shipping_amount || 0,
+        discount_amount: order.coupon_discount || order.discount_amount || 0,
+        payment_method: order.payment_method || 'cod',
+        payment_status: order.payment_status || 'pending',
+        items,
+        shipping_address: order.shipping_address,
+        carrier: order.carrier || order.courier_partner || 'Express Courier',
+        tracking_number: order.tracking_number,
+        tracking_url: order.tracking_url,
+        estimated_delivery:
+          order.estimated_delivery_min && order.estimated_delivery_max
+            ? `${order.estimated_delivery_min} – ${order.estimated_delivery_max}`
+            : order.estimated_delivery_min || null,
+      },
+      { immediate: true }
+    )
   } catch (err) {
     console.warn(`[notifyOrderStatusChange] Non-fatal notification error for ${event}:`, err)
   }
@@ -1162,22 +1185,6 @@ export async function updateOrderStatus(
   if (newStatus === 'shipped') shippedEmailSentAt = new Date().toISOString()
   if (newStatus === 'delivered') deliveredEmailSentAt = new Date().toISOString()
 
-  // Hydrate order items for rich email notification
-  try {
-    const { data: orderItems } = await supabase
-      .from('order_items')
-      .select('*')
-      .eq('order_id', currentOrder.id)
-
-    const hydratedOrder = {
-      ...currentOrder,
-      order_items: orderItems || [],
-    }
-    await notifyOrderStatusChange(hydratedOrder, newStatus)
-  } catch (notifyErr) {
-    console.warn('[updateOrderStatus] Non-fatal notification error:', notifyErr)
-  }
-
   let { data, error } = await supabase
     .from('orders')
     .update({
@@ -1207,6 +1214,23 @@ export async function updateOrderStatus(
   }
 
   if (error) return { error: error.message }
+
+  // Hydrate order items and send notification after database update succeeds
+  try {
+    const { data: orderItems } = await supabase
+      .from('order_items')
+      .select('*')
+      .eq('order_id', (data || currentOrder).id)
+
+    const hydratedOrder = {
+      ...currentOrder,
+      ...(data || {}),
+      order_items: orderItems || [],
+    }
+    await notifyOrderStatusChange(hydratedOrder, newStatus)
+  } catch (notifyErr) {
+    console.warn('[updateOrderStatus] Non-fatal notification error:', notifyErr)
+  }
 
   // Log in admin audit logs
   if (adminUserId) {

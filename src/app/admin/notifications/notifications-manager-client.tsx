@@ -32,6 +32,7 @@ interface NotificationsManagerClientProps {
     smtpUser: string
     fromEmail: string
     supportEmail: string
+    hasPassword?: boolean
   }
 }
 
@@ -119,19 +120,29 @@ export function NotificationsManagerClient({
   const [isRefreshingHistory, setIsRefreshingHistory] = useState(false)
   const [retryingJobId, setRetryingJobId] = useState<string | null>(null)
 
+  // SMTP Credential State
+  const [smtpPass, setSmtpPass] = useState(settings.smtp_pass || '')
+  const [isVerifyingSmtp, setIsVerifyingSmtp] = useState(false)
+  const [verifyFeedback, setVerifyFeedback] = useState<{ success: boolean; message: string } | null>(null)
+
   // Save Settings Handler
   async function handleSaveSettings() {
     setIsSavingSettings(true)
     setSettingsFeedback(null)
     try {
+      const payloadSettings = {
+        ...settings,
+        smtp_pass: smtpPass,
+      }
       const res = await fetch('/api/admin/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify({ settings: payloadSettings }),
       })
       const data = await res.json()
       if (res.ok && data.success) {
-        setSettingsFeedback('Notification settings saved successfully.')
+        setSettings(data.settings)
+        setSettingsFeedback('Notification settings & SMTP credentials saved successfully.')
       } else {
         setSettingsFeedback(data.error || 'Failed to save settings.')
       }
@@ -139,6 +150,43 @@ export function NotificationsManagerClient({
       setSettingsFeedback(err.message || 'Error saving settings.')
     } finally {
       setIsSavingSettings(false)
+    }
+  }
+
+  // Verify SMTP Connection Handler
+  async function handleVerifySmtp() {
+    setIsVerifyingSmtp(true)
+    setVerifyFeedback(null)
+    try {
+      const res = await fetch('/api/admin/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'VERIFY_SMTP',
+          config: {
+            user: settings.smtp_user || mailerStatus.smtpUser,
+            pass: smtpPass || settings.smtp_pass,
+            host: settings.smtp_host || mailerStatus.smtpHost,
+            port: settings.smtp_port || mailerStatus.smtpPort,
+          },
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setVerifyFeedback({
+          success: true,
+          message: data.message || 'Gmail SMTP connection verified successfully!',
+        })
+      } else {
+        setVerifyFeedback({
+          success: false,
+          message: data.error || 'Gmail SMTP verification failed.',
+        })
+      }
+    } catch (err: any) {
+      setVerifyFeedback({ success: false, message: err.message || 'Connection test failed.' })
+    } finally {
+      setIsVerifyingSmtp(false)
     }
   }
 
@@ -524,18 +572,68 @@ export function NotificationsManagerClient({
               )}
             </div>
 
-            {/* SMTP Environment Checklist */}
-            <div className="bg-neutral-50 border border-neutral-300 p-5 space-y-3 text-xs font-mono">
-              <div className="font-bold uppercase tracking-wider text-black">
-                SMTP Configuration Reference
+            {/* SMTP Environment & App Password Configuration */}
+            <div className="bg-neutral-50 border border-neutral-300 p-5 space-y-4 text-xs font-mono">
+              <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
+                <div className="font-bold uppercase tracking-wider text-black flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-black" />
+                  <span>Gmail SMTP Gateway</span>
+                </div>
+                <span
+                  className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest border ${
+                    mailerStatus.configured || Boolean(smtpPass)
+                      ? 'bg-neutral-900 text-white border-black'
+                      : 'bg-amber-100 text-amber-900 border-amber-300'
+                  }`}
+                >
+                  {mailerStatus.configured || Boolean(smtpPass) ? 'Credentials Active' : 'Setup Required'}
+                </span>
               </div>
+
               <ul className="space-y-1.5 text-neutral-600">
-                <li>• Host: <strong className="text-black">smtp.gmail.com</strong> (Port: 465)</li>
-                <li>• User: <strong className="text-black">bubbleboomstore2026@gmail.com</strong></li>
-                <li>• Password: Uses Google Workspace / Gmail App Password</li>
+                <li>• Host: <strong className="text-black">{mailerStatus.smtpHost || 'smtp.gmail.com'}</strong> (Port: {mailerStatus.smtpPort || 465})</li>
+                <li>• User: <strong className="text-black">{mailerStatus.smtpUser || 'bubbleboomstore2026@gmail.com'}</strong></li>
                 <li>• From Header: <strong className="text-black">{mailerStatus.fromEmail}</strong></li>
                 <li>• Support Inquiries: <strong className="text-black">bubbleboomstore2026@gmail.com</strong></li>
               </ul>
+
+              <div className="space-y-1.5 pt-2 border-t border-neutral-200">
+                <label className="text-[11px] font-bold text-black uppercase tracking-wider block">
+                  Gmail App Password (16 Characters)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    placeholder="Enter Gmail App Password (e.g. xxxx xxxx xxxx xxxx)"
+                    value={smtpPass}
+                    onChange={(e) => setSmtpPass(e.target.value)}
+                    className="flex-1 bg-white border border-neutral-300 px-3 py-2 text-xs text-black focus:outline-none focus:border-black font-mono"
+                  />
+                  <button
+                    onClick={handleVerifySmtp}
+                    disabled={isVerifyingSmtp || (!smtpPass && !mailerStatus.configured)}
+                    className="bg-black text-white px-3 py-2 text-[10px] font-mono font-bold uppercase tracking-wider hover:bg-neutral-800 transition-colors disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {isVerifyingSmtp ? 'Testing...' : 'Test SMTP'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-neutral-500">
+                  Password is stored securely in Supabase Store Settings and used by the transactional email worker.
+                </p>
+              </div>
+
+              {verifyFeedback && (
+                <div
+                  className={`p-3 text-xs font-mono border ${
+                    verifyFeedback.success
+                      ? 'bg-neutral-100 border-black text-black'
+                      : 'bg-red-50 border-red-500 text-red-600'
+                  }`}
+                >
+                  {verifyFeedback.message}
+                </div>
+              )}
+
               <p className="text-[10px] text-neutral-500 border-t border-neutral-200 pt-2">
                 Authentication login OTP emails continue using Supabase Auth SMTP configuration without disruption.
               </p>

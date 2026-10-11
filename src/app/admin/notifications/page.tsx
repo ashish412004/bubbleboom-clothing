@@ -18,7 +18,7 @@ export default async function AdminNotificationsPage() {
   const [settings, history, mailerStatus] = await Promise.all([
     getStoreSettings<StoreNotificationSettings>('email_notifications'),
     getOutboxHistory({ limit: 50 }),
-    Promise.resolve(getMailerStatus()),
+    getMailerStatus(),
   ])
 
   return (

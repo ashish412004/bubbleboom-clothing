@@ -56,7 +56,7 @@ export interface OutboxJobRecord {
   id: string
   job_type: string
   payload: OrderNotificationPayload
-  status: 'pending' | 'processing' | 'completed' | 'failed'
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'simulated'
   retry_count: number
   max_retries: number
   last_error: string | null

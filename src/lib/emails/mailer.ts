@@ -1,5 +1,6 @@
 import nodemailer, { type Transporter } from 'nodemailer'
 import { Resend } from 'resend'
+import { getStoreSettings, StoreNotificationSettings } from '@/lib/settings'
 
 export interface SendEmailOptions {
   to: string | string[]
@@ -52,8 +53,44 @@ export function getSmtpConfig() {
   }
 }
 
-export function getMailerTransporter(): Transporter | null {
-  const cfg = getSmtpConfig()
+/**
+ * Resolves SMTP configuration dynamically checking process.env first,
+ * then falling back to persistent store_settings in Supabase.
+ */
+export async function resolveSmtpConfig() {
+  const syncCfg = getSmtpConfig()
+  if (syncCfg.hasCredentials) {
+    return syncCfg
+  }
+
+  try {
+    const settings = await getStoreSettings<StoreNotificationSettings>('email_notifications')
+    if (settings?.smtp_pass && settings.smtp_pass.trim().length > 0) {
+      const user = settings.smtp_user || syncCfg.user
+      const host = settings.smtp_host || syncCfg.host
+      const port = Number(settings.smtp_port) || syncCfg.port
+      const secure = port === 465
+      const from = settings.from_email
+        ? `BUBBLE BOOM <${settings.from_email}>`
+        : syncCfg.from
+
+      return {
+        host,
+        port,
+        secure,
+        user,
+        pass: settings.smtp_pass.trim(),
+        from,
+        hasCredentials: true,
+      }
+    }
+  } catch {}
+
+  return syncCfg
+}
+
+export async function getMailerTransporter(): Promise<Transporter | null> {
+  const cfg = await resolveSmtpConfig()
   if (!cfg.hasCredentials) {
     return null
   }
@@ -78,8 +115,57 @@ export function getMailerTransporter(): Transporter | null {
   return cachedTransporter
 }
 
+export async function verifySmtpConnection(customConfig?: {
+  user?: string
+  pass?: string
+  host?: string
+  port?: number
+}): Promise<{ success: boolean; message?: string; error?: string }> {
+  const cfg = customConfig?.pass
+    ? {
+        host: customConfig.host || 'smtp.gmail.com',
+        port: Number(customConfig.port) || 465,
+        secure: (Number(customConfig.port) || 465) === 465,
+        user: customConfig.user || 'bubbleboomstore2026@gmail.com',
+        pass: customConfig.pass,
+      }
+    : await resolveSmtpConfig()
+
+  if (!cfg.pass || !cfg.pass.trim()) {
+    return {
+      success: false,
+      error: 'No Gmail App Password provided. Please configure SMTP_PASS in environment or Store Settings.',
+    }
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.secure,
+      auth: {
+        user: cfg.user,
+        pass: cfg.pass,
+      },
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+    })
+
+    await transporter.verify()
+    return {
+      success: true,
+      message: `Successfully authenticated with ${cfg.host} as ${cfg.user}`,
+    }
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || 'SMTP connection verification failed',
+    }
+  }
+}
+
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
-  const smtpConfig = getSmtpConfig()
+  const smtpConfig = await resolveSmtpConfig()
   const recipient = Array.isArray(options.to) ? options.to.join(', ') : options.to
   const sender = options.from || smtpConfig.from
   const replyTo = options.replyTo || 'bubbleboomstore2026@gmail.com'
@@ -87,7 +173,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
   // 1. Primary: Gmail SMTP via Nodemailer
   if (smtpConfig.hasCredentials) {
     try {
-      const transporter = getMailerTransporter()
+      const transporter = await getMailerTransporter()
       if (transporter) {
         const info = await transporter.sendMail({
           from: sender,
@@ -107,7 +193,12 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
       }
     } catch (smtpErr: any) {
       console.error('[Gmail SMTP] Delivery error:', smtpErr?.message || smtpErr)
-      // Fall through to Resend secondary fallback if available
+      return {
+        success: false,
+        error: `[Gmail SMTP Error] ${smtpErr?.message || 'SMTP delivery failed'}`,
+        provider: 'gmail-smtp',
+        simulated: false,
+      }
     }
   }
 
@@ -156,11 +247,12 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
     messageId: `sim_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     provider: 'simulated',
     simulated: true,
+    error: 'Notice: SMTP_PASS / GMAIL_APP_PASSWORD not configured. Simulated delivery logged.',
   }
 }
 
-export function getMailerStatus() {
-  const cfg = getSmtpConfig()
+export async function getMailerStatus() {
+  const cfg = await resolveSmtpConfig()
   const resendKey = process.env.RESEND_API_KEY
 
   let provider: 'gmail-smtp' | 'resend' | 'simulated' = 'simulated'
@@ -178,5 +270,6 @@ export function getMailerStatus() {
     smtpUser: cfg.user,
     fromEmail: cfg.from,
     supportEmail: 'bubbleboomstore2026@gmail.com',
+    hasPassword: Boolean(cfg.pass && cfg.pass.length > 0),
   }
 }

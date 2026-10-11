@@ -5,7 +5,7 @@ import {
   sendTestOrderEmail,
   OrderNotificationEvent,
 } from '@/lib/emails/notifications'
-import { getMailerStatus } from '@/lib/emails/mailer'
+import { getMailerStatus, verifySmtpConnection } from '@/lib/emails/mailer'
 import {
   getStoreSettings,
   updateStoreSettings,
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     const [history, settings, mailerStatus] = await Promise.all([
       getOutboxHistory({ limit, offset, status }),
       getStoreSettings<StoreNotificationSettings>('email_notifications'),
-      Promise.resolve(getMailerStatus()),
+      getMailerStatus(),
     ])
 
     return NextResponse.json({
@@ -76,7 +76,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized admin access' }, { status: 403 })
     }
 
-    const { recipientEmail, event } = await req.json()
+    const body = await req.json()
+
+    // SMTP Connection Verification Action
+    if (body.action === 'VERIFY_SMTP') {
+      const verifyRes = await verifySmtpConnection(body.config)
+      return NextResponse.json(verifyRes)
+    }
+
+    const { recipientEmail, event } = body
     if (!recipientEmail || !recipientEmail.includes('@')) {
       return NextResponse.json({ error: 'Valid recipient email is required' }, { status: 400 })
     }

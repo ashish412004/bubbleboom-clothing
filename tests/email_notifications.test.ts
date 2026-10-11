@@ -26,13 +26,13 @@ describe('Automatic Order Notifications & Gmail SMTP Suite', () => {
   })
 
   // 2. SMTP Transport Configuration
-  it('correctly defaults SMTP configuration to Gmail without exposing secrets', () => {
+  it('correctly defaults SMTP configuration to Gmail without exposing secrets', async () => {
     const config = getSmtpConfig()
     expect(config.host).toBe('smtp.gmail.com')
     expect(config.user).toBe('bubbleboomstore2026@gmail.com')
     expect(config.from).toContain('BUBBLE BOOM')
 
-    const status = getMailerStatus()
+    const status = await getMailerStatus()
     expect(status.smtpHost).toBe('smtp.gmail.com')
     expect(status.supportEmail).toBe('bubbleboomstore2026@gmail.com')
   })
