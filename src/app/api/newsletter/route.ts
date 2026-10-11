@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         message: result.message,
+        status: result.status,
         alreadyActive: result.alreadyActive || false,
         confirmationUrl: result.confirmationUrl,
       },

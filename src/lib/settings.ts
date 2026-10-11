@@ -44,7 +44,12 @@ export async function getStoreSettings<T = any>(key: 'general' | 'shipping' | 'o
   }
 
   try {
-    const supabase = await createServerClient()
+    let supabase: any
+    try {
+      supabase = await createServerClient()
+    } catch {
+      supabase = await createServiceClient()
+    }
     const { data, error } = await supabase
       .from('store_settings')
       .select('value')

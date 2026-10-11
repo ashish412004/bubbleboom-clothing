@@ -1218,6 +1218,8 @@ export interface Database {
           source: string | null
           created_at: string
           updated_at: string | null
+          is_active?: boolean | null
+          subscribed_at?: string | null
         }
         Insert: {
           id?: string
@@ -1233,6 +1235,8 @@ export interface Database {
           source?: string | null
           created_at?: string
           updated_at?: string | null
+          is_active?: boolean | null
+          subscribed_at?: string | null
         }
         Update: {
           id?: string
@@ -1248,6 +1252,8 @@ export interface Database {
           source?: string | null
           created_at?: string
           updated_at?: string | null
+          is_active?: boolean | null
+          subscribed_at?: string | null
         }
         Relationships: []
       }

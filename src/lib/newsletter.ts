@@ -77,6 +77,7 @@ export async function subscribeNewsletter({
 }): Promise<{
   success: boolean
   message: string
+  status?: SubscriberStatus
   alreadyActive?: boolean
   rateLimited?: boolean
   error?: string
@@ -110,11 +111,17 @@ export async function subscribeNewsletter({
         console.error('Error querying newsletter subscriber:', fetchError)
       }
 
-      // Case A: Already active subscriber
-      if (existing && existing.status === 'active') {
+      // Case A: Already active subscriber (supports both full schema 'status' and legacy 'is_active')
+      const isAlreadyActive =
+        existing &&
+        (existing.status === 'active' ||
+          (existing.status === undefined && existing.is_active === true))
+
+      if (isAlreadyActive) {
         return {
           success: true,
           alreadyActive: true,
+          status: 'active',
           message: "You're already subscribed to the Boom Squad!",
         }
       }
@@ -138,7 +145,7 @@ export async function subscribeNewsletter({
       const expiresAt = new Date(now.getTime() + TOKEN_EXPIRY_MS).toISOString()
       const confirmUrl = `${siteUrl}/newsletter/confirm?token=${confirmationToken}`
 
-      // Attempt sending the double opt-in email BEFORE committing or claiming success
+      // Attempt sending the confirmation email
       const emailResult = await sendNewsletterConfirmationEmail(normalizedEmail, confirmUrl)
       if (emailResult.error) {
         console.error('Newsletter confirmation email failed:', emailResult.error)
@@ -150,7 +157,7 @@ export async function subscribeNewsletter({
       }
 
       // Save / update subscription record in Supabase
-      const payload = {
+      const payload: any = {
         email: normalizedEmail,
         status: 'pending' as const,
         confirmation_token: confirmationToken,
@@ -160,11 +167,46 @@ export async function subscribeNewsletter({
         consent_given: true,
         source,
         updated_at: now.toISOString(),
+        is_active: true,
       }
 
-      const { error: upsertError } = await supabase
+      let { error: upsertError } = await supabase
         .from('newsletter_subscribers')
         .upsert(payload, { onConflict: 'email' })
+
+      // Fallback for database schema missing newer columns (e.g. status, consent_given)
+      if (
+        upsertError &&
+        (upsertError.code === 'PGRST204' ||
+          upsertError.message?.toLowerCase().includes('column') ||
+          upsertError.message?.toLowerCase().includes('does not exist') ||
+          upsertError.message?.toLowerCase().includes('schema cache'))
+      ) {
+        console.warn(
+          'Falling back to live basic newsletter schema for Supabase (email, is_active, subscribed_at):',
+          upsertError.message
+        )
+        const fallbackRes = await supabase
+          .from('newsletter_subscribers')
+          .upsert(
+            {
+              email: normalizedEmail,
+              is_active: true,
+              subscribed_at: now.toISOString(),
+            },
+            { onConflict: 'email' }
+          )
+        upsertError = fallbackRes.error
+
+        if (!upsertError) {
+          return {
+            success: true,
+            status: 'active',
+            message: "Welcome to the Boom Squad! You're now subscribed.",
+            confirmationUrl: confirmUrl,
+          }
+        }
+      }
 
       if (upsertError) {
         console.error('Failed to persist newsletter subscriber:', upsertError)
@@ -177,6 +219,7 @@ export async function subscribeNewsletter({
 
       return {
         success: true,
+        status: 'pending',
         message: 'Confirmation email sent! Please check your inbox to activate your subscription.',
         confirmationUrl: confirmUrl,
       }
@@ -198,6 +241,7 @@ export async function subscribeNewsletter({
     return {
       success: true,
       alreadyActive: true,
+      status: 'active',
       message: "You're already subscribed to the Boom Squad!",
     }
   }
@@ -249,6 +293,7 @@ export async function subscribeNewsletter({
 
   return {
     success: true,
+    status: 'pending',
     message: 'Confirmation email sent! Please check your inbox to activate your subscription.',
     confirmationUrl: confirmUrl,
   }
@@ -312,16 +357,30 @@ export async function confirmNewsletterSubscription({
       const unsubscribeUrl = `${siteUrl}/newsletter/unsubscribe?token=${subscriber.unsubscribe_token}`
 
       // Activate subscriber & consume confirmation token
-      const { error: updateError } = await supabase
+      let { error: updateError } = await supabase
         .from('newsletter_subscribers')
         .update({
           status: 'active',
+          is_active: true,
           confirmed_at: now.toISOString(),
           confirmation_token: null,
           token_expires_at: null,
           updated_at: now.toISOString(),
         })
         .eq('id', subscriber.id)
+
+      if (
+        updateError &&
+        (updateError.code === 'PGRST204' ||
+          updateError.message?.toLowerCase().includes('column') ||
+          updateError.message?.toLowerCase().includes('does not exist'))
+      ) {
+        const legacyUpdate = await supabase
+          .from('newsletter_subscribers')
+          .update({ is_active: true })
+          .eq('id', subscriber.id)
+        updateError = legacyUpdate.error
+      }
 
       if (updateError) {
         console.error('Error updating subscriber confirmation:', updateError)
@@ -441,7 +500,7 @@ export async function unsubscribeNewsletter({
         }
       }
 
-      if (subscriber.status === 'unsubscribed') {
+      if (subscriber.status === 'unsubscribed' || subscriber.is_active === false) {
         return {
           success: true,
           email: subscriber.email,
@@ -449,14 +508,28 @@ export async function unsubscribeNewsletter({
         }
       }
 
-      const { error: updateError } = await supabase
+      let { error: updateError } = await supabase
         .from('newsletter_subscribers')
         .update({
           status: 'unsubscribed',
+          is_active: false,
           unsubscribed_at: now.toISOString(),
           updated_at: now.toISOString(),
         })
         .eq('id', subscriber.id)
+
+      if (
+        updateError &&
+        (updateError.code === 'PGRST204' ||
+          updateError.message?.toLowerCase().includes('column') ||
+          updateError.message?.toLowerCase().includes('does not exist'))
+      ) {
+        const legacyUpdate = await supabase
+          .from('newsletter_subscribers')
+          .update({ is_active: false })
+          .eq('id', subscriber.id)
+        updateError = legacyUpdate.error
+      }
 
       if (updateError) {
         console.error('Error updating unsubscribe status:', updateError)
@@ -522,7 +595,66 @@ export async function unsubscribeNewsletter({
 }
 
 /**
- * Admin: Retrieve paginated subscriber list with status filters, search, and count aggregates
+ * Direct unsubscribe by email address (for authenticated users or fallback)
+ */
+export async function unsubscribeByEmail(email: string): Promise<{
+  success: boolean
+  message: string
+  error?: string
+}> {
+  const normalizedEmail = (email || '').trim().toLowerCase()
+  if (!validateEmailAddress(normalizedEmail)) {
+    return { success: false, error: 'Invalid email address.', message: 'Invalid email address.' }
+  }
+  const now = new Date()
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      let { error: updateErr } = await supabase
+        .from('newsletter_subscribers')
+        .update({
+          status: 'unsubscribed',
+          is_active: false,
+          unsubscribed_at: now.toISOString(),
+          updated_at: now.toISOString(),
+        })
+        .eq('email', normalizedEmail)
+
+      if (
+        updateErr &&
+        (updateErr.code === 'PGRST204' ||
+          updateErr.message?.toLowerCase().includes('column') ||
+          updateErr.message?.toLowerCase().includes('does not exist'))
+      ) {
+        const legacyRes = await supabase
+          .from('newsletter_subscribers')
+          .update({ is_active: false })
+          .eq('email', normalizedEmail)
+        updateErr = legacyRes.error
+      }
+
+      if (updateErr) {
+        return { success: false, error: 'Database update failed.', message: 'Database update failed.' }
+      }
+      return { success: true, message: 'You have been unsubscribed.' }
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error unsubscribing.', message: err.message || 'Error unsubscribing.' }
+    }
+  }
+
+  const store = getMemoryStore()
+  const sub = store.get(normalizedEmail)
+  if (sub) {
+    sub.status = 'unsubscribed'
+    sub.unsubscribed_at = now.toISOString()
+    store.set(normalizedEmail, sub)
+  }
+  return { success: true, message: 'You have been unsubscribed.' }
+}
+
+/**
+ * Admin: Retrieve subscriber list with status filters, search, and count aggregates
  */
 export async function getNewsletterSubscribersAdmin({
   status = 'all',
@@ -544,44 +676,62 @@ export async function getNewsletterSubscribersAdmin({
     try {
       const supabase = await createServiceClient()
 
-      // Fetch status counts
-      const { data: allRows } = await supabase
-        .from('newsletter_subscribers')
-        .select('status')
-
-      const counts: SubscriberCounts = {
-        total: allRows?.length || 0,
-        active: allRows?.filter((r) => r.status === 'active').length || 0,
-        pending: allRows?.filter((r) => r.status === 'pending').length || 0,
-        unsubscribed: allRows?.filter((r) => r.status === 'unsubscribed').length || 0,
-      }
-
-      let query = supabase
-        .from('newsletter_subscribers')
-        .select('*', { count: 'exact' })
-        .order('created_at', { ascending: false })
-
-      if (status !== 'all') {
-        query = query.eq('status', status)
-      }
+      let query = supabase.from('newsletter_subscribers').select('*')
 
       if (search.trim()) {
         query = query.ilike('email', `%${search.trim().toLowerCase()}%`)
       }
 
-      query = query.range(offset, offset + limit - 1)
-
-      const { data, count, error } = await query
+      const { data: allRows, error } = await query
 
       if (error) {
         console.error('Error fetching subscribers in admin:', error)
-        return { subscribers: [], counts, totalFiltered: 0 }
+        return {
+          subscribers: [],
+          counts: { total: 0, active: 0, pending: 0, unsubscribed: 0 },
+          totalFiltered: 0,
+        }
       }
 
+      const normalized: NewsletterSubscriber[] = (allRows || []).map((row: any) => ({
+        id: row.id,
+        email: row.email,
+        status: row.status || (row.is_active === false ? 'unsubscribed' : 'active'),
+        confirmation_token: row.confirmation_token || null,
+        token_expires_at: row.token_expires_at || null,
+        confirmed_at: row.confirmed_at || null,
+        unsubscribe_token: row.unsubscribe_token || null,
+        unsubscribed_at: row.unsubscribed_at || null,
+        last_sent_at: row.last_sent_at || null,
+        consent_given: row.consent_given ?? true,
+        source: row.source || 'storefront_footer',
+        created_at: row.created_at || row.subscribed_at || new Date().toISOString(),
+        updated_at: row.updated_at || null,
+      }))
+
+      const counts: SubscriberCounts = {
+        total: normalized.length,
+        active: normalized.filter((s) => s.status === 'active').length,
+        pending: normalized.filter((s) => s.status === 'pending').length,
+        unsubscribed: normalized.filter((s) => s.status === 'unsubscribed').length,
+      }
+
+      let filtered = normalized
+
+      if (status !== 'all') {
+        filtered = filtered.filter((s) => s.status === status)
+      }
+
+      filtered.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+
+      const paginated = filtered.slice(offset, offset + limit)
+
       return {
-        subscribers: (data as any) || [],
+        subscribers: paginated,
         counts,
-        totalFiltered: count || 0,
+        totalFiltered: filtered.length,
       }
     } catch (err) {
       console.error('Admin subscribers query error:', err)
@@ -646,7 +796,23 @@ export async function getSubscriberByEmail(email: string): Promise<NewsletterSub
         console.error('Error fetching subscriber by email:', error)
         return null
       }
-      return data || null
+      if (!data) return null
+
+      return {
+        id: data.id,
+        email: data.email,
+        status: data.status || (data.is_active === false ? 'unsubscribed' : 'active'),
+        confirmation_token: data.confirmation_token || null,
+        token_expires_at: data.token_expires_at || null,
+        confirmed_at: data.confirmed_at || null,
+        unsubscribe_token: data.unsubscribe_token || null,
+        unsubscribed_at: data.unsubscribed_at || null,
+        last_sent_at: data.last_sent_at || null,
+        consent_given: data.consent_given ?? true,
+        source: data.source || 'storefront_footer',
+        created_at: data.created_at || data.subscribed_at || new Date().toISOString(),
+        updated_at: data.updated_at || null,
+      }
     } catch (err) {
       console.error('Database query error in getSubscriberByEmail:', err)
       return null
@@ -850,4 +1016,3 @@ export async function resendConfirmationEmailAdmin({
     message: `Confirmation email re-sent successfully to ${subscriber.email}.`,
   }
 }
-

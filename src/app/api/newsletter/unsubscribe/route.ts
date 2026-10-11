@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import {
   unsubscribeNewsletter,
+  unsubscribeByEmail,
   getSubscriberByEmail,
   requestUnsubscribeEmail,
 } from '@/lib/newsletter'
@@ -76,9 +77,13 @@ export async function POST(request: NextRequest) {
       }
 
       if (!subscriber.unsubscribe_token) {
+        const result = await unsubscribeByEmail(user.email)
+        if (!result.success) {
+          return NextResponse.json({ error: result.error || 'Failed to unsubscribe.' }, { status: 400 })
+        }
         return NextResponse.json(
-          { error: 'Unable to unsubscribe automatically. Please use link sent to email.' },
-          { status: 400 }
+          { success: true, message: 'You have been unsubscribed from the newsletter.', email: user.email },
+          { status: 200 }
         )
       }
 

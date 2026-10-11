@@ -183,9 +183,9 @@ export function Footer() {
       const data = await res.json()
 
       if (res.ok) {
-        if (data.alreadyActive) {
+        if (data.alreadyActive || data.status === 'active') {
           setSubState('active')
-          setInfoMessage("You're already subscribed to the Boom Squad!")
+          setInfoMessage(data.message || "You're already subscribed to the Boom Squad!")
         } else {
           setSubState('pending')
           setInfoMessage(data.message || 'Check your email to confirm your subscription!')
