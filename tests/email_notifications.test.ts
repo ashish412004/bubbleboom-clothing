@@ -151,7 +151,7 @@ describe('Automatic Order Notifications & Gmail SMTP Suite', () => {
     const payload: OrderNotificationPayload = {
       ...sampleOrder,
       order_id: uniqueOrderId,
-      order_number: 'BB-DEDUP-001',
+      order_number: 'BB-DEDUP-' + Date.now(),
       event: 'order_placed',
     }
 
