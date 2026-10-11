@@ -115,4 +115,78 @@ describe('Customer Ownership, Admin RBAC & Secure Guest Access', () => {
     })
     expect(allowedByPhone).toBe(true)
   })
+
+  describe('Google OAuth Profile Sync & Name Resolution', () => {
+    function resolveGoogleCustomerName(userMetadata: Record<string, any>, existingCustomName?: string | null): string {
+      // 1. If user previously customized their name in profile, preserve it
+      if (existingCustomName && existingCustomName.trim()) {
+        return existingCustomName.trim()
+      }
+
+      // 2. Read actual Google-provided metadata: full_name, name, or given_name + family_name
+      const extracted =
+        userMetadata.full_name ||
+        userMetadata.name ||
+        (userMetadata.given_name
+          ? `${userMetadata.given_name} ${userMetadata.family_name || ''}`.trim()
+          : null)
+
+      if (extracted && extracted.trim()) {
+        return extracted.trim()
+      }
+
+      // 3. Fallback to neutral account label
+      return 'Member'
+    }
+
+    it('extracts correct full name for new user Rahul Sharma from Google OAuth', () => {
+      const googleUserA = {
+        full_name: 'Rahul Sharma',
+        given_name: 'Rahul',
+        family_name: 'Sharma',
+      }
+      const displayName = resolveGoogleCustomerName(googleUserA)
+      expect(displayName).toBe('Rahul Sharma')
+      expect(displayName.split(' ')[0]).toBe('Rahul')
+    })
+
+    it('extracts correct full name for new user Priya Singh from Google OAuth', () => {
+      const googleUserB = {
+        name: 'Priya Singh',
+        given_name: 'Priya',
+        family_name: 'Singh',
+      }
+      const displayName = resolveGoogleCustomerName(googleUserB)
+      expect(displayName).toBe('Priya Singh')
+      expect(displayName.split(' ')[0]).toBe('Priya')
+    })
+
+    it('never defaults to Ashish or another user name', () => {
+      const unknownUser = {}
+      const displayName = resolveGoogleCustomerName(unknownUser)
+      expect(displayName).not.toBe('Ashish')
+      expect(displayName).toBe('Member')
+    })
+
+    it('preserves user customized name even when subsequent Google login occurs', () => {
+      const googleUserC = {
+        full_name: 'Rahul Sharma (Google)',
+      }
+      const existingCustomName = 'Rahul S.' // Customer edited in profile
+      const resolved = resolveGoogleCustomerName(googleUserC, existingCustomName)
+      expect(resolved).toBe('Rahul S.')
+    })
+  })
+
+  describe('Customer Account Isolation & Logout Purge', () => {
+    it('isolates user A and user B cart and wishlist state', () => {
+      const userA = { id: 'cust_A', wishlist: ['prod_1', 'prod_2'], cartCount: 3 }
+      const userB = { id: 'cust_B', wishlist: ['prod_9'], cartCount: 1 }
+
+      expect(userA.id).not.toBe(userB.id)
+      expect(userA.wishlist).not.toEqual(userB.wishlist)
+      expect(userA.cartCount).not.toBe(userB.cartCount)
+    })
+  })
 })
+

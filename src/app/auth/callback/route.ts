@@ -75,20 +75,75 @@ export async function GET(request: Request) {
     console.warn('[auth/callback] Guest cart/wishlist merge warning:', mergeErr)
   }
 
-  // 5. Construct redirect to final safe destination on the approved app origin
+  // 5. Extract accurate name from Google OAuth metadata
+  const userMetadata = session.user.user_metadata || {}
+  const rawGoogleName =
+    userMetadata.full_name ||
+    userMetadata.name ||
+    (userMetadata.given_name
+      ? `${userMetadata.given_name} ${userMetadata.family_name || ''}`.trim()
+      : null)
+
+  let effectiveName = rawGoogleName
+
+  // 6. Sync profile in Supabase Database without overwriting custom names
+  try {
+    const { createServiceClient } = await import('@/lib/supabase/server')
+    const serviceClient = await createServiceClient()
+
+    const { data: existingProfile } = await serviceClient
+      .from('profiles')
+      .select('full_name, role')
+      .eq('id', session.user.id)
+      .maybeSingle()
+
+    if (existingProfile) {
+      if (existingProfile.full_name && existingProfile.full_name.trim()) {
+        effectiveName = existingProfile.full_name.trim()
+      } else if (rawGoogleName) {
+        await serviceClient
+          .from('profiles')
+          .update({
+            full_name: rawGoogleName,
+            avatar_url: userMetadata.avatar_url || userMetadata.picture || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', session.user.id)
+      }
+    } else {
+      // First-time Google user: create profile with Google-provided name and email
+      await serviceClient
+        .from('profiles')
+        .insert({
+          id: session.user.id,
+          email: session.user.email || '',
+          full_name: rawGoogleName || null,
+          avatar_url: userMetadata.avatar_url || userMetadata.picture || null,
+          role: 'customer',
+          updated_at: new Date().toISOString(),
+        })
+    }
+  } catch (profileErr) {
+    console.warn('[auth/callback] Profile sync notice:', profileErr)
+  }
+
+  // 7. Construct redirect to final safe destination on the approved app origin
   const finalRedirectUrl = new URL(safeRedirect, appOrigin)
   const response = NextResponse.redirect(finalRedirectUrl)
 
-  // 6. Explicitly persist all Supabase auth session cookies onto the redirect response
+  // 8. Explicitly persist all Supabase auth session cookies onto the redirect response
   cookiesToSetLater.forEach(({ name, value, options }) => {
     response.cookies.set(name, value, options)
   })
 
-  // 7. Persist fast-lookup user session cookie for server components and header
+  // 9. Persist fast-lookup user session cookie with verified effective name
   response.cookies.set('bb_auth_user', JSON.stringify({
     id: session.user.id,
     email: session.user.email,
-    user_metadata: session.user.user_metadata || {},
+    user_metadata: {
+      ...userMetadata,
+      full_name: effectiveName || userMetadata.full_name || null,
+    },
   }), {
     path: '/',
     httpOnly: true,

@@ -122,6 +122,23 @@ export async function getCurrentUser() {
 }
 
 export async function getUserProfile(userId: string) {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServerClient()
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (!error && data) {
+        return data as Database['public']['Tables']['profiles']['Row']
+      }
+    } catch {
+      // fallback
+    }
+  }
+
   try {
     const cookieStore = await cookies()
     const rawAuth = cookieStore.get('bb_auth_user')?.value
@@ -131,11 +148,12 @@ export async function getUserProfile(userId: string) {
         return {
           id: u.id,
           email: u.email,
-          full_name: u.user_metadata?.full_name || 'Bubble Boom Member',
+          full_name: u.user_metadata?.full_name || null,
           phone: null,
+          avatar_url: u.user_metadata?.avatar_url || null,
           role: 'customer',
-          created_at: u.created_at,
-          updated_at: u.created_at,
+          created_at: u.created_at || new Date().toISOString(),
+          updated_at: u.updated_at || new Date().toISOString(),
         } as any
       }
     }
@@ -143,26 +161,7 @@ export async function getUserProfile(userId: string) {
     // ignore
   }
 
-  if (!isSupabaseConfigured()) {
-    return null
-  }
-
-  try {
-    const supabase = await createServerClient()
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-
-    if (error) {
-      return null
-    }
-
-    return data as Database['public']['Tables']['profiles']['Row'] | null
-  } catch {
-    return null
-  }
+  return null
 }
 
 export async function isAdmin(userId: string): Promise<boolean> {

@@ -28,8 +28,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       return
     }
     const name =
-      rawUser.user_metadata?.full_name ||
       rawUser.full_name ||
+      rawUser.user_metadata?.full_name ||
+      rawUser.user_metadata?.name ||
+      (rawUser.user_metadata?.given_name
+        ? `${rawUser.user_metadata.given_name} ${rawUser.user_metadata?.family_name || ''}`.trim()
+        : null) ||
       rawUser.name ||
       rawUser.email?.split('@')[0] ||
       'Member'
@@ -55,8 +59,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         const data = await res.json()
         if (data.user) {
           const name =
-            data.user.user_metadata?.full_name ||
             data.user.full_name ||
+            data.user.user_metadata?.full_name ||
+            data.user.user_metadata?.name ||
+            (data.user.user_metadata?.given_name
+              ? `${data.user.user_metadata.given_name} ${data.user.user_metadata?.family_name || ''}`.trim()
+              : null) ||
             data.user.name ||
             data.user.email?.split('@')[0] ||
             'Member'

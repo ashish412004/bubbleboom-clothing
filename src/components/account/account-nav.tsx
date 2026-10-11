@@ -18,7 +18,7 @@ const NAV_ITEMS = [
 export function AccountNav() {
   const pathname = usePathname()
   const router = useRouter()
-  const resetCart = useCartStore((s) => s.refreshCart)
+  const resetCartAndWishlist = useCartStore((s) => s.resetCartAndWishlist)
 
   const handleSignOut = async () => {
     try {
@@ -27,7 +27,12 @@ export function AccountNav() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'logout' }),
       })
-      await resetCart()
+
+      // Immediate clean state purge
+      const { useAuthStore } = await import('@/lib/auth-store')
+      useAuthStore.getState().clearUser()
+      resetCartAndWishlist()
+
       toast.success('Signed out')
       router.push('/login')
       router.refresh()

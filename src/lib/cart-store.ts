@@ -13,6 +13,7 @@ interface CartStore {
   decrementWishlist: (delta?: number) => void
   refreshCart: () => Promise<void>
   refreshWishlist: () => Promise<void>
+  resetCartAndWishlist: () => void
   isItemWishlisted: (productId?: string, variantId?: string) => boolean
   toggleWishlistStore: (productId?: string, variantId?: string) => Promise<{ inWishlist: boolean }>
 }
@@ -63,6 +64,14 @@ export const useCartStore = create<CartStore>()(
         } catch {
           // Ignore network errors in background wishlist refresh
         }
+      },
+      resetCartAndWishlist: () => {
+        set({
+          itemCount: 0,
+          wishlistCount: 0,
+          wishlistProductIds: [],
+          wishlistVariantIds: [],
+        })
       },
       isItemWishlisted: (productId?: string, variantId?: string) => {
         const { wishlistProductIds, wishlistVariantIds } = get()

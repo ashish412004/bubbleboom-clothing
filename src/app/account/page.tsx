@@ -21,6 +21,10 @@ export default async function AccountPage() {
     redirect('/login?next=/account')
   }
 
+  const { getUserProfile } = await import('@/lib/auth')
+  const profile = await getUserProfile(user.id)
+  const displayName = profile?.full_name || user.user_metadata?.full_name || user.email
+
   const orders = await getOrdersByUserId(user.id)
   const recentOrders = orders.slice(0, 3)
 
@@ -37,7 +41,7 @@ export default async function AccountPage() {
               Account Overview
             </h1>
             <p className="mt-2 text-xs md:text-sm text-neutral-600">
-              Welcome back, <span className="font-bold text-black">{user.user_metadata?.full_name || user.email}</span>
+              Welcome back, <span className="font-bold text-black">{displayName}</span>
             </p>
           </div>
         </section>
@@ -149,7 +153,7 @@ export default async function AccountPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                   <div>
                     <span className="text-[10px] uppercase font-mono text-neutral-500">Name</span>
-                    <p className="font-bold text-sm mt-0.5">{user.user_metadata?.full_name || 'Not provided'}</p>
+                    <p className="font-bold text-sm mt-0.5">{displayName || 'Not provided'}</p>
                   </div>
                   <div>
                     <span className="text-[10px] uppercase font-mono text-neutral-500">Email</span>

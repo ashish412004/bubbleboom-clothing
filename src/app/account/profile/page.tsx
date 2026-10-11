@@ -19,6 +19,20 @@ export default async function ProfilePage() {
     redirect('/login?next=/account/profile')
   }
 
+  const { getUserProfile } = await import('@/lib/auth')
+  const profile = await getUserProfile(user.id)
+
+  const effectiveName =
+    profile?.full_name ||
+    user.user_metadata?.full_name ||
+    user.user_metadata?.name ||
+    ''
+
+  const identities = user.identities || []
+  const hasEmailIdentity = identities.some((i: any) => i.provider === 'email')
+  const hasGoogleIdentity = identities.some((i: any) => i.provider === 'google')
+  const isGoogleOnly = hasGoogleIdentity && !hasEmailIdentity
+
   return (
     <div className="flex flex-col min-h-screen bg-white text-black">
       <Header />
@@ -45,8 +59,11 @@ export default async function ProfilePage() {
 
             <div className="lg:col-span-3">
               <ProfileForm
-                initialName={user.user_metadata?.full_name || ''}
+                initialName={effectiveName}
                 initialEmail={user.email || ''}
+                initialPhone={profile?.phone || ''}
+                initialAvatar={profile?.avatar_url || ''}
+                isGoogleOnly={isGoogleOnly}
               />
             </div>
           </div>

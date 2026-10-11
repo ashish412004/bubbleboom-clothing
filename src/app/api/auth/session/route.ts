@@ -41,7 +41,60 @@ export async function GET() {
       const supabase = await createServerClient()
       const { data: { user }, error } = await supabase.auth.getUser()
       if (!error && user) {
-        return NextResponse.json({ user })
+        // Query profiles table to retrieve customer-preferred name
+        let effectiveName =
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          (user.user_metadata?.given_name
+            ? `${user.user_metadata.given_name} ${user.user_metadata?.family_name || ''}`.trim()
+            : null)
+
+        let phone = user.phone || null
+        let avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || null
+
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, phone, avatar_url')
+            .eq('id', user.id)
+            .maybeSingle()
+
+          if (profile?.full_name) {
+            effectiveName = profile.full_name
+          }
+          if (profile?.phone) {
+            phone = profile.phone
+          }
+          if (profile?.avatar_url) {
+            avatarUrl = profile.avatar_url
+          }
+        } catch {
+          // Non-blocking
+        }
+
+        // Determine if user has a password set (checking identities or app_metadata)
+        const identities = user.identities || []
+        const hasEmailIdentity = identities.some((i: any) => i.provider === 'email')
+        const hasGoogleIdentity = identities.some((i: any) => i.provider === 'google')
+        const isGoogleOnly = hasGoogleIdentity && !hasEmailIdentity
+
+        return NextResponse.json({
+          user: {
+            ...user,
+            full_name: effectiveName || null,
+            phone,
+            avatar_url: avatarUrl,
+            user_metadata: {
+              ...(user.user_metadata || {}),
+              full_name: effectiveName || null,
+              phone,
+              avatar_url: avatarUrl,
+            },
+            isGoogleOnly,
+            hasGoogleIdentity,
+            hasEmailIdentity,
+          },
+        })
       }
     } catch {
       // fallback to cookie
@@ -561,6 +614,110 @@ export async function POST(request: NextRequest) {
       const response = NextResponse.json({
         success: true,
         message: 'Password updated successfully. Please sign in with your new password.',
+      })
+      applySupabaseCookies(response)
+      return response
+    }
+
+    // 11. UPDATE PROFILE DETAILS (Full Name, Phone, Avatar)
+    if (action === 'update-profile') {
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError || !user) {
+        return NextResponse.json({ error: 'Authentication required to update profile.' }, { status: 401 })
+      }
+
+      const { name, phone, avatar_url } = body
+      const cleanName = typeof name === 'string' ? name.trim() : undefined
+      const cleanPhone = typeof phone === 'string' ? phone.trim() : undefined
+      const cleanAvatar = typeof avatar_url === 'string' ? avatar_url.trim() : undefined
+
+      // 11.1 Update auth.users metadata
+      const updateData: any = {}
+      if (cleanName !== undefined) updateData.full_name = cleanName
+      if (cleanPhone !== undefined) updateData.phone = cleanPhone
+      if (cleanAvatar !== undefined) updateData.avatar_url = cleanAvatar
+
+      const { error: metaError } = await supabase.auth.updateUser({
+        data: updateData,
+      })
+
+      if (metaError) {
+        return NextResponse.json({ error: metaError.message }, { status: 400 })
+      }
+
+      // 11.2 Upsert into public.profiles table securely
+      const profileUpdates: any = {
+        id: user.id,
+        email: user.email || '',
+        updated_at: new Date().toISOString(),
+      }
+      if (cleanName !== undefined) profileUpdates.full_name = cleanName
+      if (cleanPhone !== undefined) profileUpdates.phone = cleanPhone
+      if (cleanAvatar !== undefined) profileUpdates.avatar_url = cleanAvatar
+
+      try {
+        await serviceClient.from('profiles').upsert(profileUpdates, { onConflict: 'id' })
+      } catch (profErr) {
+        console.error('Error syncing profile update:', profErr)
+      }
+
+      // 11.3 Update cookie
+      const updatedUserMeta = {
+        ...(user.user_metadata || {}),
+        ...updateData,
+      }
+
+      const response = NextResponse.json({
+        success: true,
+        message: 'Profile updated successfully!',
+        user: {
+          ...user,
+          full_name: cleanName !== undefined ? cleanName : user.user_metadata?.full_name,
+          phone: cleanPhone !== undefined ? cleanPhone : user.phone,
+          avatar_url: cleanAvatar !== undefined ? cleanAvatar : user.user_metadata?.avatar_url,
+          user_metadata: updatedUserMeta,
+        },
+      })
+      applySupabaseCookies(response)
+
+      response.cookies.set('bb_auth_user', JSON.stringify({
+        id: user.id,
+        email: user.email,
+        user_metadata: updatedUserMeta,
+      }), {
+        path: '/',
+        httpOnly: true,
+        maxAge: 60 * 60 * 24 * 30,
+        sameSite: 'lax',
+      })
+
+      return response
+    }
+
+    // 12. OPTIONAL SET PASSWORD (For Google or OTP users without a password)
+    if (action === 'set-password') {
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError || !user) {
+        return NextResponse.json({ error: 'Authentication required to set a password.' }, { status: 401 })
+      }
+
+      const cleanPassword = (password || '').trim()
+      if (!cleanPassword || cleanPassword.length < 8) {
+        return NextResponse.json({ error: 'Password must be at least 8 characters long.' }, { status: 400 })
+      }
+
+      // Supabase Auth updateUser sets or updates password for the authenticated session
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: cleanPassword,
+      })
+
+      if (updateError) {
+        return NextResponse.json({ error: updateError.message }, { status: 400 })
+      }
+
+      const response = NextResponse.json({
+        success: true,
+        message: 'Password Added Successfully! You can now sign in using both Google and your email & password.',
       })
       applySupabaseCookies(response)
       return response
