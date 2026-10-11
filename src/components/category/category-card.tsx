@@ -54,12 +54,6 @@ export function CategoryCard({ category, priority = false, className = '' }: Cat
         </div>
       )}
 
-      {/* Streetwear Tag / Architectural Code */}
-      <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20">
-        <span className="text-[9px] sm:text-[10px] font-mono tracking-widest uppercase text-neutral-300 bg-black/70 px-2 py-0.5 border border-neutral-800 backdrop-blur-xs">
-          BB/{category.slug.slice(0, 4).toUpperCase()}
-        </span>
-      </div>
 
       {/* Bottom Content Area */}
       <div className="absolute bottom-0 inset-x-0 p-4 sm:p-5 z-20 flex flex-col justify-end">
