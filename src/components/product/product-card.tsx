@@ -29,10 +29,9 @@ export interface ProductCardProps {
 }
 
 export function ProductCard({ product, priority = false }: ProductCardProps) {
-  const [isWishlisted, setIsWishlisted] = useState(false)
   const [imageError, setImageError] = useState(false)
-  const incrementWishlist = useCartStore((state) => state.setWishlistCount)
-  const currentWishlistCount = useCartStore((state) => state.wishlistCount)
+  const isWishlisted = useCartStore((state) => state.isItemWishlisted(product.id))
+  const toggleWishlistStore = useCartStore((state) => state.toggleWishlistStore)
 
   const firstImage = product.images?.[0]
   const secondImage = product.images?.[1]
@@ -44,19 +43,24 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
     new Set((product.variants || []).map((v) => v.color).filter(Boolean))
   )
 
-  const handleWishlistToggle = (e: React.MouseEvent) => {
+  const handleWishlistToggle = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    const nextState = !isWishlisted
-    setIsWishlisted(nextState)
-    if (nextState) {
-      incrementWishlist(currentWishlistCount + 1)
-      toast.success('Added to wishlist', {
-        style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
-      })
-    } else {
-      incrementWishlist(Math.max(0, currentWishlistCount - 1))
-      toast('Removed from wishlist', {
+
+    const wasWishlisted = isWishlisted
+    try {
+      const res = await toggleWishlistStore(product.id)
+      if (res.inWishlist) {
+        toast.success('Added to wishlist', {
+          style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
+        })
+      } else {
+        toast('Removed from wishlist', {
+          style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
+        })
+      }
+    } catch {
+      toast.error('Failed to update wishlist', {
         style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
       })
     }

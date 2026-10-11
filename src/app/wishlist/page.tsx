@@ -1,7 +1,7 @@
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { getWishlist } from '@/lib/wishlist'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth'
 import { cookies } from 'next/headers'
 import { WishlistView } from './wishlist-view'
 import Link from 'next/link'
@@ -15,11 +15,11 @@ export const metadata = {
 
 export default async function WishlistPage() {
   const cookieStore = await cookies()
-  const sessionId = cookieStore.get('bubbleboom_guest_session')?.value
+  const sessionId =
+    cookieStore.get('bb_session_id')?.value ||
+    cookieStore.get('bubbleboom_guest_session')?.value
   
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
+  const user = await getCurrentUser()
   const items = await getWishlist(user?.id, sessionId)
 
   return (

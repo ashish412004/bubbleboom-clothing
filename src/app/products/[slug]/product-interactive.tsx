@@ -69,8 +69,8 @@ export function ProductInteractive({
 }) {
   const router = useRouter()
   const incrementCart = useCartStore((state) => state.incrementCount)
-  const setWishlist = useCartStore((state) => state.setWishlistCount)
-  const wishlistCount = useCartStore((state) => state.wishlistCount)
+  const isWishlistedInStore = useCartStore((state) => state.isItemWishlisted)
+  const toggleWishlistStore = useCartStore((state) => state.toggleWishlistStore)
 
   const categoryType = getProductCategoryType(product as any)
 
@@ -122,7 +122,6 @@ export function ProductInteractive({
     inStockSizesForColor[0] || sizesForColor[0] || ''
   )
   const [quantity, setQuantity] = useState(1)
-  const [isWishlisted, setIsWishlisted] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
   const [isBuyingNow, setIsBuyingNow] = useState(false)
   const [justAdded, setJustAdded] = useState(false)
@@ -138,6 +137,8 @@ export function ProductInteractive({
       v.size === selectedSize &&
       v.is_active
   )
+
+  const isWishlisted = isWishlistedInStore(product.id, activeVariant?.id)
 
   const isOutOfStock = Boolean(selectedSize) && (!activeVariant || activeVariant.stock <= 0)
   const maxStock = activeVariant?.stock || 0
@@ -326,13 +327,23 @@ export function ProductInteractive({
   }
 
 
-  const toggleWishlist = () => {
-    const nextState = !isWishlisted
-    setIsWishlisted(nextState)
-    setWishlist(nextState ? wishlistCount + 1 : Math.max(0, wishlistCount - 1))
-    toast(nextState ? 'Saved to wishlist' : 'Removed from wishlist', {
-      style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
-    })
+  const toggleWishlist = async () => {
+    try {
+      const res = await toggleWishlistStore(product.id, activeVariant?.id)
+      if (res.inWishlist) {
+        toast.success('Saved to wishlist', {
+          style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
+        })
+      } else {
+        toast('Removed from wishlist', {
+          style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
+        })
+      }
+    } catch {
+      toast.error('Failed to update wishlist', {
+        style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
+      })
+    }
   }
 
   const currentDisplayImage = activeColorImages[selectedImageIndex] || activeColorImages[0]

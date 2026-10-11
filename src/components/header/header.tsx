@@ -22,11 +22,15 @@ export function Header({
   const wishlistCount = useCartStore((state) => state.wishlistCount)
   const authUser = useAuthStore((state) => state.user)
   const refreshUser = useAuthStore((state) => state.refreshUser)
+  const refreshWishlist = useCartStore((state) => state.refreshWishlist)
+  const refreshCart = useCartStore((state) => state.refreshCart)
 
   useEffect(() => {
     setMounted(true)
     refreshUser()
-  }, [refreshUser])
+    refreshWishlist()
+    refreshCart()
+  }, [refreshUser, refreshWishlist, refreshCart])
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
