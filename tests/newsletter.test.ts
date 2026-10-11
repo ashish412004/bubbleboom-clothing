@@ -304,4 +304,50 @@ describe('Boom Squad Newsletter Subscription Suite', () => {
       expect(searchRes.subscribers[0].email).toBe('one.pending@boom.in')
     })
   })
+
+  describe('8. Subscriber Status, Admin Resend & Unsubscribe Request', () => {
+    it('retrieves subscriber by email accurately and handles case-insensitivity', async () => {
+      const { getSubscriberByEmail } = await import('@/lib/newsletter')
+      await subscribeNewsletter({ email: 'Test.Member@Boom.in' })
+
+      const found = await getSubscriberByEmail('test.member@boom.in')
+      expect(found).not.toBeNull()
+      expect(found?.email).toBe('test.member@boom.in')
+      expect(found?.status).toBe('pending')
+
+      const notFound = await getSubscriberByEmail('unknown@boom.in')
+      expect(notFound).toBeNull()
+    })
+
+    it('admin can resend confirmation link for pending subscriber', async () => {
+      const { resendConfirmationEmailAdmin } = await import('@/lib/newsletter')
+      await subscribeNewsletter({ email: 'resend.member@boom.in' })
+
+      const adminList = await getNewsletterSubscribersAdmin({})
+      const subscriber = adminList.subscribers.find((s) => s.email === 'resend.member@boom.in')!
+
+      const resendRes = await resendConfirmationEmailAdmin({ subscriberId: subscriber.id })
+      expect(resendRes.success).toBe(true)
+      expect(resendRes.message).toMatch(/re-sent successfully/i)
+    })
+
+    it('sends unsubscribe request link to subscriber email without revealing private data', async () => {
+      const { requestUnsubscribeEmail } = await import('@/lib/newsletter')
+      await subscribeNewsletter({ email: 'optout.request@boom.in' })
+
+      const res = await requestUnsubscribeEmail({ email: 'optout.request@boom.in' })
+      expect(res.success).toBe(true)
+      expect(res.message).toMatch(/unsubscribe/i)
+
+      // Unsubscribed user calling again
+      const adminList = await getNewsletterSubscribersAdmin({})
+      const subscriber = adminList.subscribers.find((s) => s.email === 'optout.request@boom.in')!
+      await unsubscribeNewsletter({ token: subscriber.unsubscribe_token! })
+
+      const resAlready = await requestUnsubscribeEmail({ email: 'optout.request@boom.in' })
+      expect(resAlready.success).toBe(true)
+      expect(resAlready.message).toMatch(/already unsubscribed/i)
+    })
+  })
 })
+

@@ -32,6 +32,31 @@ export function SubscribersClient({
   const [activeTab, setActiveTab] = useState<'all' | SubscriberStatus>('all')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resendingId, setResendingId] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<{ text: string; error?: boolean } | null>(null)
+
+  const handleResendConfirmation = async (subscriberId: string) => {
+    setResendingId(subscriberId)
+    setActionMessage(null)
+    try {
+      const res = await fetch('/api/admin/subscribers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'RESEND_CONFIRMATION', subscriberId }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setActionMessage({ text: data.message || 'Confirmation link resent successfully.' })
+        fetchSubscribers(activeTab, search)
+      } else {
+        setActionMessage({ text: data.error || 'Failed to resend confirmation link.', error: true })
+      }
+    } catch {
+      setActionMessage({ text: 'Network error while attempting to resend confirmation.', error: true })
+    } finally {
+      setResendingId(null)
+    }
+  }
 
   const fetchSubscribers = async (statusFilter = activeTab, searchQuery = search) => {
     setLoading(true)
@@ -132,6 +157,22 @@ export function SubscribersClient({
         </div>
       </div>
 
+      {actionMessage && (
+        <div
+          className={`p-3 text-xs font-mono border-2 border-black flex items-center justify-between ${
+            actionMessage.error ? 'bg-red-50 text-red-900' : 'bg-black text-white'
+          }`}
+        >
+          <span>{actionMessage.text}</span>
+          <button
+            onClick={() => setActionMessage(null)}
+            className="text-[10px] underline uppercase font-bold ml-4"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Control Bar: Tabs, Search, Export */}
       <div className="border-2 border-black bg-white p-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         {/* Status Filter Tabs */}
@@ -208,12 +249,13 @@ export function SubscribersClient({
                 <th className="p-3.5">Source</th>
                 <th className="p-3.5">Subscribed Date</th>
                 <th className="p-3.5">Confirmed Date</th>
+                <th className="p-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-200">
               {subscribers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-neutral-500">
+                  <td colSpan={6} className="p-8 text-center text-neutral-500">
                     {loading ? 'Loading subscribers...' : 'No subscribers found matching the criteria.'}
                   </td>
                 </tr>
@@ -272,6 +314,19 @@ export function SubscribersClient({
                               day: 'numeric',
                             })}`
                           : 'Awaiting confirmation'}
+                      </td>
+                      <td className="p-3.5 text-right">
+                        {subscriber.status === 'pending' ? (
+                          <button
+                            onClick={() => handleResendConfirmation(subscriber.id)}
+                            disabled={resendingId === subscriber.id}
+                            className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 bg-black text-white hover:bg-neutral-800 disabled:opacity-50 transition-colors"
+                          >
+                            {resendingId === subscriber.id ? 'Sending...' : 'Resend Link'}
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-neutral-400">—</span>
+                        )}
                       </td>
                     </tr>
                   )

@@ -1,6 +1,10 @@
 import crypto from 'crypto'
 import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
-import { sendNewsletterConfirmationEmail, sendNewsletterWelcomeEmail } from '@/lib/emails/resend'
+import {
+  sendNewsletterConfirmationEmail,
+  sendNewsletterWelcomeEmail,
+  sendNewsletterUnsubscribeEmail,
+} from '@/lib/emails/resend'
 
 export type SubscriberStatus = 'pending' | 'active' | 'unsubscribed'
 
@@ -621,3 +625,229 @@ export async function getNewsletterSubscribersAdmin({
     totalFiltered: filtered.length,
   }
 }
+
+/**
+ * Get subscriber record by normalized email
+ */
+export async function getSubscriberByEmail(email: string): Promise<NewsletterSubscriber | null> {
+  const normalizedEmail = (email || '').trim().toLowerCase()
+  if (!validateEmailAddress(normalizedEmail)) return null
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      const { data, error } = await supabase
+        .from('newsletter_subscribers')
+        .select('*')
+        .eq('email', normalizedEmail)
+        .maybeSingle()
+
+      if (error) {
+        console.error('Error fetching subscriber by email:', error)
+        return null
+      }
+      return data || null
+    } catch (err) {
+      console.error('Database query error in getSubscriberByEmail:', err)
+      return null
+    }
+  }
+
+  const store = getMemoryStore()
+  return store.get(normalizedEmail) || null
+}
+
+/**
+ * Send an unsubscribe confirmation link to an email address (safe for guest visitors)
+ */
+export async function requestUnsubscribeEmail({
+  email,
+  siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://bubbleboom-clothing.vercel.app',
+}: {
+  email: string
+  siteUrl?: string
+}): Promise<{
+  success: boolean
+  message: string
+  error?: string
+}> {
+  const normalizedEmail = (email || '').trim().toLowerCase()
+  if (!validateEmailAddress(normalizedEmail)) {
+    return {
+      success: false,
+      error: 'Please enter a valid email address.',
+      message: 'Invalid email address provided.',
+    }
+  }
+
+  const subscriber = await getSubscriberByEmail(normalizedEmail)
+
+  // Avoid leaking email existence: return ambiguous success message even if not found
+  if (!subscriber) {
+    return {
+      success: true,
+      message: 'If this email is subscribed, an unsubscribe link has been sent to your inbox.',
+    }
+  }
+
+  if (subscriber.status === 'unsubscribed') {
+    return {
+      success: true,
+      message: 'This email is already unsubscribed from our newsletter.',
+    }
+  }
+
+  const unsubscribeToken = subscriber.unsubscribe_token || generateSecureToken()
+  const unsubscribeUrl = `${siteUrl}/newsletter/unsubscribe?token=${unsubscribeToken}`
+
+  // Ensure unsubscribe token exists in DB if it was newly generated
+  if (!subscriber.unsubscribe_token && isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      await supabase
+        .from('newsletter_subscribers')
+        .update({ unsubscribe_token: unsubscribeToken })
+        .eq('id', subscriber.id)
+    } catch {
+      // ignore
+    }
+  }
+
+  const emailRes = await sendNewsletterUnsubscribeEmail(normalizedEmail, unsubscribeUrl)
+  if (emailRes.error) {
+    return {
+      success: false,
+      error: 'Unable to send unsubscribe link right now. Please try again later.',
+      message: 'Unable to send unsubscribe link right now.',
+    }
+  }
+
+  return {
+    success: true,
+    message: 'We have sent an unsubscribe confirmation link to your email.',
+  }
+}
+
+/**
+ * Admin action: Resend double opt-in confirmation email for a pending subscriber
+ */
+export async function resendConfirmationEmailAdmin({
+  subscriberId,
+  siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://bubbleboom-clothing.vercel.app',
+}: {
+  subscriberId: string
+  siteUrl?: string
+}): Promise<{
+  success: boolean
+  message: string
+  error?: string
+}> {
+  if (!subscriberId) {
+    return { success: false, error: 'Subscriber ID is required.', message: 'Subscriber ID is required.' }
+  }
+
+  const now = new Date()
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      const { data: subscriber, error } = await supabase
+        .from('newsletter_subscribers')
+        .select('*')
+        .eq('id', subscriberId)
+        .maybeSingle()
+
+      if (error || !subscriber) {
+        return { success: false, error: 'Subscriber not found.', message: 'Subscriber not found.' }
+      }
+
+      if (subscriber.status !== 'pending') {
+        const msg = `Subscriber status is '${subscriber.status}', cannot resend pending verification.`
+        return {
+          success: false,
+          error: msg,
+          message: msg,
+        }
+      }
+
+      const confirmationToken = generateSecureToken()
+      const expiresAt = new Date(now.getTime() + TOKEN_EXPIRY_MS).toISOString()
+      const confirmUrl = `${siteUrl}/newsletter/confirm?token=${confirmationToken}`
+
+      const emailResult = await sendNewsletterConfirmationEmail(subscriber.email, confirmUrl)
+      if (emailResult.error) {
+        return {
+          success: false,
+          error: 'Failed to send confirmation email via SMTP.',
+          message: 'Failed to send confirmation email via SMTP.',
+        }
+      }
+
+      await supabase
+        .from('newsletter_subscribers')
+        .update({
+          confirmation_token: confirmationToken,
+          token_expires_at: expiresAt,
+          last_sent_at: now.toISOString(),
+          updated_at: now.toISOString(),
+        })
+        .eq('id', subscriber.id)
+
+      return {
+        success: true,
+        message: `Confirmation email re-sent successfully to ${subscriber.email}.`,
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Database error'
+      return { success: false, error: msg, message: msg }
+    }
+  }
+
+  // Memory store fallback
+  const store = getMemoryStore()
+  let subscriber: NewsletterSubscriber | null = null
+  for (const s of store.values()) {
+    if (s.id === subscriberId) {
+      subscriber = s
+      break
+    }
+  }
+
+  if (!subscriber) {
+    return { success: false, error: 'Subscriber not found.', message: 'Subscriber not found.' }
+  }
+
+  if (subscriber.status !== 'pending') {
+    const msg = `Subscriber status is '${subscriber.status}', cannot resend pending verification.`
+    return {
+      success: false,
+      error: msg,
+      message: msg,
+    }
+  }
+
+  const confirmationToken = generateSecureToken()
+  const expiresAt = new Date(now.getTime() + TOKEN_EXPIRY_MS).toISOString()
+  const confirmUrl = `${siteUrl}/newsletter/confirm?token=${confirmationToken}`
+
+  const emailResult = await sendNewsletterConfirmationEmail(subscriber.email, confirmUrl)
+  if (emailResult.error) {
+    return {
+      success: false,
+      error: 'Failed to send confirmation email via SMTP.',
+      message: 'Failed to send confirmation email via SMTP.',
+    }
+  }
+
+  subscriber.confirmation_token = confirmationToken
+  subscriber.token_expires_at = expiresAt
+  subscriber.last_sent_at = now.toISOString()
+  subscriber.updated_at = now.toISOString()
+  store.set(subscriber.email, subscriber)
+
+  return {
+    success: true,
+    message: `Confirmation email re-sent successfully to ${subscriber.email}.`,
+  }
+}
+

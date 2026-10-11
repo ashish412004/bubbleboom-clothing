@@ -310,3 +310,45 @@ export async function sendNewsletterWelcomeEmail(
     return { error: error.message || 'Failed to send email' }
   }
 }
+
+export async function sendNewsletterUnsubscribeEmail(
+  email: string,
+  unsubscribeUrl: string
+) {
+  try {
+    const res = await sendEmail({
+      to: email,
+      subject: 'Manage Your Boom Squad Subscription | BUBBLE BOOM',
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; border: 2px solid #000; padding: 32px 24px; color: #000; background: #fff;">
+          <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 16px; margin-bottom: 24px;">
+            <h1 style="font-size: 26px; font-weight: 900; letter-spacing: -0.5px; margin: 0;">BUBBLE BOOM</h1>
+            <p style="font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #555; margin: 4px 0 0 0; font-weight: bold;">Unsubscribe Request</p>
+          </div>
+          <p style="font-size: 15px; font-weight: bold; margin-bottom: 8px;">Unsubscribe Confirmation</p>
+          <p style="font-size: 13px; color: #333; line-height: 1.6; margin-top: 0;">
+            We received a request to unsubscribe <strong>${email}</strong> from the Boom Squad newsletter. Click the button below to confirm opting out of marketing emails.
+          </p>
+          <div style="margin: 28px 0; text-align: center;">
+            <a href="${unsubscribeUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 32px; font-size: 12px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; border-radius: 0;">
+              Confirm Unsubscribe
+            </a>
+          </div>
+          <p style="font-size: 12px; color: #666; line-height: 1.5;">
+            Or copy and paste this link into your browser:<br/>
+            <a href="${unsubscribeUrl}" style="color: #000; word-break: break-all; font-size: 11px;">${unsubscribeUrl}</a>
+          </p>
+          <div style="border-top: 1px solid #eee; margin-top: 24px; padding-top: 16px; font-size: 11px; color: #888; text-align: center; line-height: 1.5;">
+            <p style="margin: 0;">If you did not request this, you can safely ignore this email — your subscription will remain active.</p>
+            <p style="margin: 4px 0 0 0;">Bubble Boom Apparel | bubbleboomstore2026@gmail.com</p>
+          </div>
+        </div>
+      `,
+    })
+    return { data: { id: res.messageId } }
+  } catch (error: any) {
+    console.error('Error sending newsletter unsubscribe email:', error)
+    return { error: error.message || 'Failed to send unsubscribe email' }
+  }
+}
+
