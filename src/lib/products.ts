@@ -68,7 +68,22 @@ export function saveDevProduct(prod: any) {
         current = JSON.parse(fs.readFileSync(file, 'utf-8'))
       } catch {}
     }
-    current = [prod, ...current.filter((p: any) => p.id !== prod.id && p.slug !== prod.slug)]
+    const normalized = {
+      ...prod,
+      slug:
+        prod.slug ||
+        (prod.name
+          ? prod.name
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/(^-|-$)/g, '')
+          : prod.id),
+      is_published: prod.is_published ?? true,
+      is_active: prod.is_active ?? true,
+      images: Array.isArray(prod.images) ? prod.images : [],
+      variants: Array.isArray(prod.variants) ? prod.variants : [],
+    }
+    current = [normalized, ...current.filter((p: any) => p.id !== normalized.id && p.slug !== normalized.slug)]
     fs.writeFileSync(file, JSON.stringify(current, null, 2), 'utf-8')
   } catch {}
 }

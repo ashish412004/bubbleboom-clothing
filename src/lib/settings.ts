@@ -5,10 +5,12 @@ import {
   StoreShippingSettings,
   StoreExchangeSettings,
   StoreOrderSettings,
+  StoreNotificationSettings,
   DEFAULT_GENERAL_SETTINGS,
   DEFAULT_SHIPPING_SETTINGS,
   DEFAULT_EXCHANGE_SETTINGS,
   DEFAULT_ORDER_SETTINGS,
+  DEFAULT_NOTIFICATION_SETTINGS,
 } from '@/types/settings'
 
 export * from '@/types/settings'
@@ -36,6 +38,7 @@ export async function getStoreSettings<T = any>(key: 'general' | 'shipping' | 'o
     else if (key === 'shipping') fallback = DEFAULT_SHIPPING_SETTINGS
     else if (key === 'orders') fallback = DEFAULT_ORDER_SETTINGS
     else if (key === 'exchange') fallback = DEFAULT_EXCHANGE_SETTINGS
+    else if (key === 'notifications' || key === 'email_notifications') fallback = DEFAULT_NOTIFICATION_SETTINGS
     settingsCache.set(key, { value: fallback, timestamp: Date.now() })
     return fallback as unknown as T
   }
@@ -54,6 +57,7 @@ export async function getStoreSettings<T = any>(key: 'general' | 'shipping' | 'o
       else if (key === 'shipping') fallback = DEFAULT_SHIPPING_SETTINGS
       else if (key === 'orders') fallback = DEFAULT_ORDER_SETTINGS
       else if (key === 'exchange') fallback = DEFAULT_EXCHANGE_SETTINGS
+      else if (key === 'notifications' || key === 'email_notifications') fallback = DEFAULT_NOTIFICATION_SETTINGS
       settingsCache.set(key, { value: fallback, timestamp: Date.now() })
       return fallback as unknown as T
     }
@@ -64,6 +68,8 @@ export async function getStoreSettings<T = any>(key: 'general' | 'shipping' | 'o
       finalVal = { ...DEFAULT_SHIPPING_SETTINGS, ...(data.value as Record<string, any>) }
     } else if (key === 'exchange') {
       finalVal = { ...DEFAULT_EXCHANGE_SETTINGS, ...(data.value as Record<string, any>) }
+    } else if (key === 'notifications' || key === 'email_notifications') {
+      finalVal = { ...DEFAULT_NOTIFICATION_SETTINGS, ...(data.value as Record<string, any>) }
     }
 
     settingsCache.set(key, { value: finalVal, timestamp: Date.now() })
@@ -74,6 +80,7 @@ export async function getStoreSettings<T = any>(key: 'general' | 'shipping' | 'o
     else if (key === 'shipping') fallback = DEFAULT_SHIPPING_SETTINGS
     else if (key === 'orders') fallback = DEFAULT_ORDER_SETTINGS
     else if (key === 'exchange') fallback = DEFAULT_EXCHANGE_SETTINGS
+    else if (key === 'notifications' || key === 'email_notifications') fallback = DEFAULT_NOTIFICATION_SETTINGS
     return fallback as unknown as T
   }
 }

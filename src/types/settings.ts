@@ -100,3 +100,35 @@ export const DEFAULT_ORDER_SETTINGS: StoreOrderSettings = {
   cancellation_allowed_states: ['pending', 'confirmed'],
   return_allowed_states: ['delivered'],
 }
+
+export interface StoreNotificationSettings {
+  enabled: boolean
+  notify_order_placed: boolean
+  notify_order_confirmed: boolean
+  notify_order_packed: boolean
+  notify_order_shipped: boolean
+  notify_out_for_delivery: boolean
+  notify_order_delivered: boolean
+  notify_order_cancelled: boolean
+  notify_refund_completed: boolean
+  from_name: string
+  from_email: string
+  support_email: string
+  admin_notification_email?: string
+}
+
+export const DEFAULT_NOTIFICATION_SETTINGS: StoreNotificationSettings = {
+  enabled: true,
+  notify_order_placed: true,
+  notify_order_confirmed: true,
+  notify_order_packed: true,
+  notify_order_shipped: true,
+  notify_out_for_delivery: true,
+  notify_order_delivered: true,
+  notify_order_cancelled: true,
+  notify_refund_completed: true,
+  from_name: 'BUBBLE BOOM',
+  from_email: 'bubbleboomstore2026@gmail.com',
+  support_email: 'bubbleboomstore2026@gmail.com',
+  admin_notification_email: 'bubbleboomstore2026@gmail.com',
+}

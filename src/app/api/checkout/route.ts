@@ -5,6 +5,7 @@ import { createOrder, createCashfreeSessionForOrder } from '@/lib/orders'
 import { getCart, clearCart } from '@/lib/cart'
 import { releaseStockReservation } from '@/lib/inventory'
 import { sendOrderConfirmationEmail } from '@/lib/emails/resend'
+import { queueOrderNotification } from '@/lib/emails/notifications'
 
 export async function POST(request: NextRequest) {
   try {
@@ -169,7 +170,31 @@ export async function POST(request: NextRequest) {
         await clearCart(userId, sessionId)
       }
 
-      // Send order confirmation email for confirmed COD order
+      // Queue order placed & order confirmed notifications for confirmed COD order
+      queueOrderNotification({
+        order_id: order.id,
+        order_number: order.order_number,
+        event: 'order_placed',
+        recipient_email: email,
+        customer_name: full_name,
+        total_amount: order.total_amount,
+        subtotal: (order as any).subtotal_amount || order.total_amount,
+        shipping_amount: order.shipping_amount,
+        discount_amount: order.coupon_discount,
+        payment_method: 'cod',
+        payment_status: 'pending',
+        items: ((order as any).order_items || []).map((it: any) => ({
+          product_name: it.product_name || 'Bubble Boom Apparel',
+          size: it.variant_info?.size || it.size || null,
+          color: it.variant_info?.color || it.color || null,
+          quantity: it.quantity || 1,
+          price: it.selling_price || it.price || 0,
+          total_amount: it.total_amount || (it.price ? it.price * (it.quantity || 1) : 0),
+          image_url: it.image_url || it.variant_info?.image_url || null,
+        })),
+        shipping_address: order.shipping_address as any,
+      }).catch((e) => console.warn('[checkout] COD order_placed email warning:', e))
+
       sendOrderConfirmationEmail({
         email,
         orderId: order.order_number,

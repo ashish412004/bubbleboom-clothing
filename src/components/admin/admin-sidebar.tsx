@@ -17,6 +17,7 @@ import {
   Store,
   ExternalLink,
   Mail,
+  Bell,
 } from 'lucide-react'
 
 const ADMIN_LINKS = [
@@ -28,6 +29,7 @@ const ADMIN_LINKS = [
   { href: '/admin/collections', label: 'Capsule Drops', icon: Layers },
   { href: '/admin/coupons', label: 'Coupons & Promos', icon: Ticket },
   { href: '/admin/subscribers', label: 'Newsletter Squad', icon: Mail },
+  { href: '/admin/notifications', label: 'Email Notifications', icon: Bell },
   { href: '/admin/returns', label: 'Returns Inspection', icon: RotateCcw },
   { href: '/admin/banners', label: 'Announcement Bars', icon: Megaphone },
   { href: '/admin/settings', label: 'Store Settings', icon: Settings },

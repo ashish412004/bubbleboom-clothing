@@ -2,6 +2,7 @@ import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server
 import { confirmStockReservation, releaseStockReservation } from '@/lib/inventory'
 import { recordCouponUsage } from '@/lib/coupons'
 import { sendOrderConfirmationEmail } from '@/lib/emails/resend'
+import { queueOrderNotification } from '@/lib/emails/notifications'
 import { getDevOrders, saveDevOrder, hydrateOrderItemsWithImages } from '@/lib/orders'
 
 export interface FinalizationParams {
@@ -296,29 +297,56 @@ export async function finalizeOrderPayment(
     const customerName = (order.shipping_address as any)?.full_name || 'Customer'
     if (customerEmail) {
       try {
-        // Enqueue to outbox_jobs for reliable background delivery
-        await supabase.from('outbox_jobs').insert({
-          job_type: 'EMAIL_ORDER_CONFIRMATION',
-          payload: {
-            order_id: order.id,
-            order_number: order.order_number,
-            email: customerEmail,
-            customer_name: customerName,
-            total_amount: order.total_amount,
-          },
-          status: 'pending',
+        const notificationItems = (hydratedItems || []).map((it: any) => {
+          const v = it.variant_info || {}
+          return {
+            product_id: it.product_id,
+            product_name: it.product_name || it.name || 'Bubble Boom Apparel',
+            size: v.size || it.size || null,
+            color: v.color || it.color || null,
+            quantity: it.quantity || 1,
+            price: it.selling_price || it.price || 0,
+            total_amount: it.total_amount || (it.price ? it.price * (it.quantity || 1) : 0),
+            image_url: it.image_url || v.image_url || null,
+          }
         })
 
-        // Also attempt direct asynchronous delivery via Resend
-        sendOrderConfirmationEmail({
-          email: customerEmail,
-          orderId: order.order_number,
-          customerName: customerName,
-          totalAmount: order.total_amount,
-          items: hydratedItems,
-          shippingAddress: order.shipping_address,
+        // 1. Queue Order Placed
+        queueOrderNotification({
+          order_id: order.id,
+          order_number: order.order_number,
+          event: 'order_placed',
+          recipient_email: customerEmail,
+          customer_name: customerName,
+          total_amount: order.total_amount,
+          subtotal: (order as any).subtotal_amount || order.total_amount,
+          shipping_amount: order.shipping_amount,
+          discount_amount: order.coupon_discount,
+          payment_method: 'cashfree',
+          payment_status: 'paid',
+          items: notificationItems,
+          shipping_address: order.shipping_address as any,
         }).catch((e) =>
-          console.warn('[finalizeOrderPayment] Direct email send error (queued in outbox):', e)
+          console.warn('[finalizeOrderPayment] Outbox order_placed error:', e)
+        )
+
+        // 2. Queue Order Confirmed
+        queueOrderNotification({
+          order_id: order.id,
+          order_number: order.order_number,
+          event: 'order_confirmed',
+          recipient_email: customerEmail,
+          customer_name: customerName,
+          total_amount: order.total_amount,
+          subtotal: (order as any).subtotal_amount || order.total_amount,
+          shipping_amount: order.shipping_amount,
+          discount_amount: order.coupon_discount,
+          payment_method: 'cashfree',
+          payment_status: 'paid',
+          items: notificationItems,
+          shipping_address: order.shipping_address as any,
+        }).catch((e) =>
+          console.warn('[finalizeOrderPayment] Outbox order_confirmed error:', e)
         )
       } catch (emailErr) {
         console.warn('[finalizeOrderPayment] Outbox email queue warning:', emailErr)

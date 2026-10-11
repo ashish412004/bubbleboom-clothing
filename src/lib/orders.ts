@@ -5,6 +5,7 @@ import { validateCoupon } from '@/lib/coupons'
 import { reserveStockForCheckout, confirmStockReservation, releaseStockReservation } from '@/lib/inventory'
 import { createCashfreeOrder, getCashfreeConfig, getPaymentStatus } from '@/lib/payments/cashfree'
 import { sendOrderShippedEmail, sendOrderDeliveredEmail } from '@/lib/emails/resend'
+import { queueOrderNotification, OrderNotificationEvent } from '@/lib/emails/notifications'
 import { isAdmin } from '@/lib/auth'
 import { MOCK_PRODUCTS, MOCK_ORDERS } from '@/lib/mock-data'
 import { getDevProducts } from '@/lib/products'
@@ -989,6 +990,85 @@ export async function getOrdersByUserId(userId: string): Promise<Order[]> {
   )
 }
 
+export async function notifyOrderStatusChange(order: any, newStatus: string) {
+  const customerEmail = order.guest_email || (order.shipping_address as any)?.email
+  if (!customerEmail) return
+
+  if (newStatus === 'shipped') {
+    try {
+      await sendOrderShippedEmail(
+        customerEmail,
+        order.order_number,
+        order.tracking_number || 'AWB-PENDING',
+        order.carrier || 'Express Courier',
+        order.tracking_url || null
+      )
+    } catch (e) {
+      console.warn('[notifyOrderStatusChange] sendOrderShippedEmail error:', e)
+    }
+    return
+  }
+
+  if (newStatus === 'delivered') {
+    try {
+      await sendOrderDeliveredEmail(customerEmail, order.order_number)
+    } catch (e) {
+      console.warn('[notifyOrderStatusChange] sendOrderDeliveredEmail error:', e)
+    }
+    return
+  }
+
+  let event: OrderNotificationEvent | null = null
+  if (newStatus === 'packed') event = 'order_packed'
+  else if (newStatus === 'out_for_delivery') event = 'out_for_delivery'
+  else if (newStatus === 'cancelled') event = 'order_cancelled'
+  else if (newStatus === 'refunded') event = 'refund_completed'
+
+  if (!event) return
+
+  try {
+    const rawItems = order.order_items || []
+    const items = rawItems.map((it: any) => {
+      const v = it.variant_info || {}
+      return {
+        product_id: it.product_id,
+        product_name: it.product_name || it.name || 'Bubble Boom Apparel',
+        size: v.size || it.size || null,
+        color: v.color || it.color || null,
+        quantity: it.quantity || 1,
+        price: it.selling_price || it.price || 0,
+        total_amount: it.total_amount || (it.price ? it.price * (it.quantity || 1) : 0),
+        image_url: it.image_url || v.image_url || null,
+      }
+    })
+
+    await queueOrderNotification({
+      order_id: order.id,
+      order_number: order.order_number,
+      event,
+      recipient_email: customerEmail,
+      customer_name: (order.shipping_address as any)?.full_name || 'Customer',
+      total_amount: order.total_amount || 0,
+      subtotal: order.subtotal_amount,
+      shipping_amount: order.shipping_amount,
+      discount_amount: order.coupon_discount,
+      payment_method: order.payment_method,
+      payment_status: order.payment_status,
+      items,
+      shipping_address: order.shipping_address,
+      carrier: order.carrier,
+      tracking_number: order.tracking_number,
+      tracking_url: order.tracking_url,
+      estimated_delivery:
+        order.estimated_delivery_min && order.estimated_delivery_max
+          ? `${order.estimated_delivery_min} – ${order.estimated_delivery_max}`
+          : order.estimated_delivery_min || null,
+    })
+  } catch (err) {
+    console.warn(`[notifyOrderStatusChange] Non-fatal notification error for ${event}:`, err)
+  }
+}
+
 /**
  * Enforce valid fulfillment state transitions & dispatch safeguards
  */
@@ -1030,31 +1110,11 @@ export async function updateOrderStatus(
       admin_id: adminUserId || null,
     })
 
-    // Email notifications (idempotent & non-blocking)
-    const customerEmail = found.guest_email || (found.shipping_address as any)?.email
-    if (newStatus === 'shipped' && !found.shipped_email_sent_at && customerEmail) {
-      try {
-        await sendOrderShippedEmail(
-          customerEmail,
-          found.order_number,
-          found.tracking_number || 'AWB-PENDING',
-          found.carrier || 'Express Courier',
-          found.tracking_url || null
-        )
-        found.shipped_email_sent_at = new Date().toISOString()
-      } catch (emailErr) {
-        console.warn('[updateOrderStatus dev] Non-fatal email error on dispatch:', emailErr)
-      }
-    }
+    if (newStatus === 'shipped') found.shipped_email_sent_at = new Date().toISOString()
+    if (newStatus === 'delivered') found.delivered_email_sent_at = new Date().toISOString()
 
-    if (newStatus === 'delivered' && !found.delivered_email_sent_at && customerEmail) {
-      try {
-        await sendOrderDeliveredEmail(customerEmail, found.order_number)
-        found.delivered_email_sent_at = new Date().toISOString()
-      } catch (emailErr) {
-        console.warn('[updateOrderStatus dev] Non-fatal email error on delivery:', emailErr)
-      }
-    }
+    // Trigger branded order notification (idempotent & non-blocking)
+    await notifyOrderStatusChange(found, newStatus)
 
     saveDevOrder(found)
     return { data: found }
@@ -1099,31 +1159,23 @@ export async function updateOrderStatus(
   let shippedEmailSentAt = (currentOrder as any).shipped_email_sent_at
   let deliveredEmailSentAt = (currentOrder as any).delivered_email_sent_at
 
-  const customerEmail = currentOrder.guest_email || (currentOrder.shipping_address as any)?.email
+  if (newStatus === 'shipped') shippedEmailSentAt = new Date().toISOString()
+  if (newStatus === 'delivered') deliveredEmailSentAt = new Date().toISOString()
 
-  // Email notifications: idempotent and non-blocking
-  if (newStatus === 'shipped' && !shippedEmailSentAt && customerEmail) {
-    try {
-      await sendOrderShippedEmail(
-        customerEmail,
-        currentOrder.order_number,
-        currentOrder.tracking_number || 'AWB-PENDING',
-        currentOrder.carrier || 'Express Courier',
-        (currentOrder as any).tracking_url || null
-      )
-      shippedEmailSentAt = new Date().toISOString()
-    } catch (emailErr) {
-      console.warn('[updateOrderStatus] Non-fatal email error on dispatch:', emailErr)
-    }
-  }
+  // Hydrate order items for rich email notification
+  try {
+    const { data: orderItems } = await supabase
+      .from('order_items')
+      .select('*')
+      .eq('order_id', currentOrder.id)
 
-  if (newStatus === 'delivered' && !deliveredEmailSentAt && customerEmail) {
-    try {
-      await sendOrderDeliveredEmail(customerEmail, currentOrder.order_number)
-      deliveredEmailSentAt = new Date().toISOString()
-    } catch (emailErr) {
-      console.warn('[updateOrderStatus] Non-fatal email error on delivery:', emailErr)
+    const hydratedOrder = {
+      ...currentOrder,
+      order_items: orderItems || [],
     }
+    await notifyOrderStatusChange(hydratedOrder, newStatus)
+  } catch (notifyErr) {
+    console.warn('[updateOrderStatus] Non-fatal notification error:', notifyErr)
   }
 
   let { data, error } = await supabase
