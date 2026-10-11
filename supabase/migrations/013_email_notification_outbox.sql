@@ -25,16 +25,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_email_outbox_unique_event ON public.email_
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.email_notification_outbox ENABLE ROW LEVEL SECURITY;
 
--- 1. Server-side service role has full access
-DROP POLICY IF EXISTS "Service role full access on email_notification_outbox" ON public.email_notification_outbox;
-CREATE POLICY "Service role full access on email_notification_outbox"
-  ON public.email_notification_outbox
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
--- 2. Authenticated Admins have read and update access
+-- Admins can view outbox
 DROP POLICY IF EXISTS "Admins can view email notification outbox" ON public.email_notification_outbox;
 CREATE POLICY "Admins can view email notification outbox"
   ON public.email_notification_outbox
@@ -42,12 +33,16 @@ CREATE POLICY "Admins can view email notification outbox"
   TO authenticated
   USING (
     EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+    OR EXISTS (
       SELECT 1 FROM public.user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'admin'
+      WHERE user_roles.user_id = auth.uid() AND user_roles.role IN ('admin', 'superadmin')
     )
   );
 
+-- Admins can retry email notifications
 DROP POLICY IF EXISTS "Admins can retry email notifications" ON public.email_notification_outbox;
 CREATE POLICY "Admins can retry email notifications"
   ON public.email_notification_outbox
@@ -55,16 +50,22 @@ CREATE POLICY "Admins can retry email notifications"
   TO authenticated
   USING (
     EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+    OR EXISTS (
       SELECT 1 FROM public.user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'admin'
+      WHERE user_roles.user_id = auth.uid() AND user_roles.role IN ('admin', 'superadmin')
     )
   )
   WITH CHECK (
     EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+    OR EXISTS (
       SELECT 1 FROM public.user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'admin'
+      WHERE user_roles.user_id = auth.uid() AND user_roles.role IN ('admin', 'superadmin')
     )
   );
 
