@@ -33,10 +33,11 @@ describe('Admin & Store Deletion Logic & Persistence', () => {
 
   describe('Category Deletion', () => {
     it('successfully deletes a category and removes it from category listings', async () => {
+      const uniqueSuffix = Date.now()
       const tempCat = {
-        id: 'c9999999-0000-0000-0000-000000000001',
+        id: `c9999999-0000-0000-0000-${String(uniqueSuffix).slice(-12).padStart(12, '0')}`,
         name: 'Temporary Category For Delete',
-        slug: 'temp-cat-delete-1',
+        slug: `temp-cat-delete-${uniqueSuffix}`,
         sort_order: 99,
         is_active: true,
       }
@@ -58,10 +59,11 @@ describe('Admin & Store Deletion Logic & Persistence', () => {
 
   describe('Collection Deletion', () => {
     it('successfully deletes a collection and removes it from collections listing', async () => {
+      const uniqueSuffix = Date.now()
       const tempCol = {
-        id: 'test-temp-col-delete-1',
+        id: `test-temp-col-delete-${uniqueSuffix}`,
         name: 'Temporary Collection For Delete',
-        slug: 'temp-col-delete-1',
+        slug: `temp-col-delete-${uniqueSuffix}`,
         sort_order: 99,
         is_visible: true,
       }

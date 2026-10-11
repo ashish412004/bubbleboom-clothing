@@ -98,7 +98,16 @@ export interface ProductFilterOptions {
 function filterMockProducts(filters?: ProductFilterOptions) {
   const deletedIds = getDeletedProductIds()
   const devProducts = getDevProducts()
-  let result = [...devProducts, ...MOCK_PRODUCTS].filter((p) => !deletedIds.has(p.id) && !deletedIds.has(p.slug))
+  let result = [...devProducts, ...MOCK_PRODUCTS]
+    .filter((p) => !deletedIds.has(p.id) && !deletedIds.has(p.slug))
+    .map((p) => ({
+      ...p,
+      images: (((p as any).images || []) as any[])
+        .map(parseProductImage)
+        .filter(Boolean)
+        .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+      variants: (p as any).variants || [],
+    }))
 
   if (filters?.category) {
     const cat = filters.category.toLowerCase()
@@ -216,13 +225,13 @@ export async function getProducts(filters?: ProductFilterOptions) {
         created_at,
         updated_at,
         category:categories(id, name, slug),
-        images:product_images(id, product_id, image_url, alt_text, color, is_primary, sort_order),
+        images:product_images(id, product_id, image_url, alt_text, sort_order, storage_path),
         variants:product_variants(id, product_id, sku, color, size, stock, is_active)
       `)
       .eq('is_published', true)
       .eq('is_active', true)
 
-    // 1. Category filter (handles both slug and UUID)
+    // 1. Category filter (handles both slug and UUID, case-insensitive)
     if (filters?.category) {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         filters.category
@@ -230,17 +239,29 @@ export async function getProducts(filters?: ProductFilterOptions) {
       if (isUuid) {
         query = query.eq('category_id', filters.category)
       } else {
-        // Find category by slug
-        const { data: cat } = await supabase
+        const catTarget = filters.category.toLowerCase().trim()
+        // Find category by slug (case-insensitive) or name
+        const { data: catBySlug } = await supabase
           .from('categories')
           .select('id')
-          .eq('slug', filters.category)
+          .ilike('slug', catTarget)
           .maybeSingle()
-        if (cat) {
-          query = query.eq('category_id', cat.id)
+
+        if (catBySlug) {
+          query = query.eq('category_id', catBySlug.id)
         } else {
-          // Tag based fallback (e.g. 'men', 'women')
-          query = query.contains('tags', [filters.category])
+          const { data: catByName } = await supabase
+            .from('categories')
+            .select('id')
+            .ilike('name', catTarget)
+            .maybeSingle()
+
+          if (catByName) {
+            query = query.eq('category_id', catByName.id)
+          } else {
+            // Tag based fallback (e.g. 'men', 'women')
+            query = query.contains('tags', [catTarget])
+          }
         }
       }
     }
@@ -297,11 +318,34 @@ export async function getProducts(filters?: ProductFilterOptions) {
     }
 
     const { data, error } = await query
-    if (error || !data || data.length === 0) {
+    if (error) {
+      console.error('getProducts Supabase query error:', error)
       return filterMockProducts(filters)
     }
 
-    let result = data as any[]
+    if (!data || data.length === 0) {
+      const mock = filterMockProducts(filters)
+      if (mock.length > 0) return mock
+      productsCache.set(cacheKey, { data: [], timestamp: Date.now() })
+      return []
+    }
+
+    const deletedIds = getDeletedProductIds()
+    const parsedData = (data as any[])
+      .filter((p) => !deletedIds.has(p.id) && !deletedIds.has(p.slug))
+      .map((p) => {
+        const parsedImages = (((p as any).images || []) as any[])
+          .map(parseProductImage)
+          .filter(Boolean)
+          .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+        return {
+          ...p,
+          images: parsedImages,
+          variants: (p as any).variants || [],
+        }
+      })
+
+    let result = parsedData
 
     // In-memory variant-level filters for size, color, stock, and sale
     if (filters?.size) {
@@ -334,7 +378,8 @@ export async function getProducts(filters?: ProductFilterOptions) {
 
     productsCache.set(cacheKey, { data: result, timestamp: Date.now() })
     return result
-  } catch {
+  } catch (err) {
+    console.error('getProducts error:', err)
     return filterMockProducts(filters)
   }
 }
@@ -373,7 +418,7 @@ export const getProductBySlug = cache(async function (slug: string) {
         created_at,
         updated_at,
         category:categories(id, name, slug),
-        images:product_images(id, product_id, image_url, alt_text, color, is_primary, sort_order),
+        images:product_images(id, product_id, image_url, alt_text, sort_order, storage_path),
         variants:product_variants(id, product_id, sku, color, size, stock, is_active)
       `)
       .eq('slug', slug)
@@ -430,7 +475,7 @@ export async function getProductById(id: string) {
         created_at,
         updated_at,
         category:categories(id, name, slug),
-        images:product_images(id, product_id, image_url, alt_text, color, is_primary, sort_order),
+        images:product_images(id, product_id, image_url, alt_text, sort_order, storage_path),
         variants:product_variants(id, product_id, sku, color, size, stock, is_active)
       `)
       .eq('id', id)
@@ -520,7 +565,7 @@ export async function getRelatedProducts(productId: string, categoryId?: string,
         created_at,
         updated_at,
         category:categories(id, name, slug),
-        images:product_images(id, product_id, image_url, alt_text, color, is_primary, sort_order),
+        images:product_images(id, product_id, image_url, alt_text, sort_order, storage_path),
         variants:product_variants(id, product_id, sku, color, size, stock, is_active)
       `)
       .eq('is_published', true)
@@ -533,7 +578,14 @@ export async function getRelatedProducts(productId: string, categoryId?: string,
     }
 
     const { data } = await query
-    const result = (data && data.length > 0) ? data : MOCK_PRODUCTS.filter((p) => p.id !== productId).slice(0, limit)
+    const parsedData = ((data || []) as any[]).map((product) => ({
+      ...product,
+      images: (((product as any).images || []) as any[])
+        .map(parseProductImage)
+        .filter(Boolean)
+        .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+    }))
+    const result = (parsedData.length > 0) ? parsedData : MOCK_PRODUCTS.filter((p) => p.id !== productId).slice(0, limit)
     relatedProductsCache.set(cacheKey, { data: result, timestamp: Date.now() })
     return result
   } catch {

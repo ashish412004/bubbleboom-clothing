@@ -62,6 +62,21 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
     getCategories(),
   ])
 
+  const currentCategory = categories.find(
+    (c) => c.slug.toLowerCase() === params.category?.toLowerCase() || c.id === params.category
+  )
+  const categoryDisplayName = currentCategory?.name || (params.category ? params.category.replace(/-/g, ' ') : null)
+
+  const hasAttributeFilters = Boolean(
+    params.size ||
+    params.color ||
+    params.minPrice ||
+    params.maxPrice ||
+    params.inStock === 'true' ||
+    params.sale === 'true' ||
+    params.search
+  )
+
   return (
     <div className="flex flex-col min-h-screen bg-white text-black">
       <Header />
@@ -73,16 +88,18 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
             <div className="text-xs uppercase tracking-widest text-neutral-500 mb-2 flex items-center space-x-2">
               <Link href="/" className="hover:underline">Home</Link>
               <span>/</span>
-              <span className="text-black font-semibold">Shop All</span>
-              {params.category && (
+              <Link href="/shop" className={`hover:underline ${!categoryDisplayName ? 'text-black font-semibold' : ''}`}>
+                Shop All
+              </Link>
+              {categoryDisplayName && (
                 <>
                   <span>/</span>
-                  <span className="capitalize text-black">{params.category.replace(/-/g, ' ')}</span>
+                  <span className="capitalize text-black font-semibold">{categoryDisplayName}</span>
                 </>
               )}
             </div>
             <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight uppercase">
-              {params.sale === 'true' ? 'Sale & Special Drops' : 'Catalog Collection'}
+              {categoryDisplayName || (params.sale === 'true' ? 'Sale & Special Drops' : 'Catalog Collection')}
             </h1>
             <p className="mt-2 text-xs sm:text-sm text-neutral-600 max-w-xl">
               Authentic streetwear wardrobe. Designed for uncompromising individuality.
@@ -118,17 +135,92 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
                     <ProductCard key={product.id} product={product as any} priority={idx < 2} />
                   ))}
                 </div>
+              ) : hasAttributeFilters ? (
+                /* State: No matching filters */
+                <div className="py-20 px-4 text-center border border-dashed border-neutral-300 bg-neutral-50">
+                  <div className="mx-auto w-12 h-12 mb-4 rounded-full bg-neutral-200 flex items-center justify-center text-neutral-600">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-base sm:text-lg uppercase tracking-widest font-black mb-2">
+                    No Matching Products
+                  </h3>
+                  <p className="text-xs text-neutral-500 mb-6 max-w-md mx-auto">
+                    No products match your selected filters. Try broadening your filter selection or clearing active filters.
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <Link
+                      href={params.category ? `/shop?category=${encodeURIComponent(params.category)}` : '/shop'}
+                      className="bg-black text-white px-6 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors"
+                    >
+                      Clear Filters
+                    </Link>
+                    <Link
+                      href="/shop"
+                      className="border border-black text-black px-6 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-100 transition-colors"
+                    >
+                      View All Products
+                    </Link>
+                  </div>
+                </div>
+              ) : params.category ? (
+                /* State: Empty category */
+                <div className="py-20 px-4 text-center border border-dashed border-neutral-300 bg-neutral-50">
+                  <div className="mx-auto w-12 h-12 mb-4 rounded-full bg-neutral-200 flex items-center justify-center text-neutral-600">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  </div>
+                  <h3 className="text-base sm:text-lg uppercase tracking-widest font-black mb-2">
+                    No Products In {categoryDisplayName?.toUpperCase() || 'This Category'} Yet
+                  </h3>
+                  <p className="text-xs text-neutral-500 mb-6 max-w-md mx-auto">
+                    New drops and styles in this category are currently in production. Check out our active styles across other categories.
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <Link
+                      href="/shop"
+                      className="bg-black text-white px-6 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors"
+                    >
+                      Explore All Products
+                    </Link>
+                    <Link
+                      href="/categories"
+                      className="border border-black text-black px-6 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-100 transition-colors"
+                    >
+                      Browse Categories
+                    </Link>
+                  </div>
+                </div>
+              ) : params.collection ? (
+                /* State: Empty collection */
+                <div className="py-20 px-4 text-center border border-dashed border-neutral-300 bg-neutral-50">
+                  <h3 className="text-base sm:text-lg uppercase tracking-widest font-black mb-2">
+                    Collection Coming Soon
+                  </h3>
+                  <p className="text-xs text-neutral-500 mb-6 max-w-md mx-auto">
+                    Pieces for this capsule collection will be releasing shortly. Stay tuned.
+                  </p>
+                  <Link
+                    href="/shop"
+                    className="inline-block bg-black text-white px-6 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors"
+                  >
+                    Explore All Drops
+                  </Link>
+                </div>
               ) : (
+                /* State: Entire store empty */
                 <div className="py-24 text-center border border-dashed border-neutral-200">
                   <h3 className="text-lg uppercase tracking-widest font-black mb-2">New styles coming soon</h3>
                   <p className="text-xs text-neutral-500 mb-6 font-mono">
                     New streetwear drops and capsules are currently being prepared. Check back shortly.
                   </p>
                   <Link
-                    href="/shop"
+                    href="/"
                     className="inline-block bg-black text-white px-6 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors"
                   >
-                    View All Categories
+                    Return to Homepage
                   </Link>
                 </div>
               )}

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { getCurrentUser, isAdmin } from '@/lib/auth'
-import { deleteProduct, saveDevProduct } from '@/lib/products'
+import { deleteProduct, saveDevProduct, clearProductCache } from '@/lib/products'
+import { clearCategoriesCache } from '@/lib/categories'
 import { getSafeImageUrl } from '@/lib/utils'
 import { extractStoragePath } from '@/lib/storage'
 
@@ -173,10 +174,15 @@ export async function POST(req: NextRequest) {
       metadata: { name: product.name, slug: product.slug },
     })
 
+    clearProductCache()
+    clearCategoriesCache()
+
     try {
       revalidatePath('/products/[slug]', 'page')
       revalidatePath('/shop', 'page')
+      revalidatePath('/shop', 'layout')
       revalidatePath('/', 'page')
+      revalidatePath('/categories', 'page')
       revalidatePath('/collections', 'page')
       revalidatePath('/collections/[slug]', 'page')
       revalidatePath('/admin/products', 'page')
@@ -349,10 +355,15 @@ export async function PUT(req: NextRequest) {
       })
     } catch {}
 
+    clearProductCache()
+    clearCategoriesCache()
+
     try {
       revalidatePath('/products/[slug]', 'page')
       revalidatePath('/shop', 'page')
+      revalidatePath('/shop', 'layout')
       revalidatePath('/', 'page')
+      revalidatePath('/categories', 'page')
       revalidatePath('/collections', 'page')
       revalidatePath('/collections/[slug]', 'page')
       revalidatePath('/admin/products', 'page')
@@ -393,6 +404,9 @@ export async function PATCH(req: NextRequest) {
 
     if (error) throw error
 
+    clearProductCache()
+    clearCategoriesCache()
+
     try {
       await supabase.from('admin_audit_logs').insert({
         admin_id: user.id,
@@ -401,6 +415,17 @@ export async function PATCH(req: NextRequest) {
         entity_id: id,
         metadata: updateData,
       })
+    } catch {}
+
+    try {
+      revalidatePath('/products/[slug]', 'page')
+      revalidatePath('/shop', 'page')
+      revalidatePath('/shop', 'layout')
+      revalidatePath('/', 'page')
+      revalidatePath('/categories', 'page')
+      revalidatePath('/collections', 'page')
+      revalidatePath('/collections/[slug]', 'page')
+      revalidatePath('/admin/products', 'page')
     } catch {}
 
     return NextResponse.json({ success: true, product: data })
@@ -435,6 +460,9 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: res.error }, { status: 500 })
     }
 
+    clearProductCache()
+    clearCategoriesCache()
+
     // Also log in audit logs if Supabase is configured
     try {
       const supabase = await createServiceClient()
@@ -445,6 +473,17 @@ export async function DELETE(req: NextRequest) {
         entity_id: id,
         metadata: { deleted_id: id },
       })
+    } catch {}
+
+    try {
+      revalidatePath('/products/[slug]', 'page')
+      revalidatePath('/shop', 'page')
+      revalidatePath('/shop', 'layout')
+      revalidatePath('/', 'page')
+      revalidatePath('/categories', 'page')
+      revalidatePath('/collections', 'page')
+      revalidatePath('/collections/[slug]', 'page')
+      revalidatePath('/admin/products', 'page')
     } catch {}
 
     return NextResponse.json({ success: true, message: 'Product deleted successfully', id })
