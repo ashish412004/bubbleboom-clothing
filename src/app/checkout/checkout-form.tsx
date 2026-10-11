@@ -69,6 +69,7 @@ export function CheckoutForm({
   isBuyNow = false,
   buyNowVariantId,
   buyNowQuantity,
+  initialAddresses = [],
 }: {
   items: CartItemData[]
   summary: CartSummaryData
@@ -78,6 +79,7 @@ export function CheckoutForm({
   isBuyNow?: boolean
   buyNowVariantId?: string
   buyNowQuantity?: number
+  initialAddresses?: any[]
 }) {
   const router = useRouter()
   const setItemCount = useCartStore((state) => state.setItemCount)
@@ -86,24 +88,27 @@ export function CheckoutForm({
   const isSubmittingRef = useRef(false)
   const addressSectionRef = useRef<HTMLDivElement>(null)
 
+  const defaultAddr = initialAddresses.find((a: any) => a.is_default) || initialAddresses[0]
+
   // Form fields
-  const [fullName, setFullName] = useState(userName)
+  const [fullName, setFullName] = useState(defaultAddr?.full_name || userName)
   const [email, setEmail] = useState(userEmail)
-  const [phone, setPhone] = useState(userPhone)
-  const [addressLine1, setAddressLine1] = useState('')
-  const [addressLine2, setAddressLine2] = useState('')
-  const [landmark, setLandmark] = useState('')
-  const [city, setCity] = useState('')
-  const [state, setState] = useState('')
-  const [pinCode, setPinCode] = useState('')
+  const [phone, setPhone] = useState(defaultAddr?.phone || userPhone)
+  const [addressLine1, setAddressLine1] = useState(defaultAddr?.address_line1 || '')
+  const [addressLine2, setAddressLine2] = useState(defaultAddr?.address_line2 || '')
+  const [landmark, setLandmark] = useState(defaultAddr?.landmark || '')
+  const [city, setCity] = useState(defaultAddr?.city || '')
+  const [state, setState] = useState(defaultAddr?.state || '')
+  const [pinCode, setPinCode] = useState(defaultAddr?.pin_code || '')
   const [paymentMethod, setPaymentMethod] = useState<'cashfree' | 'cod'>('cashfree')
   const [notes, setNotes] = useState('')
 
   // Saved addresses
-  const [savedAddresses, setSavedAddresses] = useState<any[]>([])
-  const [selectedSavedId, setSelectedSavedId] = useState<string | null>(null)
+  const [savedAddresses, setSavedAddresses] = useState<any[]>(initialAddresses)
+  const [selectedSavedId, setSelectedSavedId] = useState<string | null>(defaultAddr?.id || null)
 
   useEffect(() => {
+    if (initialAddresses.length > 0) return
     fetch('/api/addresses')
       .then((r) => r.json())
       .then((data) => {
@@ -123,7 +128,7 @@ export function CheckoutForm({
         }
       })
       .catch(() => {})
-  }, [userName, userPhone])
+  }, [initialAddresses, userName, userPhone])
 
   const handleSelectSavedAddress = (addr: any) => {
     setSelectedSavedId(addr.id)

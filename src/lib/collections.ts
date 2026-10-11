@@ -1,9 +1,18 @@
-import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, createPublicClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 import { MOCK_COLLECTIONS, MOCK_PRODUCTS } from './mock-data'
 import { revalidatePath } from 'next/cache'
 import fs from 'fs'
 import path from 'path'
+
+let collectionsCache: { data: any[]; timestamp: number } | null = null
+const slugCache = new Map<string, { data: any; timestamp: number }>()
+const COLLECTIONS_TTL_MS = 60 * 1000
+
+export function clearCollectionsCache() {
+  collectionsCache = null
+  slugCache.clear()
+}
 
 export function getDeletedCollectionIds(): Set<string> {
   try {
@@ -38,21 +47,28 @@ export type Collection = Database['public']['Tables']['collections']['Row']
 
 export async function getCollections(includeDrafts: boolean = false) {
   const deletedIds = getDeletedCollectionIds()
+  if (!includeDrafts && collectionsCache && Date.now() - collectionsCache.timestamp < COLLECTIONS_TTL_MS) {
+    return collectionsCache.data.filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.slug))
+  }
+
   let list = MOCK_COLLECTIONS.filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.slug))
   if (!includeDrafts) {
     list = list.filter((c) => c.is_visible)
   }
 
   if (!isSupabaseConfigured()) {
+    if (!includeDrafts) {
+      collectionsCache = { data: list, timestamp: Date.now() }
+    }
     return list
   }
 
   try {
-    const supabase = await createServerClient()
+    const supabase = createPublicClient()
 
     let query = supabase
       .from('collections')
-      .select('*')
+      .select('id, name, slug, description, banner_image_url, is_visible, sort_order, created_at, updated_at')
       .order('sort_order')
 
     if (!includeDrafts) {
@@ -65,7 +81,11 @@ export async function getCollections(includeDrafts: boolean = false) {
       return list
     }
 
-    return data.filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.slug))
+    const filtered = data.filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.slug))
+    if (!includeDrafts) {
+      collectionsCache = { data: filtered, timestamp: Date.now() }
+    }
+    return filtered
   } catch {
     return list
   }
@@ -75,17 +95,24 @@ export async function getCollectionBySlug(slug: string) {
   const deletedIds = getDeletedCollectionIds()
   if (deletedIds.has(slug)) return null
 
+  const cached = slugCache.get(slug)
+  if (cached && Date.now() - cached.timestamp < COLLECTIONS_TTL_MS) {
+    if (!deletedIds.has(cached.data?.id)) return cached.data
+  }
+
   if (!isSupabaseConfigured()) {
     const col = MOCK_COLLECTIONS.find((c) => c.slug === slug && !deletedIds.has(c.id))
     if (!col) return null
-    return {
+    const result = {
       ...col,
       collection_products: (col as any).collection_products || [],
     }
+    slugCache.set(slug, { data: result, timestamp: Date.now() })
+    return result
   }
 
   try {
-    const supabase = await createServerClient()
+    const supabase = createPublicClient()
 
     const { data, error } = await supabase
       .from('collections')
@@ -103,12 +130,15 @@ export async function getCollectionBySlug(slug: string) {
     if (error || !data || deletedIds.has(data.id)) {
       const col = MOCK_COLLECTIONS.find((c) => c.slug === slug && !deletedIds.has(c.id))
       if (!col) return null
-      return {
+      const result = {
         ...col,
         collection_products: (col as any).collection_products || [],
       }
+      slugCache.set(slug, { data: result, timestamp: Date.now() })
+      return result
     }
 
+    slugCache.set(slug, { data: data, timestamp: Date.now() })
     return data
   } catch {
     const col = MOCK_COLLECTIONS.find((c) => c.slug === slug && !deletedIds.has(c.id))
@@ -177,6 +207,7 @@ export async function getProductsByCollectionId(collectionId: string) {
 
 // Admin functions
 export async function createCollection(collection: Database['public']['Tables']['collections']['Insert']) {
+  clearCollectionsCache()
   if (!isSupabaseConfigured()) {
     const newCol = {
       id: `col-${Date.now()}`,
@@ -223,6 +254,7 @@ export async function createCollection(collection: Database['public']['Tables'][
 }
 
 export async function updateCollection(id: string, collection: Database['public']['Tables']['collections']['Update']) {
+  clearCollectionsCache()
   if (!isSupabaseConfigured()) {
     const idx = MOCK_COLLECTIONS.findIndex((c) => c.id === id)
     if (idx >= 0) {
@@ -269,6 +301,7 @@ export async function updateCollection(id: string, collection: Database['public'
 }
 
 export async function deleteCollection(id: string) {
+  clearCollectionsCache()
   saveDeletedCollectionId(id)
 
   const idx = MOCK_COLLECTIONS.findIndex((c) => c.id === id || c.slug === id)

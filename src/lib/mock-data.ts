@@ -107,6 +107,30 @@ export const MOCK_COLLECTIONS: any[] = [
     created_at: '2026-10-10T21:06:24.471Z',
     updated_at: '2026-10-10T21:06:24.471Z',
   },
+  {
+    id: 'col-monochrome-originals',
+    name: 'Monochrome Originals',
+    slug: 'monochrome-originals',
+    description: 'Signature black-and-white streetwear essentials.',
+    banner_image_url: null,
+    mobile_banner_image_url: null,
+    is_visible: true,
+    sort_order: 2,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'col-urban-essentials',
+    name: 'Urban Essentials',
+    slug: 'urban-essentials',
+    description: 'Everyday boxy silhouettes and raw heavyweight textures.',
+    banner_image_url: null,
+    mobile_banner_image_url: null,
+    is_visible: true,
+    sort_order: 3,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
 ]
 
 export const MOCK_PRODUCTS: any[] = []

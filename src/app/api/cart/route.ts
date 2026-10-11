@@ -30,8 +30,11 @@ async function getAuthAndSession() {
     }
   }
 
-  // 2. Check live Supabase if configured and not yet resolved
-  if (!userId && isSupabaseConfigured()) {
+  // 2. Check live Supabase if configured and auth token cookie is present
+  const hasSupabaseCookie = cookieStore.getAll().some(
+    (c) => c.name.startsWith('sb-') && c.name.includes('-auth-token')
+  )
+  if (!userId && hasSupabaseCookie && isSupabaseConfigured()) {
     try {
       const supabase = await createServerClient()
       const { data: { user } } = await supabase.auth.getUser()

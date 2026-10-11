@@ -103,8 +103,8 @@ export default async function HomePage() {
               </div>
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
-                {newArrivals.map((product) => (
-                  <ProductCard key={product.id} product={product as any} />
+                {newArrivals.map((product, idx) => (
+                  <ProductCard key={product.id} product={product as any} priority={idx < 2} />
                 ))}
               </div>
             </div>

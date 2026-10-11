@@ -1,9 +1,21 @@
-import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, createPublicClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 import { generateSlug, parseProductImage } from './utils'
 import { MOCK_PRODUCTS } from './mock-data'
+import { cache } from 'react'
 import fs from 'fs'
 import path from 'path'
+
+const productsCache = new Map<string, { data: any[]; timestamp: number }>()
+const productSlugCache = new Map<string, { data: any; timestamp: number }>()
+const relatedProductsCache = new Map<string, { data: any[]; timestamp: number }>()
+const PRODUCTS_TTL_MS = 60 * 1000
+
+export function clearProductCache() {
+  productsCache.clear()
+  productSlugCache.clear()
+  relatedProductsCache.clear()
+}
 
 export function getDeletedProductIds(): Set<string> {
   try {
@@ -172,20 +184,40 @@ function filterMockProducts(filters?: ProductFilterOptions) {
 }
 
 export async function getProducts(filters?: ProductFilterOptions) {
+  const cacheKey = JSON.stringify(filters || {})
+  const cached = productsCache.get(cacheKey)
+  if (cached && Date.now() - cached.timestamp < PRODUCTS_TTL_MS) {
+    const deletedIds = getDeletedProductIds()
+    return cached.data.filter((p) => !deletedIds.has(p.id) && !deletedIds.has(p.slug))
+  }
+
   if (!isSupabaseConfigured()) {
-    return filterMockProducts(filters)
+    const mock = filterMockProducts(filters)
+    productsCache.set(cacheKey, { data: mock, timestamp: Date.now() })
+    return mock
   }
 
   try {
-    const supabase = await createServerClient()
+    const supabase = createPublicClient()
 
     let query = supabase
       .from('products')
       .select(`
-        *,
-        category:categories(*),
-        images:product_images(*),
-        variants:product_variants(*)
+        id,
+        name,
+        slug,
+        description,
+        mrp,
+        selling_price,
+        category_id,
+        tags,
+        is_published,
+        is_active,
+        created_at,
+        updated_at,
+        category:categories(id, name, slug),
+        images:product_images(id, product_id, image_url, alt_text, color, is_primary, sort_order),
+        variants:product_variants(id, product_id, sku, color, size, stock, is_active)
       `)
       .eq('is_published', true)
       .eq('is_active', true)
@@ -300,30 +332,49 @@ export async function getProducts(filters?: ProductFilterOptions) {
       result = result.filter((p) => p.mrp > p.selling_price)
     }
 
+    productsCache.set(cacheKey, { data: result, timestamp: Date.now() })
     return result
   } catch {
     return filterMockProducts(filters)
   }
 }
 
-export async function getProductBySlug(slug: string) {
+export const getProductBySlug = cache(async function (slug: string) {
   const deletedIds = getDeletedProductIds()
   if (deletedIds.has(slug)) return null
 
+  const cached = productSlugCache.get(slug)
+  if (cached && Date.now() - cached.timestamp < PRODUCTS_TTL_MS) {
+    if (!deletedIds.has(cached.data?.id)) return cached.data
+  }
+
   if (!isSupabaseConfigured()) {
-    return MOCK_PRODUCTS.find((p) => p.slug === slug && !deletedIds.has(p.id)) || null
+    const mock = MOCK_PRODUCTS.find((p) => p.slug === slug && !deletedIds.has(p.id)) || null
+    if (mock) productSlugCache.set(slug, { data: mock, timestamp: Date.now() })
+    return mock
   }
 
   try {
-    const supabase = await createServerClient()
+    const supabase = createPublicClient()
 
     const { data, error } = await supabase
       .from('products')
       .select(`
-        *,
-        category:categories(*),
-        images:product_images(*),
-        variants:product_variants(*)
+        id,
+        name,
+        slug,
+        description,
+        mrp,
+        selling_price,
+        category_id,
+        tags,
+        is_published,
+        is_active,
+        created_at,
+        updated_at,
+        category:categories(id, name, slug),
+        images:product_images(id, product_id, image_url, alt_text, color, is_primary, sort_order),
+        variants:product_variants(id, product_id, sku, color, size, stock, is_active)
       `)
       .eq('slug', slug)
       .eq('is_published', true)
@@ -331,7 +382,8 @@ export async function getProductBySlug(slug: string) {
       .maybeSingle()
 
     if (error || !data || deletedIds.has(data.id)) {
-      return MOCK_PRODUCTS.find((p) => p.slug === slug && !deletedIds.has(p.id)) || null
+      const mock = MOCK_PRODUCTS.find((p) => p.slug === slug && !deletedIds.has(p.id)) || null
+      return mock
     }
 
     const parsedImages = (((data as any).images || []) as any[])
@@ -339,14 +391,17 @@ export async function getProductBySlug(slug: string) {
       .filter(Boolean)
       .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
 
-    return {
+    const result = {
       ...data,
       images: parsedImages,
     }
+
+    productSlugCache.set(slug, { data: result, timestamp: Date.now() })
+    return result
   } catch {
     return MOCK_PRODUCTS.find((p) => p.slug === slug && !deletedIds.has(p.id)) || null
   }
-}
+})
 
 export async function getProductById(id: string) {
   const deletedIds = getDeletedProductIds()
@@ -357,15 +412,26 @@ export async function getProductById(id: string) {
   }
 
   try {
-    const supabase = await createServerClient()
+    const supabase = createPublicClient()
 
     const { data, error } = await supabase
       .from('products')
       .select(`
-        *,
-        category:categories(*),
-        images:product_images(*),
-        variants:product_variants(*)
+        id,
+        name,
+        slug,
+        description,
+        mrp,
+        selling_price,
+        category_id,
+        tags,
+        is_published,
+        is_active,
+        created_at,
+        updated_at,
+        category:categories(id, name, slug),
+        images:product_images(id, product_id, image_url, alt_text, color, is_primary, sort_order),
+        variants:product_variants(id, product_id, sku, color, size, stock, is_active)
       `)
       .eq('id', id)
       .maybeSingle()
@@ -423,20 +489,39 @@ export async function getAdminProducts() {
 }
 
 export async function getRelatedProducts(productId: string, categoryId?: string, limit: number = 4) {
+  const cacheKey = `${productId}_${categoryId || ''}_${limit}`
+  const cached = relatedProductsCache.get(cacheKey)
+  if (cached && Date.now() - cached.timestamp < PRODUCTS_TTL_MS) {
+    return cached.data
+  }
+
   if (!isSupabaseConfigured()) {
-    return MOCK_PRODUCTS.filter((p) => p.id !== productId).slice(0, limit)
+    const mock = MOCK_PRODUCTS.filter((p) => p.id !== productId).slice(0, limit)
+    relatedProductsCache.set(cacheKey, { data: mock, timestamp: Date.now() })
+    return mock
   }
 
   try {
-    const supabase = await createServerClient()
+    const supabase = createPublicClient()
 
     let query = supabase
       .from('products')
       .select(`
-        *,
-        category:categories(*),
-        images:product_images(*),
-        variants:product_variants(*)
+        id,
+        name,
+        slug,
+        description,
+        mrp,
+        selling_price,
+        category_id,
+        tags,
+        is_published,
+        is_active,
+        created_at,
+        updated_at,
+        category:categories(id, name, slug),
+        images:product_images(id, product_id, image_url, alt_text, color, is_primary, sort_order),
+        variants:product_variants(id, product_id, sku, color, size, stock, is_active)
       `)
       .eq('is_published', true)
       .eq('is_active', true)
@@ -448,7 +533,9 @@ export async function getRelatedProducts(productId: string, categoryId?: string,
     }
 
     const { data } = await query
-    return (data && data.length > 0) ? data : MOCK_PRODUCTS.filter((p) => p.id !== productId).slice(0, limit)
+    const result = (data && data.length > 0) ? data : MOCK_PRODUCTS.filter((p) => p.id !== productId).slice(0, limit)
+    relatedProductsCache.set(cacheKey, { data: result, timestamp: Date.now() })
+    return result
   } catch {
     return MOCK_PRODUCTS.filter((p) => p.id !== productId).slice(0, limit)
   }
@@ -456,6 +543,7 @@ export async function getRelatedProducts(productId: string, categoryId?: string,
 
 // Admin product functions
 export async function createProduct(product: ProductInsert) {
+  clearProductCache()
   const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('products')
@@ -468,6 +556,7 @@ export async function createProduct(product: ProductInsert) {
 }
 
 export async function updateProduct(id: string, product: ProductUpdate) {
+  clearProductCache()
   const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('products')
@@ -481,6 +570,7 @@ export async function updateProduct(id: string, product: ProductUpdate) {
 }
 
 export async function createProductVariant(variant: Database['public']['Tables']['product_variants']['Insert']) {
+  clearProductCache()
   const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('product_variants')
@@ -496,6 +586,7 @@ export async function updateProductVariant(
   id: string,
   variant: Database['public']['Tables']['product_variants']['Update']
 ) {
+  clearProductCache()
   const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('product_variants')
@@ -509,6 +600,7 @@ export async function updateProductVariant(
 }
 
 export async function addProductImage(image: Database['public']['Tables']['product_images']['Insert']) {
+  clearProductCache()
   const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('product_images')
@@ -521,6 +613,7 @@ export async function addProductImage(image: Database['public']['Tables']['produ
 }
 
 export async function deleteProduct(id: string): Promise<{ success: boolean; error?: string }> {
+  clearProductCache()
   saveDeletedProductId(id)
 
   try {

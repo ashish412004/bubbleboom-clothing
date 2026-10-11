@@ -13,13 +13,31 @@ import {
 
 export * from '@/types/settings'
 
+const settingsCache = new Map<string, { value: any; timestamp: number }>()
+const SETTINGS_TTL_MS = 60 * 1000
+
+export function clearStoreSettingsCache(key?: string) {
+  if (key) {
+    settingsCache.delete(key)
+  } else {
+    settingsCache.clear()
+  }
+}
+
 export async function getStoreSettings<T = any>(key: 'general' | 'shipping' | 'orders' | 'exchange' | 'banners' | string): Promise<T> {
+  const cached = settingsCache.get(key)
+  if (cached && Date.now() - cached.timestamp < SETTINGS_TTL_MS) {
+    return cached.value as T
+  }
+
   if (!isSupabaseConfigured()) {
-    if (key === 'general') return DEFAULT_GENERAL_SETTINGS as unknown as T
-    if (key === 'shipping') return DEFAULT_SHIPPING_SETTINGS as unknown as T
-    if (key === 'orders') return DEFAULT_ORDER_SETTINGS as unknown as T
-    if (key === 'exchange') return DEFAULT_EXCHANGE_SETTINGS as unknown as T
-    return {} as T
+    let fallback: any = {}
+    if (key === 'general') fallback = DEFAULT_GENERAL_SETTINGS
+    else if (key === 'shipping') fallback = DEFAULT_SHIPPING_SETTINGS
+    else if (key === 'orders') fallback = DEFAULT_ORDER_SETTINGS
+    else if (key === 'exchange') fallback = DEFAULT_EXCHANGE_SETTINGS
+    settingsCache.set(key, { value: fallback, timestamp: Date.now() })
+    return fallback as unknown as T
   }
 
   try {
@@ -31,32 +49,38 @@ export async function getStoreSettings<T = any>(key: 'general' | 'shipping' | 'o
       .maybeSingle()
 
     if (error || !data) {
-      if (key === 'general') return DEFAULT_GENERAL_SETTINGS as unknown as T
-      if (key === 'shipping') return DEFAULT_SHIPPING_SETTINGS as unknown as T
-      if (key === 'orders') return DEFAULT_ORDER_SETTINGS as unknown as T
-      if (key === 'exchange') return DEFAULT_EXCHANGE_SETTINGS as unknown as T
-      return {} as T
+      let fallback: any = {}
+      if (key === 'general') fallback = DEFAULT_GENERAL_SETTINGS
+      else if (key === 'shipping') fallback = DEFAULT_SHIPPING_SETTINGS
+      else if (key === 'orders') fallback = DEFAULT_ORDER_SETTINGS
+      else if (key === 'exchange') fallback = DEFAULT_EXCHANGE_SETTINGS
+      settingsCache.set(key, { value: fallback, timestamp: Date.now() })
+      return fallback as unknown as T
     }
 
+    let finalVal: any = data.value
     // Merge defaults for missing properties if stored value is partial
     if (key === 'shipping') {
-      return { ...DEFAULT_SHIPPING_SETTINGS, ...(data.value as Record<string, any>) } as unknown as T
-    }
-    if (key === 'exchange') {
-      return { ...DEFAULT_EXCHANGE_SETTINGS, ...(data.value as Record<string, any>) } as unknown as T
+      finalVal = { ...DEFAULT_SHIPPING_SETTINGS, ...(data.value as Record<string, any>) }
+    } else if (key === 'exchange') {
+      finalVal = { ...DEFAULT_EXCHANGE_SETTINGS, ...(data.value as Record<string, any>) }
     }
 
-    return data.value as unknown as T
+    settingsCache.set(key, { value: finalVal, timestamp: Date.now() })
+    return finalVal as unknown as T
   } catch (err) {
-    if (key === 'general') return DEFAULT_GENERAL_SETTINGS as unknown as T
-    if (key === 'shipping') return DEFAULT_SHIPPING_SETTINGS as unknown as T
-    if (key === 'orders') return DEFAULT_ORDER_SETTINGS as unknown as T
-    if (key === 'exchange') return DEFAULT_EXCHANGE_SETTINGS as unknown as T
-    return {} as T
+    let fallback: any = {}
+    if (key === 'general') fallback = DEFAULT_GENERAL_SETTINGS
+    else if (key === 'shipping') fallback = DEFAULT_SHIPPING_SETTINGS
+    else if (key === 'orders') fallback = DEFAULT_ORDER_SETTINGS
+    else if (key === 'exchange') fallback = DEFAULT_EXCHANGE_SETTINGS
+    return fallback as unknown as T
   }
 }
 
 export async function updateStoreSettings(key: string, value: Record<string, any>, adminUserId?: string) {
+  clearStoreSettingsCache(key)
+
   const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('store_settings')

@@ -25,9 +25,10 @@ export interface ProductCardProps {
       stock: number
     }>
   }
+  priority?: boolean
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, priority = false }: ProductCardProps) {
   const [isWishlisted, setIsWishlisted] = useState(false)
   const [imageError, setImageError] = useState(false)
   const incrementWishlist = useCartStore((state) => state.setWishlistCount)
@@ -71,6 +72,7 @@ export function ProductCard({ product }: ProductCardProps) {
               src={getSafeImageUrl(firstImage.image_url)}
               alt={firstImage.alt_text || product.name}
               fill
+              priority={priority}
               onError={() => setImageError(true)}
               className="object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"

@@ -47,6 +47,45 @@ interface CartSummaryData {
   coupon_discount_paise: number
 }
 
+function computeOptimisticSummary(
+  items: CartItemData[],
+  thresholdPaise: number,
+  shippingRatePaise: number,
+  couponCode: string | null
+): CartSummaryData {
+  const subtotal_paise = items.reduce((sum, item) => {
+    const price = item.variant?.product?.selling_price || 0
+    return sum + Math.round(price * 100) * item.quantity
+  }, 0)
+
+  const shipping_paise =
+    subtotal_paise >= thresholdPaise || items.length === 0 ? 0 : shippingRatePaise
+
+  let coupon_discount_paise = 0
+  const normalizedCoupon = (couponCode || '').toUpperCase().trim()
+  if (normalizedCoupon === 'BOOM10') {
+    coupon_discount_paise = Math.round(subtotal_paise * 0.1)
+  } else if (normalizedCoupon === 'FIRSTBOOM' && subtotal_paise >= 149900) {
+    coupon_discount_paise = 20000
+  }
+
+  const discount_paise = Math.min(subtotal_paise, coupon_discount_paise)
+  const total_paise = Math.max(0, subtotal_paise - discount_paise + shipping_paise)
+  const free_shipping_remaining_paise = Math.max(0, thresholdPaise - subtotal_paise)
+
+  return {
+    subtotal_paise,
+    discount_paise,
+    shipping_paise,
+    cod_fee_paise: 0,
+    total_paise,
+    free_shipping_threshold_paise: thresholdPaise,
+    free_shipping_remaining_paise,
+    coupon_code: couponCode,
+    coupon_discount_paise,
+  }
+}
+
 export function CartView({
   initialItems,
   initialSummary,
@@ -60,7 +99,7 @@ export function CartView({
   const [couponCode, setCouponCode] = useState(initialSummary.coupon_code || '')
   const [couponError, setCouponError] = useState('')
   const [couponSuccess, setCouponSuccess] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [pendingItemIds, setPendingItemIds] = useState<Set<string>>(new Set())
   const setStoreCount = useCartStore((state) => state.setItemCount)
 
   useEffect(() => {
@@ -68,21 +107,38 @@ export function CartView({
     setStoreCount(totalCount)
   }, [items, setStoreCount])
 
-  const refreshCart = async () => {
-    try {
-      const res = await fetch('/api/cart')
-      if (res.ok) {
-        const data = await res.json()
-        setItems(data.items || [])
-        setSummary(data.summary || initialSummary)
-      }
-    } catch {
-      // silently fallback
-    }
-  }
-
   const handleUpdateQuantity = async (itemId: string, newQty: number) => {
-    setLoading(true)
+    const targetItem = items.find((i) => i.id === itemId)
+    if (!targetItem) return
+
+    if (newQty > targetItem.variant.stock) {
+      toast.error(`Only ${targetItem.variant.stock} item(s) available in stock.`)
+      return
+    }
+
+    if (newQty < 1) {
+      handleRemoveItem(itemId)
+      return
+    }
+
+    // Save snapshot for instant rollback if rejected
+    const prevItems = [...items]
+    const prevSummary = { ...summary }
+
+    // Instant optimistic update
+    const nextItems = items.map((i) => (i.id === itemId ? { ...i, quantity: newQty } : i))
+    setItems(nextItems)
+    setSummary(
+      computeOptimisticSummary(
+        nextItems,
+        summary.free_shipping_threshold_paise,
+        summary.shipping_paise || 9900,
+        couponCode
+      )
+    )
+
+    setPendingItemIds((prev) => new Set(prev).add(itemId))
+
     try {
       const res = await fetch('/api/cart', {
         method: 'PATCH',
@@ -90,34 +146,64 @@ export function CartView({
         body: JSON.stringify({ item_id: itemId, quantity: newQty }),
       })
       const data = await res.json()
-      if (res.ok) {
-        await refreshCart()
-      } else {
+      if (!res.ok) {
+        setItems(prevItems)
+        setSummary(prevSummary)
         toast.error(data.error || 'Failed to update quantity')
       }
     } catch {
+      setItems(prevItems)
+      setSummary(prevSummary)
       toast.error('Network error updating cart')
     } finally {
-      setLoading(false)
+      setPendingItemIds((prev) => {
+        const next = new Set(prev)
+        next.delete(itemId)
+        return next
+      })
     }
   }
 
   const handleRemoveItem = async (itemId: string) => {
-    setLoading(true)
+    const prevItems = [...items]
+    const prevSummary = { ...summary }
+
+    const nextItems = items.filter((i) => i.id !== itemId)
+    setItems(nextItems)
+    setSummary(
+      computeOptimisticSummary(
+        nextItems,
+        summary.free_shipping_threshold_paise,
+        summary.shipping_paise || 9900,
+        couponCode
+      )
+    )
+
+    toast('Item removed', {
+      style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
+    })
+
+    setPendingItemIds((prev) => new Set(prev).add(itemId))
+
     try {
       const res = await fetch(`/api/cart?item_id=${itemId}`, {
         method: 'DELETE',
       })
-      if (res.ok) {
-        await refreshCart()
-        toast('Item removed', {
-          style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
-        })
+      if (!res.ok) {
+        setItems(prevItems)
+        setSummary(prevSummary)
+        toast.error('Failed to remove item')
       }
     } catch {
+      setItems(prevItems)
+      setSummary(prevSummary)
       toast.error('Failed to remove item')
     } finally {
-      setLoading(false)
+      setPendingItemIds((prev) => {
+        const next = new Set(prev)
+        next.delete(itemId)
+        return next
+      })
     }
   }
 
@@ -129,7 +215,6 @@ export function CartView({
     if (!couponCode.trim()) return
 
     const trimmed = couponCode.trim().toUpperCase()
-    // Test coupon code validity against standard promotional codes
     if (trimmed === 'BOOM10') {
       const disc = Math.round(summary.subtotal_paise * 0.1)
       setSummary((s) => ({
@@ -254,8 +339,8 @@ export function CartView({
                       <button
                         type="button"
                         onClick={() => handleRemoveItem(item.id)}
-                        disabled={loading}
-                        className="text-neutral-400 hover:text-black p-1 transition-colors"
+                        disabled={pendingItemIds.has(item.id)}
+                        className="text-neutral-400 hover:text-black p-1 transition-colors disabled:opacity-30"
                         aria-label="Remove item"
                       >
                         <Trash2 size={16} />
@@ -276,7 +361,7 @@ export function CartView({
                       <button
                         type="button"
                         onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
-                        disabled={loading || item.quantity <= 1}
+                        disabled={pendingItemIds.has(item.id) || item.quantity <= 1}
                         className="w-8 h-8 flex items-center justify-center hover:bg-neutral-100 text-sm font-bold disabled:opacity-30"
                       >
                         -
@@ -285,7 +370,7 @@ export function CartView({
                       <button
                         type="button"
                         onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
-                        disabled={loading || item.quantity >= item.variant.stock}
+                        disabled={pendingItemIds.has(item.id) || item.quantity >= item.variant.stock}
                         className="w-8 h-8 flex items-center justify-center hover:bg-neutral-100 text-sm font-bold disabled:opacity-30"
                       >
                         +

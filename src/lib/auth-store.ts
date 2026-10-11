@@ -12,17 +12,19 @@ export interface AuthUser {
 interface AuthStore {
   user: AuthUser | null
   isLoading: boolean
+  hasChecked: boolean
   setUser: (user: any) => void
   clearUser: () => void
-  refreshUser: () => Promise<void>
+  refreshUser: (force?: boolean) => Promise<void>
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
+export const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
   isLoading: true,
+  hasChecked: false,
   setUser: (rawUser) => {
     if (!rawUser) {
-      set({ user: null, isLoading: false })
+      set({ user: null, isLoading: false, hasChecked: true })
       return
     }
     const name =
@@ -40,10 +42,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
         role: rawUser.role || 'customer',
       },
       isLoading: false,
+      hasChecked: true,
     })
   },
-  clearUser: () => set({ user: null, isLoading: false }),
-  refreshUser: async () => {
+  clearUser: () => set({ user: null, isLoading: false, hasChecked: true }),
+  refreshUser: async (force: boolean = false) => {
+    if (!force && get().hasChecked) return
+
     try {
       const res = await fetch('/api/auth/session')
       if (res.ok) {
@@ -64,13 +69,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
               role: data.user.role || 'customer',
             },
             isLoading: false,
+            hasChecked: true,
           })
           return
         }
       }
-      set({ user: null, isLoading: false })
+      set({ user: null, isLoading: false, hasChecked: true })
     } catch {
-      set({ user: null, isLoading: false })
+      set({ user: null, isLoading: false, hasChecked: true })
     }
   },
 }))

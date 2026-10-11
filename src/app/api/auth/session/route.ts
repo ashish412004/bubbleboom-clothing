@@ -24,8 +24,19 @@ function formatOtpError(error: any): { error: string; status: number } {
 
 export async function GET() {
   const cookieStore = await cookies()
+  const allCookies = cookieStore.getAll()
 
-  if (isSupabaseConfigured()) {
+  const rawAuth = cookieStore.get('bb_auth_user')?.value
+  const hasSupabaseCookie = allCookies.some(
+    (c) => c.name.startsWith('sb-') && c.name.includes('-auth-token')
+  )
+
+  // Fast path for guests: avoids blocking network call to Supabase Auth
+  if (!hasSupabaseCookie && !rawAuth) {
+    return NextResponse.json({ user: null })
+  }
+
+  if (hasSupabaseCookie && isSupabaseConfigured()) {
     try {
       const supabase = await createServerClient()
       const { data: { user }, error } = await supabase.auth.getUser()
@@ -37,7 +48,6 @@ export async function GET() {
     }
   }
 
-  const rawAuth = cookieStore.get('bb_auth_user')?.value
   if (rawAuth) {
     try {
       const user = JSON.parse(rawAuth)

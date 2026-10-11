@@ -33,11 +33,11 @@ export function ShopFilters({ categories, isMobile = false }: ShopFiltersProps) 
     } else {
       params.set(key, value)
     }
-    router.push(`/shop?${params.toString()}`)
+    router.push(`/shop?${params.toString()}`, { scroll: false })
   }
 
   const clearAllFilters = () => {
-    router.push('/shop')
+    router.push('/shop', { scroll: false })
     setMobileDrawerOpen(false)
   }
 

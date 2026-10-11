@@ -2,6 +2,7 @@ import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { getCart, calculateCartSummary, getBuyNowItemDetails, CartItemWithDetails } from '@/lib/cart'
 import { getCurrentUser } from '@/lib/auth'
+import { createClient as createServerClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { CheckoutForm } from './checkout-form'
@@ -52,7 +53,24 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     }
   }
 
-  const summary = await calculateCartSummary(items)
+  const [summary, addresses] = await Promise.all([
+    calculateCartSummary(items),
+    (async () => {
+      if (!isSupabaseConfigured() || !user) return []
+      try {
+        const supabase = await createServerClient()
+        const { data } = await supabase
+          .from('addresses')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: false })
+        return data || []
+      } catch {
+        return []
+      }
+    })(),
+  ])
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-black">
@@ -79,6 +97,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
             isBuyNow={isBuyNow}
             buyNowVariantId={buyNowVariantId}
             buyNowQuantity={buyNowQuantity}
+            initialAddresses={addresses}
           />
         </div>
       </main>

@@ -1,9 +1,16 @@
-import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, createPublicClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 import { generateSlug } from './utils'
 import { MOCK_CATEGORIES } from './mock-data'
 import fs from 'fs'
 import path from 'path'
+
+let categoriesCache: { data: any[]; timestamp: number } | null = null
+const CATEGORIES_TTL_MS = 60 * 1000
+
+export function clearCategoriesCache() {
+  categoriesCache = null
+}
 
 export function getDeletedCategoryIds(): Set<string> {
   try {
@@ -38,26 +45,34 @@ export type Category = Database['public']['Tables']['categories']['Row']
 
 export async function getCategories() {
   const deletedIds = getDeletedCategoryIds()
+  if (categoriesCache && Date.now() - categoriesCache.timestamp < CATEGORIES_TTL_MS) {
+    return categoriesCache.data.filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.slug))
+  }
+
   let list = MOCK_CATEGORIES.filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.slug))
 
   if (!isSupabaseConfigured()) {
+    categoriesCache = { data: list, timestamp: Date.now() }
     return list
   }
 
   try {
-    const supabase = await createServerClient()
+    const supabase = createPublicClient()
 
     const { data, error } = await supabase
       .from('categories')
-      .select('*')
+      .select('id, name, slug, description, sort_order, is_active, created_at')
       .eq('is_active', true)
       .order('sort_order')
 
     if (error || !data || data.length === 0) {
+      categoriesCache = { data: list, timestamp: Date.now() }
       return list
     }
 
-    return data.filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.slug))
+    const filtered = data.filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.slug))
+    categoriesCache = { data: filtered, timestamp: Date.now() }
+    return filtered
   } catch {
     return list
   }
@@ -120,6 +135,7 @@ export async function getCategoryById(id: string) {
 
 // Admin functions
 export async function createCategory(category: Database['public']['Tables']['categories']['Insert']) {
+  clearCategoriesCache()
   if (!isSupabaseConfigured()) {
     const newCat = {
       id: `cat-${Date.now()}`,
@@ -153,6 +169,7 @@ export async function createCategory(category: Database['public']['Tables']['cat
 }
 
 export async function updateCategory(id: string, category: Database['public']['Tables']['categories']['Update']) {
+  clearCategoriesCache()
   if (!isSupabaseConfigured()) {
     const idx = MOCK_CATEGORIES.findIndex((c) => c.id === id)
     if (idx >= 0) {
@@ -184,6 +201,7 @@ export async function updateCategory(id: string, category: Database['public']['T
 }
 
 export async function deleteCategory(id: string) {
+  clearCategoriesCache()
   saveDeletedCategoryId(id)
 
   const idx = MOCK_CATEGORIES.findIndex((c) => c.id === id || c.slug === id)
