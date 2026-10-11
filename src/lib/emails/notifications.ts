@@ -304,7 +304,16 @@ export async function queueOrderNotification(
           j.event_type === payload.event)
     )
     if (existingDb) {
-      return { success: true, skipped: true, reason: 'Already queued or delivered (database deduplicated)' }
+      if (existingDb.status === 'sent' || existingDb.status === 'completed') {
+        return { success: true, skipped: true, reason: 'Already delivered (database deduplicated)' }
+      }
+      // If it exists in Supabase as 'pending' or 'failed' (e.g. created by database trigger!),
+      // we must process and dispatch it immediately!
+      if (options?.immediate !== false) {
+        const sendResult = await processOutboxJob(existingDb.id)
+        return { success: true, jobId: existingDb.id, sendResult }
+      }
+      return { success: true, jobId: existingDb.id, reason: 'Already queued (pending worker execution)' }
     }
 
     const jobId = crypto.randomUUID()
@@ -372,6 +381,38 @@ export async function processOutboxJob(jobId: string): Promise<SendEmailResult> 
     inMemoryOutbox.find((j) => j.id === jobId) ||
     diskJobs.find((j) => j.id === jobId) ||
     dbJobs.find((j) => j.id === jobId)
+
+  if (!job && isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      const { data: dbRow } = await (supabase as any)
+        .from('email_notification_outbox')
+        .select('*')
+        .eq('id', jobId)
+        .maybeSingle()
+      if (dbRow) {
+        job = {
+          id: dbRow.id,
+          order_id: dbRow.order_id,
+          customer_email: dbRow.customer_email,
+          event_type: dbRow.event_type,
+          status: dbRow.status,
+          attempts: dbRow.attempts || 0,
+          last_error: dbRow.last_error,
+          created_at: dbRow.created_at,
+          sent_at: dbRow.sent_at,
+          unique_event_id: dbRow.unique_event_id,
+          payload: dbRow.payload,
+          message_id: dbRow.message_id,
+          job_type: `ORDER_EMAIL_${(dbRow.event_type || 'NOTIFICATION').toUpperCase()}`,
+          retry_count: dbRow.attempts || 0,
+          max_retries: 3,
+          scheduled_at: dbRow.created_at,
+          updated_at: dbRow.sent_at || dbRow.created_at,
+        }
+      }
+    } catch {}
+  }
 
   if (!job) {
     return { success: false, error: 'Job not found in outbox' }
@@ -464,46 +505,78 @@ export async function processPendingEmailOutboxJobs(limit = 10): Promise<{
   failed: number
   jobs: { id: string; status: string; error?: string | null }[]
 }> {
-  const jobs = await loadSupabaseOutboxJobs()
-  const diskJobs = loadDiskOutbox()
+  let eligibleJobIds: string[] = []
 
-  const allPending = [...jobs]
-  for (const dj of diskJobs) {
-    if (!allPending.some((j) => j.id === dj.id)) {
-      allPending.push(dj)
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createServiceClient()
+      const { data: rows, error: qErr } = await (supabase as any)
+        .from('email_notification_outbox')
+        .select('id, status, attempts')
+        .or('status.eq.pending,and(status.eq.failed,attempts.lt.3)')
+        .order('created_at', { ascending: true })
+        .limit(limit)
+
+      if (!qErr && Array.isArray(rows) && rows.length > 0) {
+        for (const row of rows) {
+          // Atomic claim: update status to 'processing' and only claim if status is still unchanged
+          const { data: claimed, error: claimErr } = await (supabase as any)
+            .from('email_notification_outbox')
+            .update({
+              status: 'processing',
+              attempts: (row.attempts || 0) + 1,
+            })
+            .eq('id', row.id)
+            .eq('status', row.status)
+            .select('id')
+            .maybeSingle()
+
+          if (!claimErr && claimed) {
+            eligibleJobIds.push(claimed.id)
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Outbox Worker] Supabase atomic claim notice:', e.message)
     }
   }
 
-  const eligibleJobs = allPending
-    .filter(
-      (j) =>
-        j.status === 'pending' ||
-        (j.status === 'failed' && (j.attempts || 0) < 3)
-    )
-    .slice(0, limit)
+  // Fallback / local merge if offline or local test
+  if (eligibleJobIds.length === 0) {
+    const diskJobs = loadDiskOutbox()
+    const allLocal = [...inMemoryOutbox, ...diskJobs]
+    eligibleJobIds = allLocal
+      .filter((j) => j.status === 'pending' || (j.status === 'failed' && (j.attempts || 0) < 3))
+      .slice(0, limit)
+      .map((j) => j.id)
+  }
 
   let succeeded = 0
   let failed = 0
   const results: { id: string; status: string; error?: string | null }[] = []
 
-  for (const job of eligibleJobs) {
+  for (const jobId of eligibleJobIds) {
     try {
-      const res = await processOutboxJob(job.id)
+      const res = await processOutboxJob(jobId)
       if (res.success && !res.simulated) {
         succeeded++
-        results.push({ id: job.id, status: 'sent', error: null })
+        results.push({ id: jobId, status: 'sent', error: null })
       } else {
         failed++
-        results.push({ id: job.id, status: 'failed', error: res.error || 'Simulated delivery (credentials pending)' })
+        results.push({
+          id: jobId,
+          status: 'failed',
+          error: res.error || 'Pending delivery: Gmail SMTP credentials (SMTP_PASS) not configured in Vercel',
+        })
       }
     } catch (err: any) {
       failed++
-      results.push({ id: job.id, status: 'failed', error: err.message })
+      results.push({ id: jobId, status: 'failed', error: err.message })
     }
   }
 
   return {
-    processed: eligibleJobs.length,
+    processed: eligibleJobIds.length,
     succeeded,
     failed,
     jobs: results,

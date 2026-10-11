@@ -125,6 +125,10 @@ export function NotificationsManagerClient({
   const [isVerifyingSmtp, setIsVerifyingSmtp] = useState(false)
   const [verifyFeedback, setVerifyFeedback] = useState<{ success: boolean; message: string } | null>(null)
 
+  // Process Outbox State
+  const [isProcessingOutbox, setIsProcessingOutbox] = useState(false)
+  const [processFeedback, setProcessFeedback] = useState<{ success: boolean; message: string } | null>(null)
+
   // Save Settings Handler
   async function handleSaveSettings() {
     setIsSavingSettings(true)
@@ -258,6 +262,36 @@ export function NotificationsManagerClient({
       alert(err.message || 'Retry failed')
     } finally {
       setRetryingJobId(null)
+    }
+  }
+
+  // Process All Pending Outbox Notifications Now
+  async function handleProcessPendingOutbox() {
+    setIsProcessingOutbox(true)
+    setProcessFeedback(null)
+    try {
+      const res = await fetch('/api/admin/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'PROCESS_OUTBOX', limit: 25 }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setProcessFeedback({
+          success: true,
+          message: `Processed ${data.processed} job(s): ${data.succeeded} dispatched, ${data.failed} failed/held.`,
+        })
+        await fetchHistory()
+      } else {
+        setProcessFeedback({
+          success: false,
+          message: data.error || 'Failed to process pending outbox jobs.',
+        })
+      }
+    } catch (err: any) {
+      setProcessFeedback({ success: false, message: err.message || 'Error processing outbox.' })
+    } finally {
+      setIsProcessingOutbox(false)
     }
   }
 
@@ -724,8 +758,29 @@ export function NotificationsManagerClient({
                 <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingHistory ? 'animate-spin' : ''}`} />
                 <span>Refresh</span>
               </button>
+
+              <button
+                onClick={handleProcessPendingOutbox}
+                disabled={isProcessingOutbox}
+                className="flex items-center gap-1.5 bg-black text-white border border-black px-3.5 py-1.5 text-xs font-mono font-bold uppercase hover:bg-neutral-800 transition-colors disabled:opacity-50"
+              >
+                <Send className={`w-3.5 h-3.5 ${isProcessingOutbox ? 'animate-pulse' : ''}`} />
+                <span>{isProcessingOutbox ? 'Processing...' : 'Process Outbox Now'}</span>
+              </button>
             </div>
           </div>
+
+          {processFeedback && (
+            <div
+              className={`p-3 text-xs font-mono border ${
+                processFeedback.success
+                  ? 'bg-neutral-100 border-black text-black'
+                  : 'bg-red-50 border-red-500 text-red-600'
+              }`}
+            >
+              {processFeedback.message}
+            </div>
+          )}
 
           {/* Table */}
           {filteredHistory.length === 0 ? (

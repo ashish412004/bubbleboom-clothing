@@ -25,22 +25,37 @@ export function getSmtpConfig() {
   const host = process.env.SMTP_HOST || 'smtp.gmail.com'
   const port = Number(process.env.SMTP_PORT) || 465
   const secure = process.env.SMTP_SECURE === 'true' || port === 465
-  const user =
+  const rawUser =
     process.env.SMTP_USER ||
+    process.env.SMTP_USERNAME ||
     process.env.GMAIL_USER ||
+    process.env.GMAIL_EMAIL ||
     process.env.SMTP_EMAIL ||
+    process.env.EMAIL_USER ||
+    process.env.MAIL_USER ||
     'bubbleboomstore2026@gmail.com'
-  const pass =
+  const user = rawUser.trim()
+
+  const rawPass =
     process.env.SMTP_PASS ||
     process.env.SMTP_PASSWORD ||
     process.env.GMAIL_APP_PASSWORD ||
+    process.env.GMAIL_PASSWORD ||
+    process.env.GMAIL_PASS ||
+    process.env.EMAIL_PASSWORD ||
+    process.env.EMAIL_PASS ||
+    process.env.MAIL_PASSWORD ||
+    process.env.SMTP_KEY ||
     ''
+  // Strip whitespace from 16-character Google App Password (e.g. "abcd efgh ijkl mnop" -> "abcdefghijklmnop")
+  const pass = rawPass.replace(/\s+/g, '')
+
   const from =
     process.env.SMTP_FROM ||
     process.env.EMAIL_FROM ||
     `BUBBLE BOOM <${user}>`
 
-  const hasCredentials = Boolean(pass && pass.trim().length > 0)
+  const hasCredentials = Boolean(pass && pass.length > 0)
 
   return {
     host,
@@ -79,7 +94,7 @@ export async function resolveSmtpConfig() {
         port,
         secure,
         user,
-        pass: settings.smtp_pass.trim(),
+        pass: settings.smtp_pass.replace(/\s+/g, ''),
         from,
         hasCredentials: true,
       }

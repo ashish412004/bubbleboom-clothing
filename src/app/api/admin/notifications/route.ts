@@ -3,6 +3,7 @@ import { getCurrentUser, isAdmin } from '@/lib/auth'
 import {
   getOutboxHistory,
   sendTestOrderEmail,
+  processPendingEmailOutboxJobs,
   OrderNotificationEvent,
 } from '@/lib/emails/notifications'
 import { getMailerStatus, verifySmtpConnection } from '@/lib/emails/mailer'
@@ -82,6 +83,12 @@ export async function POST(req: NextRequest) {
     if (body.action === 'VERIFY_SMTP') {
       const verifyRes = await verifySmtpConnection(body.config)
       return NextResponse.json(verifyRes)
+    }
+
+    // Process Pending Outbox Action
+    if (body.action === 'PROCESS_OUTBOX') {
+      const processRes = await processPendingEmailOutboxJobs(body.limit || 20)
+      return NextResponse.json({ success: true, ...processRes })
     }
 
     const { recipientEmail, event } = body

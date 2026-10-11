@@ -293,7 +293,7 @@ export function renderNotificationHtml(
                     <div>
                       <strong>Payment Status:</strong> 
                       <span style="display: inline-block; font-size: 10px; font-weight: 900; letter-spacing: 1px; padding: 2px 6px; background-color: ${isPaid ? '#000000' : '#444444'}; color: #ffffff; text-transform: uppercase;">
-                        ${isPaid ? 'PAID' : (isCod ? 'PAY AT DOORSTEP' : data.payment_status.toUpperCase())}
+                        ${isPaid ? 'PAID' : (isCod ? 'PAY AT DOORSTEP' : (data.payment_status || 'PENDING').toUpperCase())}
                       </span>
                     </div>
                   </td>
@@ -418,7 +418,7 @@ ${eventMessage}
 
 Order Number: #${orderNumber}
 Total Amount: ${totalFmt}
-Payment: ${isCod ? 'Cash on Delivery' : 'Prepaid'} (${isPaid ? 'PAID' : data.payment_status.toUpperCase()})
+Payment: ${isCod ? 'Cash on Delivery' : 'Prepaid'} (${isPaid ? 'PAID' : (data.payment_status || 'PENDING').toUpperCase()})
 
 Items:
 ${(data.items || [])
