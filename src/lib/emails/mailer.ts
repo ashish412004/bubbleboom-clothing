@@ -252,17 +252,26 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
     }
   }
 
-  // 3. Fallback: Simulated send (Local/Preview dev mode when credentials aren't set)
-  console.log(
-    `[Gmail SMTP Simulated] Sent to ${recipient} | Subject: "${options.subject}"`
+  // 3. Fallback: If in test environment (Vitest / CI), permit mock simulation
+  if (process.env.NODE_ENV === 'test') {
+    return {
+      success: true,
+      messageId: `test_sim_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      provider: 'simulated',
+      simulated: true,
+    }
+  }
+
+  // In production / preview, missing SMTP credentials must explicitly fail
+  console.error(
+    `[Gmail SMTP Config Error] Failed to send email to ${recipient}. SMTP_PASS / GMAIL_APP_PASSWORD not configured in runtime environment.`
   )
 
   return {
-    success: true,
-    messageId: `sim_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    success: false,
+    error: 'Gmail SMTP credentials (SMTP_PASS / GMAIL_APP_PASSWORD) not configured in runtime environment.',
     provider: 'simulated',
     simulated: true,
-    error: 'Notice: SMTP_PASS / GMAIL_APP_PASSWORD not configured. Simulated delivery logged.',
   }
 }
 
