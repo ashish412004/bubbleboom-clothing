@@ -275,39 +275,36 @@ export async function queueOrderNotification(
     // Deduplication check across memory
     const existingMemory = inMemoryOutbox.find(
       (j) =>
-        (j.unique_event_id === uniqueEventId ||
-          ((j.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
-            j.event_type === payload.event)) &&
-        (j.status === 'sent' || j.status === 'completed' || j.status === 'simulated')
+        j.unique_event_id === uniqueEventId ||
+        ((j.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
+          j.event_type === payload.event)
     )
     if (existingMemory) {
-      return { success: true, skipped: true, reason: 'Already delivered (in-memory deduplicated)' }
+      return { success: true, skipped: true, reason: 'Already queued or delivered (in-memory deduplicated)' }
     }
 
     // Deduplication check across disk
     const diskJobs = loadDiskOutbox()
     const existingDisk = diskJobs.find(
       (j) =>
-        (j.unique_event_id === uniqueEventId ||
-          ((j.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
-            j.event_type === payload.event)) &&
-        (j.status === 'sent' || j.status === 'completed' || j.status === 'simulated')
+        j.unique_event_id === uniqueEventId ||
+        ((j.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
+          j.event_type === payload.event)
     )
     if (existingDisk) {
-      return { success: true, skipped: true, reason: 'Already delivered (disk deduplicated)' }
+      return { success: true, skipped: true, reason: 'Already queued or delivered (disk deduplicated)' }
     }
 
     // Deduplication check across database
     const dbJobs = await loadSupabaseOutboxJobs()
     const existingDb = dbJobs.find(
       (j) =>
-        (j.unique_event_id === uniqueEventId ||
-          ((j.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
-            j.event_type === payload.event)) &&
-        (j.status === 'sent' || j.status === 'completed' || j.status === 'simulated')
+        j.unique_event_id === uniqueEventId ||
+        ((j.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
+          j.event_type === payload.event)
     )
     if (existingDb) {
-      return { success: true, skipped: true, reason: 'Already delivered (database deduplicated)' }
+      return { success: true, skipped: true, reason: 'Already queued or delivered (database deduplicated)' }
     }
 
     const jobId = crypto.randomUUID()
@@ -400,10 +397,12 @@ export async function processOutboxJob(jobId: string): Promise<SendEmailResult> 
     if (sendRes.success) {
       const now = new Date().toISOString()
       if (sendRes.simulated) {
-        job.status = 'simulated'
-        job.sent_at = now
-        job.message_id = sendRes.messageId || null
-        job.last_error = sendRes.error || 'Notice: Simulated delivery (SMTP_PASS / GMAIL_APP_PASSWORD not set)'
+        job.status = 'failed'
+        job.sent_at = null
+        job.message_id = null
+        job.last_error =
+          sendRes.error ||
+          'Pending delivery: Gmail SMTP credentials (SMTP_PASS) not configured in Vercel'
       } else {
         job.status = 'sent'
         job.sent_at = now
@@ -490,12 +489,12 @@ export async function processPendingEmailOutboxJobs(limit = 10): Promise<{
   for (const job of eligibleJobs) {
     try {
       const res = await processOutboxJob(job.id)
-      if (res.success) {
+      if (res.success && !res.simulated) {
         succeeded++
-        results.push({ id: job.id, status: res.simulated ? 'simulated' : 'sent', error: null })
+        results.push({ id: job.id, status: 'sent', error: null })
       } else {
         failed++
-        results.push({ id: job.id, status: 'failed', error: res.error })
+        results.push({ id: job.id, status: 'failed', error: res.error || 'Simulated delivery (credentials pending)' })
       }
     } catch (err: any) {
       failed++
