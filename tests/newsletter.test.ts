@@ -349,5 +349,62 @@ describe('Boom Squad Newsletter Subscription Suite', () => {
       expect(resAlready.message).toMatch(/already unsubscribed/i)
     })
   })
+
+  describe('9. Scanner-Safe Inspection, Tamper Resistance & Confirmation Landing State', () => {
+    it('allows inspecting confirmation token without consuming it (scanner safe)', async () => {
+      const { inspectConfirmationToken } = await import('@/lib/newsletter')
+      const subRes = await subscribeNewsletter({ email: 'scanner.safe@boom.in' })
+      const token = new URL(subRes.confirmationUrl!).searchParams.get('token')!
+
+      // Multiple scanner prefetch GET calls
+      const inspect1 = await inspectConfirmationToken({ token })
+      expect(inspect1.valid).toBe(true)
+      expect(inspect1.status).toBe('ready')
+      expect(inspect1.email).toBe('scanner.safe@boom.in')
+
+      const inspect2 = await inspectConfirmationToken({ token })
+      expect(inspect2.valid).toBe(true)
+      expect(inspect2.status).toBe('ready')
+
+      // Token can still be confirmed by the human
+      const confirmRes = await confirmNewsletterSubscription({ token })
+      expect(confirmRes.success).toBe(true)
+      expect(confirmRes.email).toBe('scanner.safe@boom.in')
+
+      // Inspecting after confirmation returns already_confirmed
+      const inspect3 = await inspectConfirmationToken({ token })
+      expect(inspect3.valid).toBe(true)
+      expect(inspect3.status).toBe('already_confirmed')
+    })
+
+    it('detects tampered or forged confirmation tokens', async () => {
+      const { inspectConfirmationToken, parseAndVerifyToken } = await import('@/lib/newsletter')
+      const subRes = await subscribeNewsletter({ email: 'tamper.check@boom.in' })
+      const token = new URL(subRes.confirmationUrl!).searchParams.get('token')!
+
+      // Tampered token string
+      const tampered = token.slice(0, -4) + 'abcd'
+      const parsed = parseAndVerifyToken(tampered)
+      expect(parsed.email).toBeUndefined() // Tampered signature rejected
+
+      const inspectRes = await inspectConfirmationToken({ token: 'bogus_forged_token_xyz' })
+      expect(inspectRes.status).toBe('invalid')
+    })
+
+    it('handles resend confirmation email with rate-limiting protection', async () => {
+      const { resendConfirmationEmail } = await import('@/lib/newsletter')
+      const email = 'resend.test@boom.in'
+
+      const res1 = await resendConfirmationEmail({ email })
+      expect(res1.success).toBe(true)
+      expect(res1.message).toMatch(/fresh verification link/i)
+
+      // Immediate second call should be rate-limited (60s cooldown)
+      const res2 = await resendConfirmationEmail({ email })
+      expect(res2.success).toBe(false)
+      expect(res2.rateLimited).toBe(true)
+      expect(res2.error).toMatch(/wait.*seconds/i)
+    })
+  })
 })
 

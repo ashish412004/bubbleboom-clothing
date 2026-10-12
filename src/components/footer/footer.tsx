@@ -114,7 +114,7 @@ export function Footer() {
     legal: false,
   })
 
-  // Check authenticated subscriber status on mount
+  // Check authenticated or verified subscriber status on mount & events
   useEffect(() => {
     let isMounted = true
 
@@ -125,12 +125,14 @@ export function Footer() {
         const data = await res.json()
         if (!isMounted) return
 
-        if (data.authenticated) {
-          setUserIsAuthenticated(true)
+        if (data.authenticated || data.verified) {
+          if (data.authenticated) {
+            setUserIsAuthenticated(true)
+          }
           if (data.email) {
             setEmail(data.email)
           }
-          if (data.status === 'active') {
+          if (data.status === 'active' || data.subscribed) {
             setSubState('active')
           } else if (data.status === 'pending') {
             setSubState('pending')
@@ -145,8 +147,25 @@ export function Footer() {
     }
 
     checkStatus()
+
+    const onConfirmed = (e: any) => {
+      const confirmedEmail =
+        e?.detail?.email ||
+        (typeof window !== 'undefined' ? localStorage.getItem('bubbleboom_newsletter_email') : '')
+      if (confirmedEmail && isMounted) {
+        setEmail(confirmedEmail)
+        setSubState('active')
+        setInfoMessage("You're officially subscribed to the Boom Squad!")
+      }
+    }
+
+    window.addEventListener('bubbleboom_newsletter_confirmed', onConfirmed)
+    window.addEventListener('storage', onConfirmed)
+
     return () => {
       isMounted = false
+      window.removeEventListener('bubbleboom_newsletter_confirmed', onConfirmed)
+      window.removeEventListener('storage', onConfirmed)
     }
   }, [])
 
