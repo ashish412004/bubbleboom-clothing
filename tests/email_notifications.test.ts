@@ -183,4 +183,41 @@ describe('Automatic Order Notifications & Gmail SMTP Suite', () => {
       expect(retryResult.success).toBe(true)
     }
   })
+
+  // 9. Fulfillment status notifications & cancellation reason
+  it('renders cancellation reason in order_cancelled email template', () => {
+    const cancelledRendered = renderNotificationHtml('order_cancelled', {
+      ...sampleOrder,
+      event: 'order_cancelled',
+      cancellation_reason: 'Customer requested size change before dispatch',
+    })
+    expect(cancelledRendered.html).toContain('Customer requested size change before dispatch')
+    expect(cancelledRendered.html).toContain('ORDER CANCELLED')
+  })
+
+  it('correctly resolves variant_info size, color and image in email item mapping', () => {
+    const variantItemPayload: OrderNotificationPayload = {
+      ...sampleOrder,
+      event: 'order_packed',
+      items: [
+        {
+          product_id: 'prod_99',
+          product_name: 'Monochrome Cargo Pants',
+          quantity: 2,
+          price: 1599,
+          total_amount: 3198,
+          variant_info: {
+            size: '32',
+            color: 'Charcoal Black',
+            image_url: 'https://bubbleboom.in/images/cargo-32.jpg',
+          },
+        },
+      ],
+    }
+    const rendered = renderNotificationHtml('order_packed', variantItemPayload)
+    expect(rendered.html).toContain('Size: 32')
+    expect(rendered.html).toContain('Color: Charcoal Black')
+    expect(rendered.html).toContain('https://bubbleboom.in/images/cargo-32.jpg')
+    expect(rendered.html).toContain('Monochrome Cargo Pants')
+  })
 })

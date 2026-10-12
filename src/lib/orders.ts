@@ -994,19 +994,28 @@ export async function getOrdersByUserId(userId: string): Promise<Order[]> {
 }
 
 export async function notifyOrderStatusChange(order: any, newStatus: string) {
-  let customerEmail = order.guest_email || (order.shipping_address as any)?.email
+  let customerEmail =
+    order.guest_email ||
+    order.customer_email ||
+    (order.shipping_address as any)?.email ||
+    (order.billing_address as any)?.email
 
-  // Fallback to customer profile email if authenticated user without guest_email
+  // Fallback to customer profile email or auth user if authenticated user without guest_email
   if (!customerEmail && order.user_id && isSupabaseConfigured()) {
     try {
       const supabase = await createServiceClient()
       const { data: profile } = await supabase
         .from('profiles')
-        .select('email')
+        .select('email, full_name')
         .eq('id', order.user_id)
         .maybeSingle()
       if (profile?.email) {
         customerEmail = profile.email
+      } else {
+        const { data: authUser } = await supabase.auth.admin.getUserById(order.user_id)
+        if (authUser?.user?.email) {
+          customerEmail = authUser.user.email
+        }
       }
     } catch {}
   }
@@ -1039,8 +1048,8 @@ export async function notifyOrderStatusChange(order: any, newStatus: string) {
       return {
         product_id: it.product_id,
         product_name: it.product_name || it.name || 'Bubble Boom Apparel',
-        size: v.size || it.size || null,
-        color: v.color || it.color || null,
+        size: it.size || v.size || null,
+        color: it.color || v.color || null,
         quantity: it.quantity || 1,
         price: it.selling_price || it.price || 0,
         total_amount: it.total_amount || (it.price ? it.price * (it.quantity || 1) : 0),
@@ -1055,13 +1064,17 @@ export async function notifyOrderStatusChange(order: any, newStatus: string) {
       try {
         await sendOrderShippedEmail(
           customerEmail,
-          order.order_number || order.id,
+          order.id, // Primary UUID ensures outbox deduplication aligns with DB trigger
           order.tracking_number || 'AWB-PENDING',
           order.carrier || order.courier_partner || 'Express Courier',
           order.tracking_url || null,
           {
+            orderNumber: order.order_number || order.id,
             customerName,
             totalAmount: order.total_amount || 0,
+            subtotal: order.subtotal_amount || order.subtotal || 0,
+            shippingAmount: order.shipping_amount || 0,
+            discountAmount: order.coupon_discount || order.discount_amount || 0,
             items,
             shippingAddress: order.shipping_address,
             paymentMethod: order.payment_method || 'cod',
@@ -1078,10 +1091,14 @@ export async function notifyOrderStatusChange(order: any, newStatus: string) {
       try {
         await sendOrderDeliveredEmail(
           customerEmail,
-          order.order_number || order.id,
+          order.id, // Primary UUID ensures outbox deduplication aligns with DB trigger
           {
+            orderNumber: order.order_number || order.id,
             customerName,
             totalAmount: order.total_amount || 0,
+            subtotal: order.subtotal_amount || order.subtotal || 0,
+            shippingAmount: order.shipping_amount || 0,
+            discountAmount: order.coupon_discount || order.discount_amount || 0,
             items,
             shippingAddress: order.shipping_address,
             paymentMethod: order.payment_method || 'cod',
@@ -1100,13 +1117,14 @@ export async function notifyOrderStatusChange(order: any, newStatus: string) {
         order_number: order.order_number || order.id,
         event,
         recipient_email: customerEmail,
-        customer_name: (order.shipping_address as any)?.full_name || order.customer_name || 'Customer',
+        customer_name: customerName,
         total_amount: order.total_amount || 0,
         subtotal: order.subtotal_amount || order.subtotal || 0,
         shipping_amount: order.shipping_amount || 0,
         discount_amount: order.coupon_discount || order.discount_amount || 0,
         payment_method: order.payment_method || 'cod',
         payment_status: order.payment_status || 'pending',
+        cancellation_reason: order.cancellation_reason || null,
         items,
         shipping_address: order.shipping_address,
         carrier: order.carrier || order.courier_partner || 'Express Courier',
@@ -1696,6 +1714,7 @@ export async function cancelOrder(orderId: string, reason: string, cancelledByUs
     found.cancelled_at = new Date().toISOString()
     found.updated_at = new Date().toISOString()
     saveDevOrder(found)
+    await notifyOrderStatusChange(found, 'cancelled')
     return { data: found }
   }
 
@@ -1739,6 +1758,25 @@ export async function cancelOrder(orderId: string, reason: string, cancelledByUs
     .single()
 
   if (error) return { error: error.message }
+
+  // Send cancellation notification immediately
+  try {
+    const { data: orderItems } = await supabase
+      .from('order_items')
+      .select('*')
+      .eq('order_id', orderId)
+
+    const hydratedOrder = {
+      ...order,
+      ...(data || {}),
+      order_items: orderItems || [],
+      cancellation_reason: reason,
+    }
+    await notifyOrderStatusChange(hydratedOrder, 'cancelled')
+  } catch (notifyErr) {
+    console.warn('[cancelOrder] Non-fatal notification error:', notifyErr)
+  }
+
   return { data }
 }
 

@@ -91,6 +91,10 @@ export async function sendOrderShippedEmail(
   options?: {
     customerName?: string
     totalAmount?: number
+    orderNumber?: string
+    subtotal?: number
+    shippingAmount?: number
+    discountAmount?: number
     items?: any[]
     shippingAddress?: any
     paymentMethod?: string
@@ -98,21 +102,27 @@ export async function sendOrderShippedEmail(
   }
 ) {
   try {
-    const queueRes = await queueOrderNotification({
-      order_id: orderId,
-      order_number: orderId,
-      event: 'order_shipped',
-      recipient_email: email,
-      customer_name: options?.customerName || 'Customer',
-      total_amount: options?.totalAmount || 0,
-      payment_method: options?.paymentMethod || 'online',
-      payment_status: options?.paymentStatus || 'paid',
-      items: options?.items || [],
-      shipping_address: options?.shippingAddress,
-      carrier,
-      tracking_number: trackingNumber,
-      tracking_url: trackingUrl || null,
-    })
+    const queueRes = await queueOrderNotification(
+      {
+        order_id: orderId,
+        order_number: options?.orderNumber || orderId,
+        event: 'order_shipped',
+        recipient_email: email,
+        customer_name: options?.customerName || 'Customer',
+        total_amount: options?.totalAmount || 0,
+        subtotal: options?.subtotal || options?.totalAmount || 0,
+        shipping_amount: options?.shippingAmount || 0,
+        discount_amount: options?.discountAmount || 0,
+        payment_method: options?.paymentMethod || 'online',
+        payment_status: options?.paymentStatus || 'paid',
+        items: options?.items || [],
+        shipping_address: options?.shippingAddress,
+        carrier,
+        tracking_number: trackingNumber,
+        tracking_url: trackingUrl || null,
+      },
+      { immediate: true }
+    )
     return { data: { id: queueRes.jobId || `job_${Date.now()}` } }
   } catch (error: any) {
     console.error('Error queuing order shipped email:', error)
@@ -124,8 +134,12 @@ export async function sendOrderDeliveredEmail(
   email: string,
   orderId: string,
   options?: {
+    orderNumber?: string
     customerName?: string
     totalAmount?: number
+    subtotal?: number
+    shippingAmount?: number
+    discountAmount?: number
     items?: any[]
     shippingAddress?: any
     paymentMethod?: string
@@ -133,18 +147,24 @@ export async function sendOrderDeliveredEmail(
   }
 ) {
   try {
-    const queueRes = await queueOrderNotification({
-      order_id: orderId,
-      order_number: orderId,
-      event: 'order_delivered',
-      recipient_email: email,
-      customer_name: options?.customerName || 'Customer',
-      total_amount: options?.totalAmount || 0,
-      payment_method: options?.paymentMethod || 'online',
-      payment_status: options?.paymentStatus || 'paid',
-      items: options?.items || [],
-      shipping_address: options?.shippingAddress,
-    })
+    const queueRes = await queueOrderNotification(
+      {
+        order_id: orderId,
+        order_number: options?.orderNumber || orderId,
+        event: 'order_delivered',
+        recipient_email: email,
+        customer_name: options?.customerName || 'Customer',
+        total_amount: options?.totalAmount || 0,
+        subtotal: options?.subtotal || options?.totalAmount || 0,
+        shipping_amount: options?.shippingAmount || 0,
+        discount_amount: options?.discountAmount || 0,
+        payment_method: options?.paymentMethod || 'online',
+        payment_status: options?.paymentStatus || 'paid',
+        items: options?.items || [],
+        shipping_address: options?.shippingAddress,
+      },
+      { immediate: true }
+    )
     return { data: { id: queueRes.jobId || `job_${Date.now()}` } }
   } catch (error: any) {
     console.error('Error queuing order delivered email:', error)

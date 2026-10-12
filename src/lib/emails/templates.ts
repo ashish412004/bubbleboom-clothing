@@ -1,3 +1,5 @@
+import { toAbsoluteEmailImageUrl } from '@/lib/utils'
+
 export type OrderNotificationEvent =
   | 'order_placed'
   | 'order_confirmed'
@@ -18,6 +20,7 @@ export interface OrderItemNotificationData {
   quantity: number
   price: number
   total_amount?: number
+  variant_info?: any
 }
 
 export interface ShippingAddressData {
@@ -53,6 +56,7 @@ export interface OrderNotificationPayload {
   tracking_number?: string | null
   tracking_url?: string | null
   estimated_delivery?: string | null
+  cancellation_reason?: string | null
   notes?: string | null
   created_at?: string
 }
@@ -174,8 +178,9 @@ export function renderNotificationHtml(
       subject = `Order Cancelled: #${orderNumber} | BUBBLE BOOM`
       eventTitle = 'ORDER CANCELLED'
       eventHeadline = 'CANCELLATION CONFIRMED'
-      eventMessage =
-        'Your order has been cancelled. Any inventory reservations have been released. If this was a prepaid order, your refund is being initiated.'
+      eventMessage = data.cancellation_reason
+        ? `Your order has been cancelled (Reason: ${data.cancellation_reason}). Any inventory reservations have been released. If this was a prepaid order, your refund is being initiated.`
+        : 'Your order has been cancelled. Any inventory reservations have been released. If this was a prepaid order, your refund is being initiated.'
       statusBadgeBg = '#222222'
       break
     case 'refund_completed':
@@ -190,12 +195,16 @@ export function renderNotificationHtml(
   const itemsHtml = (data.items || [])
     .map((item) => {
       const name = item.product_name || 'Bubble Boom Apparel'
-      const sizeStr = item.size ? `Size: ${item.size}` : ''
-      const colorStr = item.color ? `Color: ${item.color}` : ''
+      const v = item.variant_info || {}
+      const sizeVal = item.size || v.size || null
+      const colorVal = item.color || v.color || null
+      const sizeStr = sizeVal ? `Size: ${sizeVal}` : ''
+      const colorStr = colorVal ? `Color: ${colorVal}` : ''
       const meta = [sizeStr, colorStr].filter(Boolean).join(' • ')
       const pricePaise = item.price || 0
       const itemTotal = item.total_amount || pricePaise * item.quantity
-      const img = item.image_url || null
+      const rawImg = item.image_url || v.image_url || null
+      const img = toAbsoluteEmailImageUrl(rawImg)
 
       return `
         <tr style="border-bottom: 1px solid #e5e5e5;">

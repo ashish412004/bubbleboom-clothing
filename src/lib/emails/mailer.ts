@@ -122,9 +122,9 @@ export async function getMailerTransporter(): Promise<Transporter | null> {
       user: cfg.user,
       pass: cfg.pass,
     },
-    pool: true,
-    maxConnections: 3,
-    maxMessages: 50,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   })
 
   return cachedTransporter
@@ -208,6 +208,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
       }
     } catch (smtpErr: any) {
       console.error('[Gmail SMTP] Delivery error:', smtpErr?.message || smtpErr)
+      cachedTransporter = null
       return {
         success: false,
         error: `[Gmail SMTP Error] ${smtpErr?.message || 'SMTP delivery failed'}`,

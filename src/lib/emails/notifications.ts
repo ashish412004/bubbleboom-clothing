@@ -57,14 +57,18 @@ async function persistJobToSupabase(job: OutboxJobRecord) {
 
     let resolvedOrderId = job.order_id
     if (!isValidUuid(resolvedOrderId)) {
+      const targetOrderNumber = job.payload?.order_number || resolvedOrderId
       const { data: ord } = await supabase
         .from('orders')
-        .select('id')
-        .or(`id.eq.${resolvedOrderId},order_number.eq.${resolvedOrderId}`)
+        .select('id, order_number')
+        .eq('order_number', targetOrderNumber)
         .maybeSingle()
       if (ord?.id) {
         resolvedOrderId = ord.id
         job.order_id = ord.id
+        if (job.unique_event_id && job.unique_event_id.startsWith(`${targetOrderNumber}_`)) {
+          job.unique_event_id = `${ord.id}_${job.event_type}`
+        }
       }
     }
 
@@ -156,10 +160,10 @@ async function updateJobInSupabase(job: OutboxJobRecord) {
       message_id: job.message_id,
     })
 
-    if (isValidUuid(job.id)) {
-      updateQuery = updateQuery.eq('id', job.id)
-    } else if (job.unique_event_id) {
+    if (job.unique_event_id) {
       updateQuery = updateQuery.eq('unique_event_id', job.unique_event_id)
+    } else if (isValidUuid(job.id)) {
+      updateQuery = updateQuery.eq('id', job.id)
     }
 
     const { error: outboxErr } = await updateQuery
@@ -269,14 +273,32 @@ export async function queueOrderNotification(
       return { success: true, skipped: true, reason: `Notification for ${payload.event} is disabled in store settings` }
     }
 
-    // 2. Idempotency Check with unique event identifier
-    const uniqueEventId = `${payload.order_id}_${payload.event}`
+    // 2. Normalize order_id and order_number
+    let orderUuid = payload.order_id
+    if (!isValidUuid(orderUuid) && isSupabaseConfigured()) {
+      try {
+        const supabase = await createServiceClient()
+        const targetNumber = payload.order_number || payload.order_id
+        const { data: ord } = await supabase
+          .from('orders')
+          .select('id, order_number')
+          .eq('order_number', targetNumber)
+          .maybeSingle()
+        if (ord?.id) {
+          orderUuid = ord.id
+          payload.order_id = ord.id
+          if (!payload.order_number) payload.order_number = ord.order_number
+        }
+      } catch {}
+    }
+
+    const uniqueEventId = `${orderUuid}_${payload.event}`
 
     // Deduplication check across memory
     const existingMemory = inMemoryOutbox.find(
       (j) =>
         j.unique_event_id === uniqueEventId ||
-        ((j.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
+        ((j.order_id === orderUuid || j.payload.order_number === orderNumber) &&
           j.event_type === payload.event)
     )
     if (existingMemory) {
@@ -288,29 +310,88 @@ export async function queueOrderNotification(
     const existingDisk = diskJobs.find(
       (j) =>
         j.unique_event_id === uniqueEventId ||
-        ((j.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
+        ((j.order_id === orderUuid || j.payload.order_number === orderNumber) &&
           j.event_type === payload.event)
     )
     if (existingDisk) {
       return { success: true, skipped: true, reason: 'Already queued or delivered (disk deduplicated)' }
     }
 
-    // Deduplication check across database
-    const dbJobs = await loadSupabaseOutboxJobs()
-    const existingDb = dbJobs.find(
-      (j) =>
-        j.unique_event_id === uniqueEventId ||
-        ((j.order_id === payload.order_id || j.payload.order_number === orderNumber) &&
-          j.event_type === payload.event)
-    )
+    // Direct check across database for exact unique_event_id (from trigger or previous queue)
+    let existingDb: OutboxJobRecord | null = null
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = await createServiceClient()
+        const { data: row } = await (supabase as any)
+          .from('email_notification_outbox')
+          .select('*')
+          .eq('unique_event_id', uniqueEventId)
+          .maybeSingle()
+        if (row) {
+          existingDb = {
+            id: row.id,
+            order_id: row.order_id,
+            customer_email: row.customer_email,
+            event_type: row.event_type,
+            status: row.status,
+            attempts: row.attempts || 0,
+            last_error: row.last_error,
+            created_at: row.created_at,
+            sent_at: row.sent_at,
+            unique_event_id: row.unique_event_id,
+            payload: row.payload,
+            message_id: row.message_id,
+            job_type: `ORDER_EMAIL_${(row.event_type || 'NOTIFICATION').toUpperCase()}`,
+            retry_count: row.attempts || 0,
+            max_retries: 3,
+            scheduled_at: row.created_at,
+            updated_at: row.sent_at || row.created_at,
+          }
+        }
+      } catch {}
+    }
+
+    if (!existingDb) {
+      const dbJobs = await loadSupabaseOutboxJobs()
+      existingDb =
+        dbJobs.find(
+          (j) =>
+            j.unique_event_id === uniqueEventId ||
+            ((j.order_id === orderUuid || j.payload.order_number === orderNumber) &&
+              j.event_type === payload.event)
+        ) || null
+    }
+
     if (existingDb) {
       if (existingDb.status === 'sent' || existingDb.status === 'completed') {
         return { success: true, skipped: true, reason: 'Already delivered (database deduplicated)' }
       }
       // If it exists in Supabase as 'pending' or 'failed' (e.g. created by database trigger!),
-      // we must process and dispatch it immediately!
+      // we enrich its payload with hydrated images/items and dispatch it immediately!
       if (options?.immediate !== false) {
-        const sendResult = await processOutboxJob(existingDb.id)
+        const mergedPayload = { ...existingDb.payload, ...payload }
+        existingDb.payload = mergedPayload
+        if (isSupabaseConfigured()) {
+          try {
+            const supabase = await createServiceClient()
+            await (supabase as any)
+              .from('email_notification_outbox')
+              .update({ payload: mergedPayload })
+              .eq('id', existingDb.id)
+          } catch {}
+        }
+
+        let sendResult: SendEmailResult | undefined
+        try {
+          sendResult = await Promise.race([
+            processOutboxJob(existingDb.id),
+            new Promise<SendEmailResult>((_, reject) =>
+              setTimeout(() => reject(new Error('Email dispatch timeout (15s)')), 15000)
+            ),
+          ])
+        } catch (procErr: any) {
+          console.warn(`[Outbox] Dispatch timeout/warning for existing job ${existingDb.id}:`, procErr.message)
+        }
         return { success: true, jobId: existingDb.id, sendResult }
       }
       return { success: true, jobId: existingDb.id, reason: 'Already queued (pending worker execution)' }
@@ -320,7 +401,7 @@ export async function queueOrderNotification(
     const now = new Date().toISOString()
     const jobRecord: OutboxJobRecord = {
       id: jobId,
-      order_id: payload.order_id,
+      order_id: orderUuid,
       customer_email: recipient,
       event_type: payload.event,
       status: 'pending',
@@ -352,7 +433,7 @@ export async function queueOrderNotification(
         sendResult = await Promise.race([
           processOutboxJob(jobId),
           new Promise<SendEmailResult>((_, reject) =>
-            setTimeout(() => reject(new Error('Email dispatch timeout (7s)')), 7000)
+            setTimeout(() => reject(new Error('Email dispatch timeout (15s)')), 15000)
           ),
         ])
       } catch (procErr: any) {
@@ -437,20 +518,18 @@ export async function queueAdminNewOrderNotification(
  */
 export async function processOutboxJob(jobId: string): Promise<SendEmailResult> {
   const diskJobs = loadDiskOutbox()
-  const dbJobs = await loadSupabaseOutboxJobs()
-  let job =
-    inMemoryOutbox.find((j) => j.id === jobId) ||
-    diskJobs.find((j) => j.id === jobId) ||
-    dbJobs.find((j) => j.id === jobId)
+  let job: OutboxJobRecord | undefined
 
-  if (!job && isSupabaseConfigured()) {
+  if (isSupabaseConfigured()) {
     try {
       const supabase = await createServiceClient()
-      const { data: dbRow } = await (supabase as any)
-        .from('email_notification_outbox')
-        .select('*')
-        .eq('id', jobId)
-        .maybeSingle()
+      let query = (supabase as any).from('email_notification_outbox').select('*')
+      if (isValidUuid(jobId)) {
+        query = query.eq('id', jobId)
+      } else {
+        query = query.eq('unique_event_id', jobId)
+      }
+      const { data: dbRow } = await query.maybeSingle()
       if (dbRow) {
         job = {
           id: dbRow.id,
@@ -473,6 +552,14 @@ export async function processOutboxJob(jobId: string): Promise<SendEmailResult> 
         }
       }
     } catch {}
+  }
+
+  if (!job) {
+    const dbJobs = await loadSupabaseOutboxJobs()
+    job =
+      inMemoryOutbox.find((j) => j.id === jobId || j.unique_event_id === jobId) ||
+      diskJobs.find((j) => j.id === jobId || j.unique_event_id === jobId) ||
+      dbJobs.find((j) => j.id === jobId || j.unique_event_id === jobId)
   }
 
   if (!job) {
