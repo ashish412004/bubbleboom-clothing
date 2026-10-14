@@ -2,6 +2,8 @@ import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { getCurrentUser, isAdmin } from '@/lib/auth'
 import { getOrderById, getCourierTrackingUrl } from '@/lib/orders'
+import { getReturnsForOrder } from '@/lib/returns'
+import { createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -51,7 +53,33 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
   }
 
   const shippingAddr = order.shipping_address as any
-  const items = ((order as any).order_items as any[]) || []
+  const rawItems = ((order as any).order_items as any[]) || []
+
+  // Hydrate items with available product variants for seamless exchange selection
+  const items = await Promise.all(
+    rawItems.map(async (item) => {
+      let variants: any[] = []
+      if (item.product_id && isSupabaseConfigured()) {
+        try {
+          const supabase = await createServiceClient()
+          const { data: vList } = await supabase
+            .from('product_variants')
+            .select('id, size, color, stock, sku')
+            .eq('product_id', item.product_id)
+            .eq('is_active', true)
+          variants = vList || []
+        } catch {}
+      }
+      return {
+        ...item,
+        product_variants: variants,
+      }
+    })
+  )
+
+  // Fetch existing return/exchange records for this order
+  const existingReturns = await getReturnsForOrder(order.id)
+  const deliveryDate = (order as any).delivered_email_sent_at || order.updated_at || order.created_at
 
   const statusProgression = ['pending', 'confirmed', 'packed', 'pickup_scheduled', 'shipped', 'out_for_delivery', 'delivered']
   const normalizedStatus = order.status === 'unfulfilled' ? 'confirmed' : order.status
@@ -267,7 +295,19 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                     orderId={order.id}
                     orderNumber={order.order_number}
                     status={order.status}
-                    items={items.map((i) => ({ id: i.id, product_name: i.product_name, quantity: i.quantity }))}
+                    paymentMethod={order.payment_method}
+                    deliveryDate={deliveryDate}
+                    items={items.map((i) => ({
+                      id: i.id,
+                      product_id: i.product_id,
+                      product_name: i.product_name,
+                      quantity: i.quantity,
+                      selling_price: i.selling_price,
+                      total_amount: i.total_amount,
+                      variant_info: i.variant_info,
+                      product_variants: i.product_variants || [],
+                    }))}
+                    existingReturns={existingReturns}
                   />
                 </div>
               </div>

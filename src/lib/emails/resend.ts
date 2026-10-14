@@ -372,3 +372,42 @@ export async function sendNewsletterUnsubscribeEmail(
   }
 }
 
+export async function sendReturnLifecycleEmail(
+  event:
+    | 'return_requested'
+    | 'exchange_requested'
+    | 'return_approved'
+    | 'return_rejected'
+    | 'pickup_scheduled'
+    | 'item_received'
+    | 'refund_completed'
+    | 'exchange_dispatched',
+  payload: {
+    order_id: string
+    order_number: string
+    recipient_email: string
+    customer_name: string
+    total_amount: number
+    items: OrderItemNotificationData[]
+    carrier?: string | null
+    tracking_number?: string | null
+    tracking_url?: string | null
+    cancellation_reason?: string | null
+    notes?: string | null
+  }
+) {
+  try {
+    return await queueOrderNotification(
+      {
+        ...payload,
+        event,
+        payment_method: 'return_process',
+        payment_status: event === 'refund_completed' ? 'refunded' : 'processing',
+      },
+      { immediate: true }
+    )
+  } catch (error: any) {
+    console.error(`Error sending ${event} email:`, error)
+    return { error: error.message || 'Failed to dispatch email' }
+  }
+}

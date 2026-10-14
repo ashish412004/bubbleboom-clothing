@@ -86,7 +86,7 @@ export const DEFAULT_SHIPPING_SETTINGS: StoreShippingSettings = {
 export const DEFAULT_EXCHANGE_SETTINGS: StoreExchangeSettings = {
   policy_configured: true,
   exchange_window_days: 7,
-  item_conditions: 'Unworn, unwashed, and undamaged with original tags intact',
+  item_conditions: 'Unworn, unwashed, and undamaged with original packaging where provided',
   applicable_fee_paise: 0, // Free exchange
   excluded_categories: [],
   excluded_product_ids: [],

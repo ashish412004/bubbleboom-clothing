@@ -10,6 +10,13 @@ export type OrderNotificationEvent =
   | 'order_cancelled'
   | 'refund_completed'
   | 'admin_new_order'
+  | 'return_requested'
+  | 'exchange_requested'
+  | 'return_approved'
+  | 'return_rejected'
+  | 'pickup_scheduled'
+  | 'item_received'
+  | 'exchange_dispatched'
 
 export interface OrderItemNotificationData {
   product_id?: string
@@ -188,6 +195,51 @@ export function renderNotificationHtml(
       eventTitle = 'REFUND COMPLETED'
       eventHeadline = 'FUNDS ISSUED'
       eventMessage = `The refund of ${totalFmt} for order #${orderNumber} has been successfully processed back to your original payment account. Standard bank processing takes 3–5 business days.`
+      break
+    case 'return_requested':
+      subject = `Return Request Received: #${orderNumber} | BUBBLE BOOM`
+      eventTitle = 'RETURN REQUESTED'
+      eventHeadline = 'REQUEST UNDER REVIEW'
+      eventMessage = `We have received your return request for order #${orderNumber}. Our operations team is reviewing your details and will schedule a reverse pickup within 24–48 hours.`
+      break
+    case 'exchange_requested':
+      subject = `Exchange Request Received: #${orderNumber} | BUBBLE BOOM`
+      eventTitle = 'EXCHANGE REQUESTED'
+      eventHeadline = 'SIZE/COLOR EXCHANGE INITIATED'
+      eventMessage = `We have received your exchange request for order #${orderNumber}. We will schedule a courier pickup for your existing item and prepare your replacement once inspected.`
+      break
+    case 'return_approved':
+      subject = `Return Request Approved: #${orderNumber} | BUBBLE BOOM`
+      eventTitle = 'RETURN APPROVED'
+      eventHeadline = 'REVERSE PICKUP INITIATED'
+      eventMessage = `Your return request for order #${orderNumber} has been approved. A courier partner will collect the parcel from your shipping address. Please ensure items are securely packed in unwashed condition with original packaging.`
+      break
+    case 'return_rejected':
+      subject = `Return Request Update: #${orderNumber} | BUBBLE BOOM`
+      eventTitle = 'RETURN NOT APPROVED'
+      eventHeadline = 'CLAIM STATUS UPDATE'
+      eventMessage = data.cancellation_reason || data.notes
+        ? `Your return claim for order #${orderNumber} could not be approved. Reason: ${data.cancellation_reason || data.notes}. If you have questions, please reach out to our customer care team.`
+        : `Your return claim for order #${orderNumber} could not be approved based on our 7-day eligibility policy. If you have questions, please reply to this email.`
+      statusBadgeBg = '#222222'
+      break
+    case 'pickup_scheduled':
+      subject = `Reverse Pickup Scheduled: #${orderNumber} | BUBBLE BOOM`
+      eventTitle = 'COURIER PICKUP SCHEDULED'
+      eventHeadline = 'PICKUP ON THE WAY'
+      eventMessage = `A reverse pickup has been booked with ${data.carrier || 'our courier partner'} for order #${orderNumber}. Please hand over the sealed parcel to the pickup executive.`
+      break
+    case 'item_received':
+      subject = `Returned Item Received: #${orderNumber} | BUBBLE BOOM`
+      eventTitle = 'ITEM RECEIVED AT WAREHOUSE'
+      eventHeadline = 'QUALITY INSPECTION IN PROGRESS'
+      eventMessage = `Your returned package for order #${orderNumber} has reached our warehouse and is currently undergoing quality inspection by our fulfillment crew.`
+      break
+    case 'exchange_dispatched':
+      subject = `Exchange Replacement Dispatched: #${orderNumber} | BUBBLE BOOM`
+      eventTitle = 'EXCHANGE DISPATCHED'
+      eventHeadline = 'REPLACEMENT ON THE MOVE'
+      eventMessage = `Your exchange replacement for order #${orderNumber} has been dispatched! Track your new shipment with the details below.`
       break
   }
 

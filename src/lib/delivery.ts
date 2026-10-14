@@ -229,11 +229,11 @@ export function getProductExchangeSummary(
     configured: true,
     is_excluded: false,
     window_days: windowDays,
-    conditions: exchangeSettings.item_conditions || 'Unworn, unwashed, and undamaged with original tags intact',
+    conditions: exchangeSettings.item_conditions || 'Unworn, unwashed, and undamaged with original packaging where provided',
     fee_paise: feePaise,
     policy_url: policyUrl,
     summary_heading: `${windowDays}-Day Easy Exchange`,
-    summary_text: `${windowDays} days from delivery. ${feeText}. Items must be unworn with original tags attached.`,
+    summary_text: `${windowDays} days from delivery. ${feeText}. Items must be unworn with original packaging where provided.`,
     link_label: 'View Exchange Policy',
   }
 }

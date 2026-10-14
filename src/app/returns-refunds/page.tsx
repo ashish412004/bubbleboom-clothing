@@ -35,11 +35,12 @@ export default function ReturnsRefundsPage() {
 
             <section>
               <h2 className="text-lg font-black uppercase tracking-tight text-black mb-2">2. Eligibility &amp; Item Condition</h2>
-              <p>To qualify for an approved return and full refund:</p>
+              <p>To qualify for an approved return or size exchange:</p>
               <ul className="list-disc pl-5 space-y-1">
-                <li>The item must be <strong>unworn, unwashed, and undamaged</strong>, free from fragrance, deodorant stains, pet hair, or alterations.</li>
-                <li>All original brand tags, labels, and star monogram polybags must be intact and returned with the item.</li>
-                <li>Items bought during final clearance or flash archive sales are marked final sale and are only eligible for exchange in case of manufacturing defect.</li>
+                <li>The item must be in <strong>unworn, unwashed, and undamaged condition</strong>, free from perfumes, scents, deodorant marks, animal hair, or body alterations.</li>
+                <li>Original packaging and protective star monogram polybags where provided must be included with the returned parcel.</li>
+                <li>For unbranded apparel pieces, wholesale basic blanks, or garments dispatched without manufacturer swing tags, the item must be returned neatly folded in its original supplied packaging in clean, unlaundered condition.</li>
+                <li>Items marked Final Sale or Archive Vault are not eligible for discretionary return, but remain eligible for replacement if arriving with transit damage or stitching flaws.</li>
               </ul>
             </section>
 
