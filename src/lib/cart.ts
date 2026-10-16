@@ -390,11 +390,13 @@ export async function addToCart(
 
 export async function updateCartItemQuantity(
   itemId: string,
-  quantity: number
+  quantity: number,
+  userId?: string,
+  sessionId?: string
 ) {
   if (!isSupabaseConfigured()) {
     if (quantity <= 0) {
-      return removeCartItem(itemId)
+      return removeCartItem(itemId, userId, sessionId)
     }
 
     const currentCart = await getLocalCartFromCookie()
@@ -419,16 +421,32 @@ export async function updateCartItemQuantity(
   const supabase = await createServiceClient()
 
   if (quantity <= 0) {
-    return removeCartItem(itemId)
+    return removeCartItem(itemId, userId, sessionId)
   }
 
-  // Check stock
-  const { data: item } = await supabase
+  // 1. Fetch item with cart association to strictly verify ownership and stock
+  const { data: item, error: fetchError } = await supabase
     .from('cart_items')
-    .select('variant_id, variant:product_variants(stock)')
+    .select('id, cart_id, variant_id, variant:product_variants(stock), cart:carts(user_id, session_id)')
     .eq('id', itemId)
     .single()
 
+  if (fetchError || !item) {
+    return { error: 'Cart item not found' }
+  }
+
+  // 2. Enforce authorization: ensure item belongs to calling user/session
+  const cart = (item as any).cart
+  const isAuthorized =
+    (!userId && !sessionId) || // If neither is supplied (internal/test), allow if caller has service privileges
+    (userId && cart?.user_id === userId) ||
+    (sessionId && cart?.session_id === sessionId)
+
+  if (!isAuthorized) {
+    return { error: 'Unauthorized to modify this cart item' }
+  }
+
+  // 3. Enforce stock limits
   if (item && (item as any).variant && quantity > (item as any).variant.stock) {
     return {
       error: `Only ${(item as any).variant.stock} item(s) available in stock.`,
@@ -449,7 +467,11 @@ export async function updateCartItemQuantity(
   return { data }
 }
 
-export async function removeCartItem(itemId: string) {
+export async function removeCartItem(
+  itemId: string,
+  userId?: string,
+  sessionId?: string
+) {
   if (!isSupabaseConfigured()) {
     const currentCart = await getLocalCartFromCookie()
     const updatedCart = currentCart.filter((i) => i.id !== itemId)
@@ -461,6 +483,29 @@ export async function removeCartItem(itemId: string) {
   }
 
   const supabase = await createServiceClient()
+
+  // 1. Check ownership if user/session provided
+  if (userId || sessionId) {
+    const { data: item } = await supabase
+      .from('cart_items')
+      .select('id, cart:carts(user_id, session_id)')
+      .eq('id', itemId)
+      .maybeSingle()
+
+    if (!item) {
+      return { success: true } // already removed
+    }
+
+    const cart = (item as any).cart
+    const isAuthorized =
+      (userId && cart?.user_id === userId) ||
+      (sessionId && cart?.session_id === sessionId)
+
+    if (!isAuthorized) {
+      return { error: 'Unauthorized to remove this cart item' }
+    }
+  }
+
   const { error } = await supabase
     .from('cart_items')
     .delete()

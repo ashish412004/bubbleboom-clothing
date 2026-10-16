@@ -39,6 +39,13 @@ DECLARE
   v_new_qty INT;
   v_item_id UUID;
 BEGIN
+  -- Caller authorization safety check: if invoked directly by non-service_role, prevent arbitrary p_user_id override
+  IF current_setting('request.jwt.claim.role', true) = 'authenticated' THEN
+    p_user_id := auth.uid();
+  ELSIF current_setting('request.jwt.claim.role', true) = 'anon' THEN
+    p_user_id := NULL;
+  END IF;
+
   -- Validate input quantity
   IF p_quantity <= 0 THEN
     RETURN jsonb_build_object('error', 'Quantity must be greater than zero');
@@ -114,8 +121,9 @@ BEGIN
 END;
 $$;
 
--- Grant execution permissions on atomic RPC function
-GRANT EXECUTE ON FUNCTION add_to_cart_atomic(UUID, INT, UUID, TEXT) TO anon, authenticated, service_role;
+-- Restrict execution permissions on atomic RPC function to secure service_role
+REVOKE EXECUTE ON FUNCTION add_to_cart_atomic(UUID, INT, UUID, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION add_to_cart_atomic(UUID, INT, UUID, TEXT) TO service_role;
 
 -- 3. Ensure Carts & Cart Items RLS allow guest session access
 DROP POLICY IF EXISTS "Users can view own carts" ON carts;

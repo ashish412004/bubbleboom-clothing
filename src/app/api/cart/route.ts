@@ -110,9 +110,11 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Item ID and quantity required' }, { status: 400 })
     }
 
-    const result = await updateCartItemQuantity(item_id, quantity)
+    const { userId, sessionId } = await getAuthAndSession()
+    const result = await updateCartItemQuantity(item_id, quantity, userId, sessionId)
     if ('error' in result && result.error) {
-      return NextResponse.json({ error: result.error }, { status: 400 })
+      const status = result.error.includes('Unauthorized') ? 403 : 400
+      return NextResponse.json({ error: result.error }, { status })
     }
 
     const response = NextResponse.json(result)
@@ -134,9 +136,14 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const itemId = searchParams.get('item_id')
+    const { userId, sessionId } = await getAuthAndSession()
 
     if (itemId) {
-      const result = await removeCartItem(itemId)
+      const result = await removeCartItem(itemId, userId, sessionId)
+      if ('error' in result && result.error) {
+        const status = result.error.includes('Unauthorized') ? 403 : 400
+        return NextResponse.json({ error: result.error }, { status })
+      }
       const response = NextResponse.json(result)
       if ((result as any).cartCookieValue) {
         response.cookies.set('bb_cart', (result as any).cartCookieValue, {
