@@ -70,11 +70,15 @@ interface CartStore {
   ) => Promise<{ success: boolean; error?: string }>
   updateCartItemQuantityAction: (itemId: string, newQty: number) => Promise<{ success: boolean; error?: string }>
   removeCartItemAction: (itemId: string) => Promise<{ success: boolean; error?: string }>
+  restoreCartItemAction: (item: CartStoreItem) => Promise<{ success: boolean; error?: string }>
+  syncCartState: (items: CartStoreItem[], summary?: CartStoreSummary | null) => void
 }
 
 let lastCartRefreshTime = 0
 let lastWishlistRefreshTime = 0
 const REFRESH_THROTTLE_MS = 15000 // 15s throttle for routine background checks
+const updateDebounceTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+const updateDebounceResolvers: Record<string, ((val: { success: boolean; error?: string }) => void)[]> = {}
 
 function computeSummaryFromItems(items: CartStoreItem[], prevSummary?: CartStoreSummary | null): CartStoreSummary {
   const thresholdPaise = prevSummary?.free_shipping_threshold_paise ?? 149900
@@ -357,6 +361,10 @@ export const useCartStore = create<CartStore>()(
         const prevCount = get().itemCount
 
         if (newQty <= 0) {
+          if (updateDebounceTimers[itemId]) {
+            clearTimeout(updateDebounceTimers[itemId])
+            delete updateDebounceTimers[itemId]
+          }
           return get().removeCartItemAction(itemId)
         }
 
@@ -366,33 +374,67 @@ export const useCartStore = create<CartStore>()(
         const nextCount = nextItems.reduce((sum, item) => sum + item.quantity, 0)
         const nextSummary = computeSummaryFromItems(nextItems, get().summary)
 
+        // Instant optimistic update
         set({
           items: nextItems,
           itemCount: nextCount,
           summary: nextSummary,
         })
 
-        try {
-          const res = await fetch('/api/cart', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item_id: itemId, quantity: newQty }),
-          })
-
-          const data = await res.json()
-          if (!res.ok || data.error) {
-            throw new Error(data.error || 'Failed to update quantity')
-          }
-
-          await get().refreshCart(true)
-          return { success: true }
-        } catch (err: any) {
-          set({ items: prevItems, itemCount: prevCount, summary: get().summary })
-          return { success: false, error: err.message || 'Failed to update quantity' }
+        if (!updateDebounceResolvers[itemId]) {
+          updateDebounceResolvers[itemId] = []
         }
+
+        // Debounce network dispatch to prevent rapid-click race conditions
+        if (updateDebounceTimers[itemId]) {
+          clearTimeout(updateDebounceTimers[itemId])
+        }
+
+        return new Promise<{ success: boolean; error?: string }>((resolve) => {
+          updateDebounceResolvers[itemId].push(resolve)
+
+          updateDebounceTimers[itemId] = setTimeout(async () => {
+            const resolvers = [...(updateDebounceResolvers[itemId] || [])]
+            delete updateDebounceResolvers[itemId]
+            delete updateDebounceTimers[itemId]
+
+            try {
+              const res = await fetch('/api/cart', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_id: itemId, quantity: newQty }),
+              })
+
+              const data = await res.json()
+              if (!res.ok || data.error) {
+                // Rollback on failure
+                set({ items: prevItems, itemCount: prevCount, summary: get().summary })
+                const errResult = { success: false, error: data.error || 'Failed to update quantity' }
+                resolvers.forEach((r) => r(errResult))
+                return
+              }
+
+              resolvers.forEach((r) => r({ success: true }))
+            } catch (err: any) {
+              set({ items: prevItems, itemCount: prevCount, summary: get().summary })
+              const errResult = { success: false, error: err.message || 'Failed to update quantity' }
+              resolvers.forEach((r) => r(errResult))
+            }
+          }, 200)
+        })
       },
 
       removeCartItemAction: async (itemId) => {
+        if (updateDebounceTimers[itemId]) {
+          clearTimeout(updateDebounceTimers[itemId])
+          delete updateDebounceTimers[itemId]
+        }
+        if (updateDebounceResolvers[itemId]) {
+          const resolvers = [...updateDebounceResolvers[itemId]]
+          delete updateDebounceResolvers[itemId]
+          resolvers.forEach((r) => r({ success: true }))
+        }
+
         const prevItems = [...get().items]
         const prevCount = get().itemCount
 
@@ -413,15 +455,63 @@ export const useCartStore = create<CartStore>()(
 
           const data = await res.json()
           if (!res.ok || data.error) {
-            throw new Error(data.error || 'Failed to remove item')
+            set({ items: prevItems, itemCount: prevCount, summary: get().summary })
+            return { success: false, error: data.error || 'Failed to remove item' }
           }
 
-          await get().refreshCart(true)
           return { success: true }
         } catch (err: any) {
           set({ items: prevItems, itemCount: prevCount, summary: get().summary })
           return { success: false, error: err.message || 'Failed to remove item' }
         }
+      },
+
+      restoreCartItemAction: async (item) => {
+        const prevItems = [...get().items]
+        const prevCount = get().itemCount
+
+        const maxStock = item.variant?.stock ?? 99
+        if (item.quantity > maxStock) {
+          return { success: false, error: 'Product is no longer available in the requested quantity.' }
+        }
+
+        const nextItems = [item, ...prevItems]
+        const nextCount = nextItems.reduce((sum, i) => sum + (i.quantity || 1), 0)
+        const nextSummary = computeSummaryFromItems(nextItems, get().summary)
+
+        set({
+          items: nextItems,
+          itemCount: nextCount,
+          summary: nextSummary,
+        })
+
+        try {
+          const res = await fetch('/api/cart', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ variant_id: item.variant_id, quantity: item.quantity }),
+          })
+
+          const data = await res.json()
+          if (!res.ok || data.error) {
+            set({ items: prevItems, itemCount: prevCount, summary: get().summary })
+            return { success: false, error: data.error || 'Failed to restore item' }
+          }
+
+          return { success: true }
+        } catch (err: any) {
+          set({ items: prevItems, itemCount: prevCount, summary: get().summary })
+          return { success: false, error: err.message || 'Failed to restore item' }
+        }
+      },
+
+      syncCartState: (items, summary) => {
+        const count = items.reduce((sum, item) => sum + (item.quantity || 1), 0)
+        set({
+          items,
+          itemCount: count,
+          summary: summary || computeSummaryFromItems(items, get().summary),
+        })
       },
     }),
     {

@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { X, Trash2, ShoppingBag, ArrowRight, Truck } from 'lucide-react'
 import { useCartStore, CartStoreItem } from '@/lib/cart-store'
+import { CartQuantityControl } from './cart-quantity-control'
 import { formatPrice, getSafeImageUrl, findImageForVariantColor } from '@/lib/utils'
+import toast from 'react-hot-toast'
 
 export function CartDrawer() {
   const router = useRouter()
@@ -17,7 +19,9 @@ export function CartDrawer() {
   const itemCount = useCartStore((state) => state.itemCount)
   const updateQuantity = useCartStore((state) => state.updateCartItemQuantityAction)
   const removeItem = useCartStore((state) => state.removeCartItemAction)
+  const restoreItem = useCartStore((state) => state.restoreCartItemAction)
 
+  const [removingItemIds, setRemovingItemIds] = useState<Set<string>>(new Set())
   const drawerRef = useRef<HTMLDivElement>(null)
 
   // Close on ESC key and prevent body scroll when open
@@ -48,6 +52,59 @@ export function CartDrawer() {
   const thresholdPaise = summary?.free_shipping_threshold_paise ?? 149900
   const freeShippingRemaining = Math.max(0, thresholdPaise - subtotalPaise)
   const freeShippingProgress = Math.min(100, Math.round((subtotalPaise / thresholdPaise) * 100))
+
+  const handleRemoveDrawerItem = (item: CartStoreItem) => {
+    if (removingItemIds.has(item.id)) return
+
+    // 1. Mark as removing (initiates CSS collapse)
+    setRemovingItemIds((prev) => new Set(prev).add(item.id))
+
+    // 2. Show lightweight Undo toast
+    toast.custom(
+      (t) => (
+        <div
+          className={`${
+            t.visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'
+          } transition-all duration-200 max-w-sm w-full bg-black text-white px-4 py-3 shadow-2xl border border-neutral-800 flex items-center justify-between gap-3 text-xs`}
+        >
+          <div className="flex items-center gap-2 truncate pr-2">
+            <span className="w-2 h-2 rounded-full bg-[#DC2626] shrink-0" />
+            <span className="truncate">
+              Removed <strong className="font-bold text-white">{item.variant?.product?.name}</strong>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              toast.dismiss(t.id)
+              const res = await restoreItem(item)
+              if (res.success) {
+                toast.success(`Restored ${item.variant?.product?.name} to bag`, {
+                  style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px', fontSize: '12px' },
+                })
+              } else {
+                toast.error(res.error || 'Failed to restore item')
+              }
+            }}
+            className="shrink-0 bg-white text-black hover:bg-neutral-200 active:scale-95 px-3 py-1 font-mono uppercase text-[10px] font-black tracking-wider transition-all"
+          >
+            Undo
+          </button>
+        </div>
+      ),
+      { id: `undo-drawer-${item.id}`, duration: 5000 }
+    )
+
+    // 3. After 280ms collapse animation, remove from store
+    setTimeout(() => {
+      removeItem(item.id)
+      setRemovingItemIds((prev) => {
+        const next = new Set(prev)
+        next.delete(item.id)
+        return next
+      })
+    }, 280)
+  }
 
   return (
     <>
@@ -111,7 +168,7 @@ export function CartDrawer() {
         </div>
 
         {/* Items List */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 divide-y divide-neutral-100">
+        <div className="flex-1 overflow-y-auto px-5 py-2">
           {items.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center py-12">
               <div className="w-14 h-14 rounded-full bg-neutral-100 flex items-center justify-center mb-3">
@@ -129,7 +186,7 @@ export function CartDrawer() {
                   closeCart()
                   router.push('/shop')
                 }}
-                className="bg-black text-white px-6 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors"
+                className="bg-black text-white px-6 py-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors active:scale-95"
               >
                 Start Shopping
               </button>
@@ -141,85 +198,93 @@ export function CartDrawer() {
               const image = findImageForVariantColor(product?.images || [], variant?.color) || product?.images?.[0]
               const sellingPrice = product?.selling_price || 0
               const itemTotal = sellingPrice * item.quantity
+              const isRemoving = removingItemIds.has(item.id)
 
               return (
-                <div key={item.id} className="py-4 flex gap-4">
-                  {/* Thumbnail */}
-                  <Link
-                    href={`/products/${product?.slug || ''}`}
-                    onClick={closeCart}
-                    className="relative w-20 h-24 bg-neutral-100 shrink-0 overflow-hidden border border-neutral-200"
-                  >
-                    {image?.image_url ? (
-                      <Image
-                        src={getSafeImageUrl(image.image_url)}
-                        alt={product?.name || 'Garment'}
-                        fill
-                        sizes="80px"
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[9px] font-mono uppercase text-neutral-400">
-                        BOOM
-                      </div>
-                    )}
-                  </Link>
+                <div
+                  key={item.id}
+                  className={`grid transition-[grid-template-rows,opacity,transform] duration-300 ease-out motion-reduce:transition-none ${
+                    isRemoving
+                      ? 'grid-rows-[0fr] opacity-0 -translate-x-4 pointer-events-none'
+                      : 'grid-rows-[1fr] opacity-100 translate-x-0'
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="py-4 flex gap-4 border-b border-neutral-100">
+                      {/* Thumbnail */}
+                      <Link
+                        href={`/products/${product?.slug || ''}`}
+                        onClick={closeCart}
+                        className="relative w-20 h-24 bg-neutral-100 shrink-0 overflow-hidden border border-neutral-200"
+                      >
+                        {image?.image_url ? (
+                          <Image
+                            src={getSafeImageUrl(image.image_url)}
+                            alt={product?.name || 'Garment'}
+                            fill
+                            sizes="80px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[9px] font-mono uppercase text-neutral-400">
+                            BOOM
+                          </div>
+                        )}
+                      </Link>
 
-                  {/* Details */}
-                  <div className="flex-1 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <Link
-                          href={`/products/${product?.slug || ''}`}
-                          onClick={closeCart}
-                          className="text-xs font-bold uppercase tracking-tight text-black hover:underline line-clamp-1"
-                        >
-                          {product?.name || 'Product'}
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => removeItem(item.id)}
-                          aria-label={`Remove ${product?.name} from bag`}
-                          className="text-neutral-400 hover:text-[#DC2626] transition-colors p-0.5"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                      {/* Details */}
+                      <div className="flex-1 flex flex-col justify-between min-w-0">
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <Link
+                              href={`/products/${product?.slug || ''}`}
+                              onClick={closeCart}
+                              className="text-xs font-bold uppercase tracking-tight text-black hover:underline truncate"
+                            >
+                              {product?.name || 'Product'}
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDrawerItem(item)}
+                              disabled={isRemoving}
+                              aria-label={`Remove ${product?.name} (${variant?.color}, Size ${variant?.size}) from bag`}
+                              title="Remove item"
+                              className="group/del text-neutral-400 hover:text-[#DC2626] hover:bg-red-50 dark:hover:bg-red-950/20 active:scale-90 transition-all p-1.5 rounded-xs shrink-0"
+                            >
+                              <Trash2 size={15} className="transition-transform group-hover/del:scale-110" />
+                            </button>
+                          </div>
 
-                      <div className="text-[11px] font-mono text-neutral-500 mt-1 space-x-2">
-                        <span>{variant?.color || 'Original'}</span>
-                        <span>&bull;</span>
-                        <span className="font-bold text-black uppercase">Size: {variant?.size || 'Free'}</span>
-                      </div>
-                    </div>
+                          <div className="text-[11px] font-mono text-neutral-500 mt-1 space-x-2">
+                            <span>{variant?.color || 'Original'}</span>
+                            <span>&bull;</span>
+                            <span className="font-bold text-black uppercase">Size: {variant?.size || 'Free'}</span>
+                          </div>
+                        </div>
 
-                    {/* Quantity Stepper & Price */}
-                    <div className="flex items-center justify-between mt-3 pt-2">
-                      <div className="inline-flex items-center border border-neutral-300">
-                        <button
-                          type="button"
-                          disabled={item.quantity <= 1}
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="w-7 h-7 flex items-center justify-center text-xs font-bold hover:bg-neutral-100 disabled:opacity-30 transition-colors"
-                        >
-                          -
-                        </button>
-                        <span className="w-7 text-center text-xs font-mono font-bold select-none">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          disabled={variant?.stock !== undefined && item.quantity >= variant.stock}
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="w-7 h-7 flex items-center justify-center text-xs font-bold hover:bg-neutral-100 disabled:opacity-30 transition-colors"
-                        >
-                          +
-                        </button>
-                      </div>
+                        {/* Quantity Stepper & Price */}
+                        <div className="flex items-center justify-between mt-3 pt-1">
+                          <CartQuantityControl
+                            quantity={item.quantity}
+                            maxStock={variant?.stock ?? 99}
+                            size="sm"
+                            itemTitle={product?.name || 'Product'}
+                            disabled={isRemoving}
+                            onIncrease={() => updateQuantity(item.id, item.quantity + 1)}
+                            onDecrease={() => {
+                              if (item.quantity <= 1) {
+                                handleRemoveDrawerItem(item)
+                              } else {
+                                updateQuantity(item.id, item.quantity - 1)
+                              }
+                            }}
+                          />
 
-                      <span className="text-xs font-mono font-extrabold text-black">
-                        {formatPrice(itemTotal)}
-                      </span>
+                          <span className="text-xs font-mono font-extrabold text-black">
+                            {formatPrice(itemTotal)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

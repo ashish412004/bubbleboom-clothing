@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Trash2, ShoppingBag, ArrowRight, Tag, Truck } from 'lucide-react'
 import { formatPrice, getSafeImageUrl, findImageForVariantColor } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
+import { CartQuantityControl } from '@/components/cart/cart-quantity-control'
 import toast from 'react-hot-toast'
 
 interface CartItemData {
@@ -100,110 +101,220 @@ export function CartView({
   const [couponError, setCouponError] = useState('')
   const [couponSuccess, setCouponSuccess] = useState('')
   const [pendingItemIds, setPendingItemIds] = useState<Set<string>>(new Set())
+  const [removingItemIds, setRemovingItemIds] = useState<Set<string>>(new Set())
   const setStoreCount = useCartStore((state) => state.setItemCount)
+  const syncStore = useCartStore((state) => state.syncCartState)
+
+  const debounceTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   useEffect(() => {
     const totalCount = items.reduce((sum, item) => sum + item.quantity, 0)
     setStoreCount(totalCount)
-  }, [items, setStoreCount])
+    syncStore(items as any, summary as any)
+  }, [items, summary, setStoreCount, syncStore])
 
-  const handleUpdateQuantity = async (itemId: string, newQty: number) => {
+  const handleUpdateQuantity = (itemId: string, newQty: number) => {
     const targetItem = items.find((i) => i.id === itemId)
     if (!targetItem) return
-
-    if (newQty > targetItem.variant.stock) {
-      toast.error(`Only ${targetItem.variant.stock} item(s) available in stock.`)
-      return
-    }
 
     if (newQty < 1) {
       handleRemoveItem(itemId)
       return
     }
 
-    // Save snapshot for instant rollback if rejected
+    if (newQty > targetItem.variant.stock) {
+      toast.error(`Only ${targetItem.variant.stock} item(s) available in stock.`, {
+        id: `stock-${itemId}`,
+        style: { background: '#000', color: '#fff', fontSize: '12px', fontFamily: 'monospace' },
+      })
+      return
+    }
+
+    // Save snapshot for rollback
     const prevItems = [...items]
     const prevSummary = { ...summary }
 
     // Instant optimistic update
     const nextItems = items.map((i) => (i.id === itemId ? { ...i, quantity: newQty } : i))
     setItems(nextItems)
-    setSummary(
-      computeOptimisticSummary(
-        nextItems,
-        summary.free_shipping_threshold_paise,
-        summary.shipping_paise || 9900,
-        couponCode
-      )
+    const nextSummary = computeOptimisticSummary(
+      nextItems,
+      summary.free_shipping_threshold_paise,
+      summary.shipping_paise || 9900,
+      couponCode
     )
+    setSummary(nextSummary)
 
-    setPendingItemIds((prev) => new Set(prev).add(itemId))
+    // Debounce network dispatch to prevent rapid-click race conditions
+    if (debounceTimersRef.current[itemId]) {
+      clearTimeout(debounceTimersRef.current[itemId])
+    }
 
-    try {
-      const res = await fetch('/api/cart', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: itemId, quantity: newQty }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
+    debounceTimersRef.current[itemId] = setTimeout(async () => {
+      setPendingItemIds((prev) => new Set(prev).add(itemId))
+      try {
+        const res = await fetch('/api/cart', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_id: itemId, quantity: newQty }),
+        })
+        const data = await res.json()
+        if (!res.ok || data.error) {
+          setItems(prevItems)
+          setSummary(prevSummary)
+          toast.error(data.error || 'Failed to update quantity')
+        }
+      } catch {
         setItems(prevItems)
         setSummary(prevSummary)
-        toast.error(data.error || 'Failed to update quantity')
+        toast.error('Network error updating cart')
+      } finally {
+        setPendingItemIds((prev) => {
+          const next = new Set(prev)
+          next.delete(itemId)
+          return next
+        })
+        delete debounceTimersRef.current[itemId]
       }
-    } catch {
-      setItems(prevItems)
-      setSummary(prevSummary)
-      toast.error('Network error updating cart')
-    } finally {
-      setPendingItemIds((prev) => {
-        const next = new Set(prev)
-        next.delete(itemId)
-        return next
-      })
-    }
+    }, 200)
   }
 
   const handleRemoveItem = async (itemId: string) => {
+    if (removingItemIds.has(itemId)) return
+
+    const targetItem = items.find((i) => i.id === itemId)
+    if (!targetItem) return
+
+    // Clear any pending debounce timer for this item
+    if (debounceTimersRef.current[itemId]) {
+      clearTimeout(debounceTimersRef.current[itemId])
+      delete debounceTimersRef.current[itemId]
+    }
+
     const prevItems = [...items]
     const prevSummary = { ...summary }
 
-    const nextItems = items.filter((i) => i.id !== itemId)
-    setItems(nextItems)
-    setSummary(
-      computeOptimisticSummary(
-        nextItems,
-        summary.free_shipping_threshold_paise,
-        summary.shipping_paise || 9900,
-        couponCode
-      )
+    // 1. Mark as removing (initiates CSS slide & height collapse animation)
+    setRemovingItemIds((prev) => new Set(prev).add(itemId))
+
+    // 2. Immediately calculate optimistic totals without this item
+    const remainingItems = items.filter((i) => i.id !== itemId)
+    const nextSummary = computeOptimisticSummary(
+      remainingItems,
+      summary.free_shipping_threshold_paise,
+      summary.shipping_paise || 9900,
+      couponCode
+    )
+    setSummary(nextSummary)
+    setStoreCount(remainingItems.reduce((sum, it) => sum + it.quantity, 0))
+
+    // 3. Show lightweight "Item removed — Undo" toast
+    toast.custom(
+      (t) => (
+        <div
+          className={`${
+            t.visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'
+          } transition-all duration-200 max-w-sm w-full bg-black text-white px-4 py-3 shadow-2xl border border-neutral-800 flex items-center justify-between gap-3 text-xs`}
+        >
+          <div className="flex items-center gap-2 truncate pr-2">
+            <span className="w-2 h-2 rounded-full bg-[#DC2626] shrink-0" />
+            <span className="truncate">
+              Removed <strong className="font-bold text-white">{targetItem.variant?.product?.name}</strong>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              toast.dismiss(t.id)
+              await handleUndoRemoval(targetItem)
+            }}
+            className="shrink-0 bg-white text-black hover:bg-neutral-200 active:scale-95 px-3 py-1 font-mono uppercase text-[10px] font-black tracking-wider transition-all"
+          >
+            Undo
+          </button>
+        </div>
+      ),
+      { id: `undo-${itemId}`, duration: 5000 }
     )
 
-    toast('Item removed', {
-      style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
-    })
-
-    setPendingItemIds((prev) => new Set(prev).add(itemId))
-
-    try {
-      const res = await fetch(`/api/cart?item_id=${itemId}`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) {
-        setItems(prevItems)
-        setSummary(prevSummary)
-        toast.error('Failed to remove item')
-      }
-    } catch {
-      setItems(prevItems)
-      setSummary(prevSummary)
-      toast.error('Failed to remove item')
-    } finally {
-      setPendingItemIds((prev) => {
+    // 4. After 280ms animation duration, remove item from state array
+    setTimeout(() => {
+      setItems((prev) => prev.filter((i) => i.id !== itemId))
+      setRemovingItemIds((prev) => {
         const next = new Set(prev)
         next.delete(itemId)
         return next
       })
+    }, 280)
+
+    // 5. Asynchronous backend persistence
+    try {
+      const res = await fetch(`/api/cart?item_id=${encodeURIComponent(itemId)}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        // Rollback on failure
+        setItems(prevItems)
+        setSummary(prevSummary)
+        toast.dismiss(`undo-${itemId}`)
+        toast.error(data.error || 'Failed to remove item. Restored to bag.')
+      }
+    } catch {
+      setItems(prevItems)
+      setSummary(prevSummary)
+      toast.dismiss(`undo-${itemId}`)
+      toast.error('Network error. Restored item to bag.')
+    }
+  }
+
+  const handleUndoRemoval = async (itemToRestore: CartItemData) => {
+    // Validate stock
+    if (itemToRestore.quantity > itemToRestore.variant.stock) {
+      toast.error('Sorry, product is no longer available in the requested quantity.', {
+        style: { background: '#000', color: '#fff', fontSize: '12px' },
+      })
+      return
+    }
+
+    const prevItems = [...items]
+    const prevSummary = { ...summary }
+
+    // Optimistically restore
+    const restoredItems = [itemToRestore, ...items]
+    setItems(restoredItems)
+    const nextSummary = computeOptimisticSummary(
+      restoredItems,
+      summary.free_shipping_threshold_paise,
+      summary.shipping_paise || 9900,
+      couponCode
+    )
+    setSummary(nextSummary)
+
+    try {
+      const res = await fetch('/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          variant_id: itemToRestore.variant_id,
+          quantity: itemToRestore.quantity,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setItems(prevItems)
+        setSummary(prevSummary)
+        toast.error(data.error || 'Failed to restore item')
+        return
+      }
+
+      toast.success(`Restored ${itemToRestore.variant?.product?.name} to bag`, {
+        style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px', fontSize: '12px' },
+      })
+    } catch {
+      setItems(prevItems)
+      setSummary(prevSummary)
+      toast.error('Network error restoring item')
     }
   }
 
@@ -300,87 +411,91 @@ export function CartView({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         {/* Cart Line Items */}
-        <div className="lg:col-span-8 divide-y divide-neutral-200 border-t border-b border-neutral-200">
+        <div className="lg:col-span-8 border-t border-neutral-200">
           {items.map((item) => {
             const prod = item.variant?.product
             if (!prod) return null
             const img = findImageForVariantColor(prod.images, item.variant?.color)
             const lineSubtotal = Math.round(prod.selling_price * item.quantity)
+            const isRemoving = removingItemIds.has(item.id)
+            const isPending = pendingItemIds.has(item.id)
 
             return (
-              <div key={item.id} className="py-6 flex gap-4 sm:gap-6">
-                {/* Thumbnail */}
-                <div className="relative w-24 sm:w-28 aspect-[3/4] bg-neutral-100 border border-neutral-200 shrink-0 overflow-hidden">
-                  {img ? (
-                    <Image
-                      src={getSafeImageUrl(img.image_url)}
-                      alt={img.alt_text || prod.name}
-                      fill
-                      className="object-cover"
-                      sizes="120px"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[10px] uppercase font-bold text-neutral-400">
-                      BB
-                    </div>
-                  )}
-                </div>
-
-                {/* Details */}
-                <div className="flex flex-col justify-between flex-grow">
-                  <div>
-                    <div className="flex justify-between items-start gap-2">
-                      <Link
-                        href={`/products/${prod.slug}`}
-                        className="text-xs sm:text-sm font-bold uppercase tracking-tight text-black hover:underline"
-                      >
-                        {prod.name}
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(item.id)}
-                        disabled={pendingItemIds.has(item.id)}
-                        className="text-neutral-400 hover:text-black p-1 transition-colors disabled:opacity-30"
-                        aria-label="Remove item"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+              <div
+                key={item.id}
+                className={`grid transition-[grid-template-rows,opacity,transform] duration-300 ease-out motion-reduce:transition-none ${
+                  isRemoving
+                    ? 'grid-rows-[0fr] opacity-0 -translate-x-6 pointer-events-none'
+                    : 'grid-rows-[1fr] opacity-100 translate-x-0'
+                }`}
+              >
+                <div className="overflow-hidden">
+                  <div className="py-6 flex gap-4 sm:gap-6 border-b border-neutral-200">
+                    {/* Thumbnail */}
+                    <div className="relative w-24 sm:w-28 aspect-[3/4] bg-neutral-100 border border-neutral-200 shrink-0 overflow-hidden">
+                      {img ? (
+                        <Image
+                          src={getSafeImageUrl(img.image_url)}
+                          alt={img.alt_text || prod.name}
+                          fill
+                          className="object-cover"
+                          sizes="120px"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[10px] uppercase font-bold text-neutral-400">
+                          BB
+                        </div>
+                      )}
                     </div>
 
-                    <p className="text-xs text-neutral-500 mt-1 uppercase tracking-wider">
-                      Color: {item.variant.color} | Size: {item.variant.size}
-                    </p>
-                    <p className="text-[11px] font-mono text-neutral-400 mt-0.5">
-                      SKU: {item.variant.sku}
-                    </p>
-                  </div>
+                    {/* Details */}
+                    <div className="flex flex-col justify-between flex-grow min-w-0">
+                      <div>
+                        <div className="flex justify-between items-start gap-2">
+                          <Link
+                            href={`/products/${prod.slug}`}
+                            className="text-xs sm:text-sm font-bold uppercase tracking-tight text-black hover:underline truncate"
+                          >
+                            {prod.name}
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.id)}
+                            disabled={isPending || isRemoving}
+                            className="group/del p-2 text-neutral-400 hover:text-[#DC2626] hover:bg-red-50 dark:hover:bg-red-950/20 active:scale-90 transition-all rounded-xs flex items-center justify-center min-w-[36px] min-h-[36px] touch-manipulation disabled:opacity-30"
+                            aria-label={`Remove ${prod.name} (${item.variant.color}, Size ${item.variant.size}) from bag`}
+                            title="Remove item"
+                          >
+                            <Trash2 size={16} className="transition-transform group-hover/del:scale-110" />
+                          </button>
+                        </div>
 
-                  <div className="flex items-center justify-between mt-4">
-                    {/* Quantity Selector */}
-                    <div className="inline-flex items-center border border-neutral-300">
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
-                        disabled={pendingItemIds.has(item.id) || item.quantity <= 1}
-                        className="w-8 h-8 flex items-center justify-center hover:bg-neutral-100 text-sm font-bold disabled:opacity-30"
-                      >
-                        -
-                      </button>
-                      <span className="w-8 text-center text-xs font-bold">{item.quantity}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
-                        disabled={pendingItemIds.has(item.id) || item.quantity >= item.variant.stock}
-                        className="w-8 h-8 flex items-center justify-center hover:bg-neutral-100 text-sm font-bold disabled:opacity-30"
-                      >
-                        +
-                      </button>
+                        <p className="text-xs text-neutral-500 mt-1 uppercase tracking-wider">
+                          Color: {item.variant.color} | Size: {item.variant.size}
+                        </p>
+                        <p className="text-[11px] font-mono text-neutral-400 mt-0.5">
+                          SKU: {item.variant.sku}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-4 pt-1">
+                        {/* Redesigned Animated Quantity Selector */}
+                        <CartQuantityControl
+                          quantity={item.quantity}
+                          maxStock={item.variant.stock}
+                          size="md"
+                          itemTitle={prod.name}
+                          disabled={isPending || isRemoving}
+                          onIncrease={() => handleUpdateQuantity(item.id, item.quantity + 1)}
+                          onDecrease={() => handleUpdateQuantity(item.id, item.quantity - 1)}
+                        />
+
+                        {/* Line Total */}
+                        <span className="text-sm sm:text-base font-bold font-mono tracking-tight text-black">
+                          {formatPrice(lineSubtotal)}
+                        </span>
+                      </div>
                     </div>
-
-                    {/* Line Total */}
-                    <span className="text-sm font-bold tracking-tight text-black">
-                      {formatPrice(lineSubtotal)}
-                    </span>
                   </div>
                 </div>
               </div>
