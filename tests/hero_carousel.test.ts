@@ -94,8 +94,8 @@ describe('Homepage Hero Background Carousel Assets & Optimization', () => {
     // Preserves LCP priority on primary slide
     expect(content).toContain('priority={index === 0}')
 
-    // Preserves all CTAs and brand identity text
-    expect(content).toContain('BUBBLE BOOM ORIGINALS')
+    // Verifies removal of the BUBBLE BOOM ORIGINALS badge while preserving headline and CTAs
+    expect(content).not.toContain('BUBBLE BOOM ORIGINALS')
     expect(content).toContain('WEAR THE BOOM.')
     expect(content).toContain('SHOP NOW')
     expect(content).toContain('EXPLORE COLLECTIONS')

@@ -2,18 +2,13 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
-  ArrowRight,
-  CheckCircle2,
-  AlertCircle,
   ShieldCheck,
   Truck,
   RefreshCw,
   Plus,
   Minus,
-  Mail,
-  Check,
 } from 'lucide-react'
 
 const SUPPORT_EMAIL = 'bubbleboomstore2026@gmail.com'
@@ -97,16 +92,7 @@ function LegalLinksList() {
   )
 }
 
-type NewsletterSubState = 'idle' | 'subscribing' | 'pending' | 'active' | 'unsubscribed'
-
 export function Footer() {
-  const [email, setEmail] = useState('')
-  const [subState, setSubState] = useState<NewsletterSubState>('idle')
-  const [errorMessage, setErrorMessage] = useState('')
-  const [infoMessage, setInfoMessage] = useState('')
-  const [isUnsubscribing, setIsUnsubscribing] = useState(false)
-  const [userIsAuthenticated, setUserIsAuthenticated] = useState(false)
-
   // Accordion state for mobile view - all collapsed by default
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     shop: false,
@@ -114,141 +100,11 @@ export function Footer() {
     legal: false,
   })
 
-  // Check authenticated or verified subscriber status on mount & events
-  useEffect(() => {
-    let isMounted = true
-
-    async function checkStatus() {
-      try {
-        const res = await fetch('/api/newsletter/status')
-        if (!res.ok) return
-        const data = await res.json()
-        if (!isMounted) return
-
-        if (data.authenticated || data.verified) {
-          if (data.authenticated) {
-            setUserIsAuthenticated(true)
-          }
-          if (data.email) {
-            setEmail(data.email)
-          }
-          if (data.status === 'active' || data.subscribed) {
-            setSubState('active')
-          } else if (data.status === 'pending') {
-            setSubState('pending')
-            setInfoMessage('Check your email for the confirmation link to activate your subscription.')
-          } else if (data.status === 'unsubscribed') {
-            setSubState('unsubscribed')
-          }
-        }
-      } catch {
-        // Non-blocking
-      }
-    }
-
-    checkStatus()
-
-    const onConfirmed = (e: any) => {
-      const confirmedEmail =
-        e?.detail?.email ||
-        (typeof window !== 'undefined' ? localStorage.getItem('bubbleboom_newsletter_email') : '')
-      if (confirmedEmail && isMounted) {
-        setEmail(confirmedEmail)
-        setSubState('active')
-        setInfoMessage("You're officially subscribed to the Boom Squad!")
-      }
-    }
-
-    window.addEventListener('bubbleboom_newsletter_confirmed', onConfirmed)
-    window.addEventListener('storage', onConfirmed)
-
-    return () => {
-      isMounted = false
-      window.removeEventListener('bubbleboom_newsletter_confirmed', onConfirmed)
-      window.removeEventListener('storage', onConfirmed)
-    }
-  }, [])
-
   const toggleSection = (section: string) => {
     setOpenSections((prev) => ({
       ...prev,
       [section]: !prev[section],
     }))
-  }
-
-  const handleSubscribe = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const trimmedEmail = email.trim()
-    if (!trimmedEmail) return
-
-    const emailRegex =
-      /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/
-    if (!emailRegex.test(trimmedEmail)) {
-      setErrorMessage('Please enter a valid email address.')
-      setInfoMessage('')
-      return
-    }
-
-    setSubState('subscribing')
-    setErrorMessage('')
-    setInfoMessage('')
-
-    try {
-      const res = await fetch('/api/newsletter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: trimmedEmail, source: 'storefront_footer' }),
-      })
-      const data = await res.json()
-
-      if (res.ok) {
-        if (data.alreadyActive || data.status === 'active') {
-          setSubState('active')
-          setInfoMessage(data.message || "You're already subscribed to the Boom Squad!")
-        } else {
-          setSubState('pending')
-          setInfoMessage(data.message || 'Check your email to confirm your subscription!')
-        }
-      } else {
-        setSubState('idle')
-        setErrorMessage(data.error || 'Failed to subscribe. Please try again.')
-      }
-    } catch {
-      setSubState('idle')
-      setErrorMessage('Unable to connect to the server. Please check your network and try again.')
-    }
-  }
-
-  const handleUnsubscribe = async () => {
-    if (isUnsubscribing) return
-    setIsUnsubscribing(true)
-    setErrorMessage('')
-    setInfoMessage('')
-
-    try {
-      const res = await fetch('/api/newsletter/unsubscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
-      })
-      const data = await res.json()
-
-      if (res.ok) {
-        if (userIsAuthenticated) {
-          setSubState('unsubscribed')
-          setInfoMessage('You have unsubscribed from the Boom Squad newsletter.')
-        } else {
-          // Guest request: verification link sent
-          setInfoMessage(data.message || 'If subscribed, an unsubscribe link has been sent to your inbox.')
-        }
-      } else {
-        setErrorMessage(data.error || 'Unable to process unsubscribe request.')
-      }
-    } catch {
-      setErrorMessage('Network error. Please try again.')
-    } finally {
-      setIsUnsubscribing(false)
-    }
   }
 
   return (
@@ -471,135 +327,7 @@ export function Footer() {
           </div>
         </div>
 
-        {/* 4. Newsletter Subscribe Section */}
-        <div className="mt-10 sm:mt-12 pt-8 sm:pt-10 border-t border-neutral-900">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-1">
-              <h4 className="text-sm sm:text-base font-black tracking-tight uppercase text-white">
-                Join the Boom Squad
-              </h4>
-              <p className="text-xs text-neutral-400">
-                Get new arrivals and offers by email. Unsubscribe anytime.
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
-              {subState === 'active' ? (
-                /* Subscribed Active State */
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                  <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-700 px-4 py-2.5 text-xs text-white">
-                    <span className="font-mono text-neutral-300 truncate max-w-[200px]">{email}</span>
-                  </div>
-                  <div className="inline-flex items-center justify-center gap-1.5 bg-white text-black px-5 py-2.5 text-xs uppercase tracking-widest font-black shrink-0 shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)]">
-                    <Check size={14} className="stroke-[3]" />
-                    <span>SUBSCRIBED</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleUnsubscribe}
-                    disabled={isUnsubscribing}
-                    className="text-[11px] text-neutral-400 hover:text-white underline underline-offset-4 font-mono transition-colors text-center sm:text-left px-1 py-1"
-                  >
-                    {isUnsubscribing ? 'Processing...' : 'Unsubscribe'}
-                  </button>
-                </div>
-              ) : subState === 'pending' ? (
-                /* Double Opt-In Pending State */
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                  <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-700 px-4 py-2.5 text-xs text-white">
-                    <Mail size={13} className="text-neutral-400 shrink-0" />
-                    <span className="font-mono text-neutral-300 truncate max-w-[200px]">{email}</span>
-                  </div>
-                  <div className="inline-flex items-center justify-center gap-1.5 bg-neutral-200 text-black px-4 py-2.5 text-xs uppercase tracking-widest font-black shrink-0">
-                    <span>CHECK YOUR EMAIL</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSubState('idle')
-                      setInfoMessage('')
-                      setErrorMessage('')
-                    }}
-                    className="text-[11px] text-neutral-400 hover:text-white underline underline-offset-4 font-mono transition-colors text-center sm:text-left px-1 py-1"
-                  >
-                    Use different email
-                  </button>
-                </div>
-              ) : (
-                /* Idle or Subscribing State */
-                <form
-                  onSubmit={handleSubscribe}
-                  className="flex flex-col sm:flex-row gap-2 w-full md:w-auto md:min-w-[380px]"
-                >
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value)
-                      if (errorMessage) setErrorMessage('')
-                    }}
-                    placeholder="Enter your email"
-                    required
-                    disabled={subState === 'subscribing'}
-                    className="bg-neutral-950 border border-neutral-800 text-white placeholder-neutral-500 px-4 py-2.5 text-xs flex-grow focus:outline-none focus:border-white transition-colors disabled:opacity-60 min-h-[44px]"
-                  />
-                  <button
-                    type="submit"
-                    disabled={subState === 'subscribing'}
-                    className="bg-white text-black hover:bg-neutral-200 px-5 py-2.5 text-xs uppercase tracking-widest font-bold flex items-center justify-center transition-colors disabled:opacity-50 shrink-0 min-h-[44px] cursor-pointer"
-                  >
-                    {subState === 'subscribing' ? (
-                      <>
-                        <RefreshCw size={13} className="mr-1.5 animate-spin" />
-                        <span>SUBSCRIBING...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>SUBSCRIBE</span>
-                        <ArrowRight size={13} className="ml-1.5" />
-                      </>
-                    )}
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>
-
-          {infoMessage && (
-            <div className="mt-3 text-xs flex items-center text-white bg-neutral-950 p-2.5 border border-neutral-800">
-              <CheckCircle2 size={15} className="text-white mr-2 shrink-0" />
-              <span>{infoMessage}</span>
-            </div>
-          )}
-
-          {errorMessage && (
-            <div className="mt-3 text-xs flex items-center text-[#DC2626] bg-red-950/20 p-2.5 border border-[#DC2626]/40">
-              <AlertCircle size={15} className="text-[#DC2626] mr-2 shrink-0" />
-              <span className="font-semibold">{errorMessage}</span>
-            </div>
-          )}
-
-          {subState === 'unsubscribed' && !infoMessage && (
-            <div className="mt-3 text-xs flex items-center justify-between text-neutral-400 bg-neutral-950 p-2.5 border border-neutral-800">
-              <div className="flex items-center">
-                <AlertCircle size={15} className="text-neutral-400 mr-2 shrink-0" />
-                <span>YOU HAVE UNSUBSCRIBED FROM MARKETING EMAILS.</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSubState('idle')
-                  setEmail('')
-                }}
-                className="text-[11px] uppercase font-bold text-white underline underline-offset-2 ml-3"
-              >
-                Re-subscribe
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* 5. Footer Bottom Bar */}
+        {/* 4. Footer Bottom Bar */}
         <div className="mt-10 sm:mt-12 pt-6 border-t border-neutral-900 flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500 gap-3 text-center sm:text-left">
           <p>© {new Date().getFullYear()} BUBBLE BOOM. All rights reserved.</p>
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-wider text-neutral-400">

@@ -1,33 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { inspectConfirmationToken } from '@/lib/newsletter'
+import { NextResponse } from 'next/server'
 
-export async function GET(request: NextRequest) {
-  try {
-    const token = request.nextUrl.searchParams.get('token')
-
-    if (!token) {
-      return NextResponse.json(
-        {
-          valid: false,
-          status: 'invalid',
-          message: 'Confirmation token is missing.',
-        },
-        { status: 400 }
-      )
-    }
-
-    const inspection = await inspectConfirmationToken({ token })
-
-    return NextResponse.json(inspection, { status: 200 })
-  } catch (err: any) {
-    console.error('Newsletter token inspection error:', err)
-    return NextResponse.json(
-      {
-        valid: false,
-        status: 'invalid',
-        message: 'Unable to inspect confirmation link.',
-      },
-      { status: 500 }
-    )
-  }
+export async function GET() {
+  return NextResponse.json(
+    { error: 'Newsletter service has been retired.' },
+    { status: 410 }
+  )
 }

@@ -298,14 +298,6 @@ export function HeroCarousel({
 
       {/* 4. Fixed Headline, Description & CTAs (Completely stable, zero layout shift) */}
       <div className="relative z-10 max-w-5xl mx-auto px-12 sm:px-16 md:px-20 py-16 sm:py-20 text-center flex flex-col items-center">
-        {/* Monogram Badge */}
-        <div className="mb-4 sm:mb-6 inline-flex items-center space-x-2 border border-white/20 bg-black/60 backdrop-blur-md px-3.5 sm:px-4 py-1.5 rounded-full shadow-lg">
-          <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-          <span className="text-[10px] sm:text-[11px] uppercase tracking-widest font-bold text-white/90">
-            BUBBLE BOOM ORIGINALS
-          </span>
-        </div>
-
         {/* Hero Main Heading */}
         <h1 className="text-4xl sm:text-7xl md:text-8xl lg:text-9xl font-extrabold tracking-tighter uppercase leading-[0.9] mb-4 sm:mb-6 text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)]">
           {heroTitle || 'WEAR THE BOOM.'}

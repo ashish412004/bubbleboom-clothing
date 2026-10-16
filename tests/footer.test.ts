@@ -78,11 +78,11 @@ describe('Responsive Footer Redesign Suite', () => {
     expect(footerSource).toContain('100% Secure Payments')
   })
 
-  it('connects newsletter form to /api/newsletter with storefront_footer source', () => {
-    expect(footerSource).toContain('/api/newsletter')
-    expect(footerSource).toContain('storefront_footer')
-    expect(footerSource).toContain('Join the Boom Squad')
-    expect(footerSource).toContain('Unsubscribe anytime.')
+  it('completely removes newsletter subscribe section and endpoints from the footer', () => {
+    expect(footerSource).not.toContain('/api/newsletter')
+    expect(footerSource).not.toContain('storefront_footer')
+    expect(footerSource).not.toContain('Join the Boom Squad')
+    expect(footerSource).not.toContain('Unsubscribe anytime.')
   })
 
   it('displays a compact copyright and payment support bottom bar', () => {

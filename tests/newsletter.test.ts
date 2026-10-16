@@ -1,410 +1,105 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import {
-  validateEmailAddress,
-  generateSecureToken,
-  subscribeNewsletter,
-  confirmNewsletterSubscription,
-  unsubscribeNewsletter,
-  getNewsletterSubscribersAdmin,
-  _resetNewsletterStore,
-} from '@/lib/newsletter'
+import { describe, it, expect } from 'vitest'
+import fs from 'fs'
+import path from 'path'
+import { POST as newsletterPost } from '@/app/api/newsletter/route'
+import { POST as confirmPost } from '@/app/api/newsletter/confirm/route'
+import { GET as verifyGet } from '@/app/api/newsletter/confirm/verify/route'
+import { POST as resendPost } from '@/app/api/newsletter/resend/route'
+import { GET as statusGet } from '@/app/api/newsletter/status/route'
+import { POST as unsubPost } from '@/app/api/newsletter/unsubscribe/route'
+import { GET as adminSubsGet, POST as adminSubsPost } from '@/app/api/admin/subscribers/route'
 import * as resendModule from '@/lib/emails/resend'
 
-describe('Boom Squad Newsletter Subscription Suite', () => {
-  beforeEach(() => {
-    _resetNewsletterStore()
-    vi.restoreAllMocks()
-    vi.useRealTimers()
+describe('Newsletter & Subscription System Retirement Suite', () => {
+  it('returns 410 Gone on customer newsletter subscription API (/api/newsletter)', async () => {
+    const res = await newsletterPost()
+    expect(res.status).toBe(410)
+    const json = await res.json()
+    expect(json.error).toContain('retired')
   })
 
-  afterEach(() => {
-    vi.useRealTimers()
+  it('returns 410 Gone on confirmation endpoint (/api/newsletter/confirm)', async () => {
+    const res = await confirmPost()
+    expect(res.status).toBe(410)
+    const json = await res.json()
+    expect(json.error).toContain('retired')
   })
 
-  describe('1. Client & Server Email Validation', () => {
-    it('accepts standard valid email addresses', () => {
-      expect(validateEmailAddress('ashish@bubbleboom.in')).toBe(true)
-      expect(validateEmailAddress('customer.first@gmail.com')).toBe(true)
-      expect(validateEmailAddress('test+tag@subdomain.example.co.in')).toBe(true)
-    })
-
-    it('rejects invalid or malformed email strings', () => {
-      expect(validateEmailAddress('')).toBe(false)
-      expect(validateEmailAddress('invalid-email')).toBe(false)
-      expect(validateEmailAddress('user@')).toBe(false)
-      expect(validateEmailAddress('@domain.com')).toBe(false)
-      expect(validateEmailAddress('user @domain.com')).toBe(false)
-      expect(validateEmailAddress('user@domain')).toBe(false)
-    })
-
-    it('rejects subscription requests with invalid email address and does not create record', async () => {
-      const res = await subscribeNewsletter({ email: 'bad-email' })
-      expect(res.success).toBe(false)
-      expect(res.error).toMatch(/valid email/i)
-
-      const adminList = await getNewsletterSubscribersAdmin({})
-      expect(adminList.counts.total).toBe(0)
-    })
+  it('returns 410 Gone on confirmation verification endpoint (/api/newsletter/confirm/verify)', async () => {
+    const res = await verifyGet()
+    expect(res.status).toBe(410)
+    const json = await res.json()
+    expect(json.error).toContain('retired')
   })
 
-  describe('2. Double Opt-In Verification Lifecycle', () => {
-    it('creates pending subscription and generates valid verification link with token', async () => {
-      const res = await subscribeNewsletter({
-        email: 'NEW.MEMBER@BubbleBoom.in',
-        source: 'storefront_footer',
-      })
-
-      expect(res.success).toBe(true)
-      expect(res.message).toMatch(/confirmation email sent/i)
-      expect(res.confirmationUrl).toBeDefined()
-      expect(res.confirmationUrl).toContain('/newsletter/confirm?token=')
-
-      const adminList = await getNewsletterSubscribersAdmin({})
-      expect(adminList.counts.total).toBe(1)
-      expect(adminList.counts.pending).toBe(1)
-      expect(adminList.counts.active).toBe(0)
-
-      const subscriber = adminList.subscribers[0]
-      expect(subscriber.email).toBe('new.member@bubbleboom.in')
-      expect(subscriber.status).toBe('pending')
-      expect(subscriber.consent_given).toBe(true)
-      expect(subscriber.source).toBe('storefront_footer')
-      expect(subscriber.confirmation_token).toBeDefined()
-    })
-
-    it('activates subscription only after clicking confirmation link with valid token', async () => {
-      const subRes = await subscribeNewsletter({ email: 'fan@boom.in' })
-      const token = new URL(subRes.confirmationUrl!).searchParams.get('token')!
-
-      // Confirm with token
-      const confirmRes = await confirmNewsletterSubscription({ token })
-      expect(confirmRes.success).toBe(true)
-      expect(confirmRes.message).toMatch(/part of the boom squad/i)
-      expect(confirmRes.email).toBe('fan@boom.in')
-
-      // Verify active status in admin
-      const adminList = await getNewsletterSubscribersAdmin({})
-      expect(adminList.counts.active).toBe(1)
-      expect(adminList.counts.pending).toBe(0)
-
-      const activeSub = adminList.subscribers[0]
-      expect(activeSub.status).toBe('active')
-      expect(activeSub.confirmed_at).toBeDefined()
-      expect(activeSub.confirmation_token).toBeNull() // consumed
-    })
-
-    it('rejects confirmation with expired token', async () => {
-      vi.useFakeTimers()
-      const subRes = await subscribeNewsletter({ email: 'late@boom.in' })
-      const token = new URL(subRes.confirmationUrl!).searchParams.get('token')!
-
-      // Fast forward past 24-hour expiration (25 hours)
-      vi.advanceTimersByTime(25 * 60 * 60 * 1000)
-
-      const confirmRes = await confirmNewsletterSubscription({ token })
-      expect(confirmRes.success).toBe(false)
-      expect(confirmRes.expired).toBe(true)
-      expect(confirmRes.error).toMatch(/expired/i)
-      vi.useRealTimers()
-    })
-
-    it('rejects reused or invalid confirmation tokens', async () => {
-      const subRes = await subscribeNewsletter({ email: 'reuse@boom.in' })
-      const token = new URL(subRes.confirmationUrl!).searchParams.get('token')!
-
-      // First confirmation succeeds
-      const firstConfirm = await confirmNewsletterSubscription({ token })
-      expect(firstConfirm.success).toBe(true)
-
-      // Second attempt with same token fails
-      const secondConfirm = await confirmNewsletterSubscription({ token })
-      expect(secondConfirm.success).toBe(false)
-      expect(secondConfirm.error).toMatch(/invalid or has already been used/i)
-    })
+  it('returns 410 Gone on resend confirmation endpoint (/api/newsletter/resend)', async () => {
+    const res = await resendPost()
+    expect(res.status).toBe(410)
+    const json = await res.json()
+    expect(json.error).toContain('retired')
   })
 
-  describe('3. Rate Limiting & Cooldown Protection', () => {
-    it('blocks rapid duplicate requests within 60-second cooldown window', async () => {
-      const email = 'cooldown@boom.in'
-      const first = await subscribeNewsletter({ email })
-      expect(first.success).toBe(true)
-
-      // Immediately attempt a second subscribe request
-      const second = await subscribeNewsletter({ email })
-      expect(second.success).toBe(false)
-      expect(second.rateLimited).toBe(true)
-      expect(second.error).toMatch(/wait \d+ seconds/i)
-    })
-
-    it('allows resend after cooldown period elapses with a fresh token', async () => {
-      vi.useFakeTimers()
-      const email = 'resend@boom.in'
-      const first = await subscribeNewsletter({ email })
-      const token1 = new URL(first.confirmationUrl!).searchParams.get('token')!
-
-      // Advance clock by 61 seconds
-      vi.advanceTimersByTime(61 * 1000)
-
-      const second = await subscribeNewsletter({ email })
-      expect(second.success).toBe(true)
-      const token2 = new URL(second.confirmationUrl!).searchParams.get('token')!
-
-      // Fresh token was issued
-      expect(token2).not.toEqual(token1)
-      vi.useRealTimers()
-    })
+  it('returns 410 Gone on subscriber status endpoint (/api/newsletter/status)', async () => {
+    const res = await statusGet()
+    expect(res.status).toBe(410)
+    const json = await res.json()
+    expect(json.error).toContain('retired')
   })
 
-  describe('4. Repeated Subscriptions & Privacy Protection', () => {
-    it('handles repeated subscriptions for already active subscribers without revealing private account details', async () => {
-      const email = 'active.member@boom.in'
-      const subRes = await subscribeNewsletter({ email })
-      const token = new URL(subRes.confirmationUrl!).searchParams.get('token')!
-      await confirmNewsletterSubscription({ token })
-
-      // Now member tries to subscribe again
-      const repeatRes = await subscribeNewsletter({ email })
-      expect(repeatRes.success).toBe(true)
-      expect(repeatRes.alreadyActive).toBe(true)
-      expect(repeatRes.message).toMatch(/already subscribed/i)
-
-      // Does not create duplicate database rows
-      const adminList = await getNewsletterSubscribersAdmin({})
-      expect(adminList.counts.total).toBe(1)
-      expect(adminList.counts.active).toBe(1)
-    })
-
-    it('allows unsubscribed subscribers to re-subscribe and restarts verification', async () => {
-      vi.useFakeTimers()
-      const email = 'reactivate@boom.in'
-      const subRes = await subscribeNewsletter({ email })
-      const confirmToken = new URL(subRes.confirmationUrl!).searchParams.get('token')!
-      await confirmNewsletterSubscription({ token: confirmToken })
-
-      // Fetch subscriber's unsubscribe token from admin
-      const adminBefore = await getNewsletterSubscribersAdmin({})
-      const unsubToken = adminBefore.subscribers[0].unsubscribe_token!
-
-      // Advance past cooldown before unsubscribe
-      vi.advanceTimersByTime(61 * 1000)
-
-      // Unsubscribe
-      await unsubscribeNewsletter({ token: unsubToken })
-      const adminUnsub = await getNewsletterSubscribersAdmin({})
-      expect(adminUnsub.counts.unsubscribed).toBe(1)
-
-      // Advance past cooldown before re-subscribing
-      vi.advanceTimersByTime(61 * 1000)
-
-      // Now customer changes mind and re-subscribes
-      const reSub = await subscribeNewsletter({ email })
-      expect(reSub.success).toBe(true)
-      expect(reSub.message).toMatch(/confirmation email sent/i)
-
-      const adminAfter = await getNewsletterSubscribersAdmin({})
-      expect(adminAfter.counts.total).toBe(1)
-      expect(adminAfter.counts.pending).toBe(1)
-      vi.useRealTimers()
-    })
+  it('returns 410 Gone on unsubscribe endpoint (/api/newsletter/unsubscribe)', async () => {
+    const res = await unsubPost()
+    expect(res.status).toBe(410)
+    const json = await res.json()
+    expect(json.error).toContain('retired')
   })
 
-  describe('5. Working 1-Click Unsubscribe (No Login Required)', () => {
-    it('unsubscribes customer cleanly using persistent token without impacting orders or auth', async () => {
-      const email = 'optout@boom.in'
-      const subRes = await subscribeNewsletter({ email })
-      const token = new URL(subRes.confirmationUrl!).searchParams.get('token')!
-      await confirmNewsletterSubscription({ token })
+  it('returns 410 Gone on admin subscribers endpoints (/api/admin/subscribers)', async () => {
+    const getRes = await adminSubsGet()
+    expect(getRes.status).toBe(410)
+    const getJson = await getRes.json()
+    expect(getJson.error).toContain('retired')
 
-      const adminList = await getNewsletterSubscribersAdmin({})
-      const unsubToken = adminList.subscribers[0].unsubscribe_token!
-
-      const unsubRes = await unsubscribeNewsletter({ token: unsubToken })
-      expect(unsubRes.success).toBe(true)
-      expect(unsubRes.message).toMatch(/successfully unsubscribed/i)
-
-      const adminAfter = await getNewsletterSubscribersAdmin({})
-      expect(adminAfter.counts.active).toBe(0)
-      expect(adminAfter.counts.unsubscribed).toBe(1)
-      expect(adminAfter.subscribers[0].unsubscribed_at).toBeDefined()
-    })
-
-    it('handles idempotent repeated unsubscribe calls gracefully', async () => {
-      const email = 'idempotent@boom.in'
-      const subRes = await subscribeNewsletter({ email })
-      const token = new URL(subRes.confirmationUrl!).searchParams.get('token')!
-      await confirmNewsletterSubscription({ token })
-
-      const adminList = await getNewsletterSubscribersAdmin({})
-      const unsubToken = adminList.subscribers[0].unsubscribe_token!
-
-      await unsubscribeNewsletter({ token: unsubToken })
-      const secondUnsub = await unsubscribeNewsletter({ token: unsubToken })
-      expect(secondUnsub.success).toBe(true)
-      expect(secondUnsub.message).toMatch(/already unsubscribed/i)
-    })
-
-    it('rejects invalid or missing unsubscribe token', async () => {
-      const res = await unsubscribeNewsletter({ token: 'bogus_token' })
-      expect(res.success).toBe(false)
-      expect(res.error).toMatch(/invalid/i)
-    })
+    const postRes = await adminSubsPost()
+    expect(postRes.status).toBe(410)
+    const postJson = await postRes.json()
+    expect(postJson.error).toContain('retired')
   })
 
-  describe('6. Honest Error Handling (Never Claim Sent When Failed)', () => {
-    it('never claims confirmation email was sent if email transport throws an error', async () => {
-      // Mock sendNewsletterConfirmationEmail to return error
-      vi.spyOn(resendModule, 'sendNewsletterConfirmationEmail').mockResolvedValueOnce({
-        error: 'Resend API rate limit or invalid domain configuration',
-      })
+  it('verifies Newsletter Squad is removed from Admin navigation (sidebar & shell)', () => {
+    const sidebarPath = path.join(process.cwd(), 'src/components/admin/admin-sidebar.tsx')
+    const shellPath = path.join(process.cwd(), 'src/components/admin/admin-shell.tsx')
+    const sidebarContent = fs.readFileSync(sidebarPath, 'utf-8')
+    const shellContent = fs.readFileSync(shellPath, 'utf-8')
 
-      const res = await subscribeNewsletter({ email: 'transport.error@boom.in' })
-      expect(res.success).toBe(false)
-      expect(res.error).toMatch(/unable to send verification email/i)
-
-      // Ensure no phantom confirmed or active records
-      const adminList = await getNewsletterSubscribersAdmin({})
-      expect(adminList.counts.active).toBe(0)
-    })
+    expect(sidebarContent).not.toContain('/admin/subscribers')
+    expect(sidebarContent).not.toContain('Newsletter Squad')
+    expect(shellContent).not.toContain('/admin/subscribers')
+    expect(shellContent).not.toContain('Newsletter Squad')
   })
 
-  describe('7. Admin Filtering, Search & Aggregates', () => {
-    it('filters subscribers by status correctly and calculates aggregate counts', async () => {
-      // Create one pending
-      await subscribeNewsletter({ email: 'one.pending@boom.in' })
+  it('verifies /newsletter/confirm and /newsletter/unsubscribe redirect to home', () => {
+    const confirmPath = path.join(process.cwd(), 'src/app/newsletter/confirm/page.tsx')
+    const unsubPath = path.join(process.cwd(), 'src/app/newsletter/unsubscribe/page.tsx')
+    const confirmContent = fs.readFileSync(confirmPath, 'utf-8')
+    const unsubContent = fs.readFileSync(unsubPath, 'utf-8')
 
-      // Create one active
-      const s2 = await subscribeNewsletter({ email: 'two.active@boom.in' })
-      const token2 = new URL(s2.confirmationUrl!).searchParams.get('token')!
-      await confirmNewsletterSubscription({ token: token2 })
-
-      // Create one unsubscribed
-      const s3 = await subscribeNewsletter({ email: 'three.unsub@boom.in' })
-      const token3 = new URL(s3.confirmationUrl!).searchParams.get('token')!
-      await confirmNewsletterSubscription({ token: token3 })
-      const adminData = await getNewsletterSubscribersAdmin({})
-      const unsubToken3 = adminData.subscribers.find((s) => s.email === 'three.unsub@boom.in')!.unsubscribe_token!
-      await unsubscribeNewsletter({ token: unsubToken3 })
-
-      // Query all
-      const allRes = await getNewsletterSubscribersAdmin({ status: 'all' })
-      expect(allRes.counts.total).toBe(3)
-      expect(allRes.counts.pending).toBe(1)
-      expect(allRes.counts.active).toBe(1)
-      expect(allRes.counts.unsubscribed).toBe(1)
-      expect(allRes.subscribers.length).toBe(3)
-
-      // Query only active
-      const activeRes = await getNewsletterSubscribersAdmin({ status: 'active' })
-      expect(activeRes.subscribers.length).toBe(1)
-      expect(activeRes.subscribers[0].email).toBe('two.active@boom.in')
-
-      // Query search filter
-      const searchRes = await getNewsletterSubscribersAdmin({ search: 'pending' })
-      expect(searchRes.subscribers.length).toBe(1)
-      expect(searchRes.subscribers[0].email).toBe('one.pending@boom.in')
-    })
+    expect(confirmContent).toContain("redirect('/')")
+    expect(unsubContent).toContain("redirect('/')")
   })
 
-  describe('8. Subscriber Status, Admin Resend & Unsubscribe Request', () => {
-    it('retrieves subscriber by email accurately and handles case-insensitivity', async () => {
-      const { getSubscriberByEmail } = await import('@/lib/newsletter')
-      await subscribeNewsletter({ email: 'Test.Member@Boom.in' })
+  it('preserves all transactional email functions while retiring marketing/newsletter emails', () => {
+    // Transactional emails MUST exist
+    expect(typeof resendModule.sendOrderConfirmationEmail).toBe('function')
+    expect(typeof resendModule.sendOrderShippedEmail).toBe('function')
+    expect(typeof resendModule.sendOrderDeliveredEmail).toBe('function')
+    expect(typeof resendModule.sendReturnRequestEmail).toBe('function')
+    expect(typeof resendModule.sendReturnApprovedEmail).toBe('function')
+    expect(typeof resendModule.sendWelcomeEmail).toBe('function')
+    expect(typeof resendModule.sendReturnLifecycleEmail).toBe('function')
 
-      const found = await getSubscriberByEmail('test.member@boom.in')
-      expect(found).not.toBeNull()
-      expect(found?.email).toBe('test.member@boom.in')
-      expect(found?.status).toBe('pending')
-
-      const notFound = await getSubscriberByEmail('unknown@boom.in')
-      expect(notFound).toBeNull()
-    })
-
-    it('admin can resend confirmation link for pending subscriber', async () => {
-      const { resendConfirmationEmailAdmin } = await import('@/lib/newsletter')
-      await subscribeNewsletter({ email: 'resend.member@boom.in' })
-
-      const adminList = await getNewsletterSubscribersAdmin({})
-      const subscriber = adminList.subscribers.find((s) => s.email === 'resend.member@boom.in')!
-
-      const resendRes = await resendConfirmationEmailAdmin({ subscriberId: subscriber.id })
-      expect(resendRes.success).toBe(true)
-      expect(resendRes.message).toMatch(/re-sent successfully/i)
-    })
-
-    it('sends unsubscribe request link to subscriber email without revealing private data', async () => {
-      const { requestUnsubscribeEmail } = await import('@/lib/newsletter')
-      await subscribeNewsletter({ email: 'optout.request@boom.in' })
-
-      const res = await requestUnsubscribeEmail({ email: 'optout.request@boom.in' })
-      expect(res.success).toBe(true)
-      expect(res.message).toMatch(/unsubscribe/i)
-
-      // Unsubscribed user calling again
-      const adminList = await getNewsletterSubscribersAdmin({})
-      const subscriber = adminList.subscribers.find((s) => s.email === 'optout.request@boom.in')!
-      await unsubscribeNewsletter({ token: subscriber.unsubscribe_token! })
-
-      const resAlready = await requestUnsubscribeEmail({ email: 'optout.request@boom.in' })
-      expect(resAlready.success).toBe(true)
-      expect(resAlready.message).toMatch(/already unsubscribed/i)
-    })
-  })
-
-  describe('9. Scanner-Safe Inspection, Tamper Resistance & Confirmation Landing State', () => {
-    it('allows inspecting confirmation token without consuming it (scanner safe)', async () => {
-      const { inspectConfirmationToken } = await import('@/lib/newsletter')
-      const subRes = await subscribeNewsletter({ email: 'scanner.safe@boom.in' })
-      const token = new URL(subRes.confirmationUrl!).searchParams.get('token')!
-
-      // Multiple scanner prefetch GET calls
-      const inspect1 = await inspectConfirmationToken({ token })
-      expect(inspect1.valid).toBe(true)
-      expect(inspect1.status).toBe('ready')
-      expect(inspect1.email).toBe('scanner.safe@boom.in')
-
-      const inspect2 = await inspectConfirmationToken({ token })
-      expect(inspect2.valid).toBe(true)
-      expect(inspect2.status).toBe('ready')
-
-      // Token can still be confirmed by the human
-      const confirmRes = await confirmNewsletterSubscription({ token })
-      expect(confirmRes.success).toBe(true)
-      expect(confirmRes.email).toBe('scanner.safe@boom.in')
-
-      // Inspecting after confirmation returns already_confirmed
-      const inspect3 = await inspectConfirmationToken({ token })
-      expect(inspect3.valid).toBe(true)
-      expect(inspect3.status).toBe('already_confirmed')
-    })
-
-    it('detects tampered or forged confirmation tokens', async () => {
-      const { inspectConfirmationToken, parseAndVerifyToken } = await import('@/lib/newsletter')
-      const subRes = await subscribeNewsletter({ email: 'tamper.check@boom.in' })
-      const token = new URL(subRes.confirmationUrl!).searchParams.get('token')!
-
-      // Tampered token string
-      const tampered = token.slice(0, -4) + 'abcd'
-      const parsed = parseAndVerifyToken(tampered)
-      expect(parsed.email).toBeUndefined() // Tampered signature rejected
-
-      const inspectRes = await inspectConfirmationToken({ token: 'bogus_forged_token_xyz' })
-      expect(inspectRes.status).toBe('invalid')
-    })
-
-    it('handles resend confirmation email with rate-limiting protection', async () => {
-      const { resendConfirmationEmail } = await import('@/lib/newsletter')
-      const email = 'resend.test@boom.in'
-
-      const res1 = await resendConfirmationEmail({ email })
-      expect(res1.success).toBe(true)
-      expect(res1.message).toMatch(/fresh verification link/i)
-
-      // Immediate second call should be rate-limited (60s cooldown)
-      const res2 = await resendConfirmationEmail({ email })
-      expect(res2.success).toBe(false)
-      expect(res2.rateLimited).toBe(true)
-      expect(res2.error).toMatch(/wait.*seconds/i)
-    })
+    // Newsletter-specific functions MUST NOT exist
+    expect((resendModule as any).sendNewsletterConfirmationEmail).toBeUndefined()
+    expect((resendModule as any).sendNewsletterWelcomeEmail).toBeUndefined()
+    expect((resendModule as any).sendNewsletterUnsubscribeEmail).toBeUndefined()
   })
 })
-
