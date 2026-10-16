@@ -5,6 +5,7 @@ import { getPaymentStatus, getOrderPayments } from '@/lib/payments/cashfree'
 import { finalizeOrderPayment } from '@/lib/payments/finalization'
 import { isSupabaseConfigured } from '@/lib/supabase/server'
 import { getCurrentUser, isAdmin } from '@/lib/auth'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { AlertCircle } from 'lucide-react'
 import { PaymentRecoveryClient } from './payment-recovery-client'
@@ -74,6 +75,9 @@ export default async function OrderPaymentPage({ params, searchParams }: OrderPa
 
   // 2. Ownership verification
   const currentUser = await getCurrentUser()
+  if (order.user_id && !currentUser) {
+    redirect(`/login?next=${encodeURIComponent(`/orders/${order.order_number}/payment`)}`)
+  }
   if (order.user_id && currentUser && order.user_id !== currentUser.id) {
     const userIsAdmin = await isAdmin(currentUser.id)
     if (!userIsAdmin) {

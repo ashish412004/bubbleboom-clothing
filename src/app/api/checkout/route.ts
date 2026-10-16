@@ -9,12 +9,20 @@ import { queueOrderNotification, queueAdminNewOrderNotification } from '@/lib/em
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies()
-    const sessionId = cookieStore.get('bb_session_id')?.value
+    let sessionId: string | undefined
+    let rawAuth: string | undefined
+
+    try {
+      const cookieStore = await cookies()
+      sessionId = cookieStore.get('bb_session_id')?.value
+      rawAuth = cookieStore.get('bb_auth_user')?.value
+    } catch {
+      sessionId = request.cookies?.get?.('bb_session_id')?.value
+      rawAuth = request.cookies?.get?.('bb_auth_user')?.value
+    }
 
     // Auth check
     let userId: string | undefined = undefined
-    const rawAuth = cookieStore.get('bb_auth_user')?.value
     if (rawAuth) {
       try {
         const u = JSON.parse(rawAuth)
@@ -30,8 +38,16 @@ export async function POST(request: NextRequest) {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) userId = user.id
       } catch {
-        // Guest mode
+        // Unauthenticated
       }
+    }
+
+    // MANDATORY AUTHENTICATION: Guest checkout is strictly prohibited
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Customer authentication is mandatory. Please sign in to complete your order.' },
+        { status: 401 }
+      )
     }
 
     const body = await request.json()
@@ -56,6 +72,22 @@ export async function POST(request: NextRequest) {
     if (!full_name || !email || !phone || !address_line1 || !city || !state || !pin_code) {
       return NextResponse.json(
         { error: 'Please provide all required shipping and contact details.' },
+        { status: 400 }
+      )
+    }
+
+    // MANDATORY MOBILE NUMBER NORMALIZATION & VALIDATION (10 DIGITS, STARTS 6-9)
+    const rawDigits = (phone || '').replace(/\D/g, '')
+    let normalizedPhone = rawDigits
+    if (normalizedPhone.startsWith('91') && normalizedPhone.length === 12) {
+      normalizedPhone = normalizedPhone.slice(2)
+    } else if (normalizedPhone.startsWith('0') && normalizedPhone.length === 11) {
+      normalizedPhone = normalizedPhone.slice(1)
+    }
+
+    if (!normalizedPhone || normalizedPhone.length !== 10 || !/^[6-9]\d{9}$/.test(normalizedPhone)) {
+      return NextResponse.json(
+        { error: 'A valid 10-digit Indian mobile number is mandatory (starts with 6-9).' },
         { status: 400 }
       )
     }
@@ -91,10 +123,10 @@ export async function POST(request: NextRequest) {
     const orderRes = await createOrder({
       user_id: userId,
       guest_email: email,
-      guest_phone: phone,
+      guest_phone: normalizedPhone,
       shipping_address: {
         full_name,
-        phone,
+        phone: normalizedPhone,
         address_line1,
         address_line2: address_line2 || null,
         landmark: landmark || null,

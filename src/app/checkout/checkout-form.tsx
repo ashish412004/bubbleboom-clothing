@@ -17,12 +17,23 @@ import {
   Loader2,
   ShoppingBag,
   MapPin,
-  Check
+  Check,
+  ChevronDown
 } from 'lucide-react'
 import { formatPrice, getSafeImageUrl, findImageForVariantColor } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
 import { load as loadCashfree } from '@cashfreepayments/cashfree-js'
+
+export function normalizeIndianMobile(input: string): string {
+  let clean = (input || '').replace(/\D/g, '')
+  if (clean.startsWith('91') && clean.length === 12) {
+    clean = clean.slice(2)
+  } else if (clean.startsWith('0') && clean.length === 11) {
+    clean = clean.slice(1)
+  }
+  return clean.slice(0, 10)
+}
 
 interface CartItemData {
   id: string
@@ -102,6 +113,7 @@ export function CheckoutForm({
   const [pinCode, setPinCode] = useState(defaultAddr?.pin_code || '')
   const [paymentMethod, setPaymentMethod] = useState<'cashfree' | 'cod'>('cashfree')
   const [notes, setNotes] = useState('')
+  const [mobileSummaryOpen, setMobileSummaryOpen] = useState(false)
 
   // Saved addresses
   const [savedAddresses, setSavedAddresses] = useState<any[]>(initialAddresses)
@@ -118,9 +130,10 @@ export function CheckoutForm({
           if (def) {
             setSelectedSavedId(def.id)
             setFullName(def.full_name || userName)
-            setPhone(def.phone || userPhone)
+            setPhone(normalizeIndianMobile(def.phone || userPhone))
             setAddressLine1(def.address_line1 || '')
             setAddressLine2(def.address_line2 || '')
+            setLandmark(def.landmark || '')
             setCity(def.city || '')
             setState(def.state || '')
             setPinCode(def.pin_code || '')
@@ -133,9 +146,10 @@ export function CheckoutForm({
   const handleSelectSavedAddress = (addr: any) => {
     setSelectedSavedId(addr.id)
     setFullName(addr.full_name || '')
-    setPhone(addr.phone || '')
+    setPhone(normalizeIndianMobile(addr.phone || ''))
     setAddressLine1(addr.address_line1 || '')
     setAddressLine2(addr.address_line2 || '')
+    setLandmark(addr.landmark || '')
     setCity(addr.city || '')
     setState(addr.state || '')
     setPinCode(addr.pin_code || '')
@@ -179,7 +193,8 @@ export function CheckoutForm({
   const isAddressComplete = Boolean(
     fullName.trim().length >= 2 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
-    phone.replace(/\D/g, '').length === 10 &&
+    normalizeIndianMobile(phone).length === 10 &&
+    /^[6-9]\d{9}$/.test(normalizeIndianMobile(phone)) &&
     addressLine1.trim().length >= 5 &&
     city.trim().length >= 2 &&
     state.trim().length > 0 &&
@@ -197,7 +212,7 @@ export function CheckoutForm({
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim())) return 'Enter a valid email address (e.g. name@domain.com).'
         return ''
       case 'phone': {
-        const clean = val.replace(/\D/g, '')
+        const clean = normalizeIndianMobile(val)
         if (!clean) return 'Mobile number is required.'
         if (clean.length !== 10 || !/^[6-9]\d{9}$/.test(clean)) {
           return 'Enter a valid 10-digit Indian mobile number (starts with 6-9).'
@@ -458,7 +473,7 @@ export function CheckoutForm({
     isSubmittingRef.current = true
     setLoading(true)
 
-    const cleanPhone = phone.replace(/\D/g, '')
+    const cleanPhone = normalizeIndianMobile(phone)
 
     try {
       const res = await fetch('/api/checkout', {
@@ -537,6 +552,94 @@ export function CheckoutForm({
     <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-10">
       {/* Left Column: Delivery & Payment Details */}
       <div className="lg:col-span-7 space-y-8" ref={addressSectionRef}>
+        {/* Mobile Collapsible Order Summary Banner (< lg viewports) */}
+        <div className="lg:hidden border border-neutral-300 bg-[#F8F8F6] p-4 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setMobileSummaryOpen(!mobileSummaryOpen)}
+            className="w-full flex items-center justify-between text-xs font-bold uppercase tracking-wider text-black cursor-pointer"
+            aria-expanded={mobileSummaryOpen}
+            aria-label="Toggle mobile order summary"
+          >
+            <div className="flex items-center gap-2">
+              <ShoppingBag size={15} />
+              <span>{mobileSummaryOpen ? 'Hide Order Summary' : 'Show Order Summary'}</span>
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${mobileSummaryOpen ? 'rotate-180' : ''}`}
+              />
+            </div>
+            <span className="font-extrabold text-sm text-black">
+              {formatPrice(Math.round(totalPaise / 100))}
+            </span>
+          </button>
+
+          {mobileSummaryOpen && (
+            <div className="mt-4 pt-3 border-t border-neutral-200 space-y-3">
+              {/* Item List Preview */}
+              <div className="max-h-56 overflow-y-auto space-y-2.5 divide-y divide-neutral-200">
+                {items.map((item) => {
+                  const prod = item.variant?.product
+                  if (!prod) return null
+                  const matchedImg = findImageForVariantColor(prod.images, item.variant?.color)
+                  const firstImg = matchedImg?.image_url
+                  return (
+                    <div key={item.id} className="pt-2 flex items-center gap-3 text-xs">
+                      <div className="relative w-10 h-12 bg-neutral-100 border shrink-0 overflow-hidden">
+                        {firstImg && (
+                          <Image
+                            src={getSafeImageUrl(firstImg)}
+                            alt={prod.name}
+                            fill
+                            className="object-cover"
+                            sizes="40px"
+                          />
+                        )}
+                      </div>
+                      <div className="flex-grow min-w-0">
+                        <p className="font-bold truncate text-black">{prod.name}</p>
+                        <p className="text-[10px] text-neutral-500 font-mono">
+                          Size: {item.variant.size} · Qty {item.quantity} · {item.variant.color}
+                        </p>
+                      </div>
+                      <span className="font-bold text-xs shrink-0 text-black">
+                        {formatPrice(prod.selling_price * item.quantity)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Price Breakdown */}
+              <div className="pt-2 border-t border-neutral-200 space-y-1 text-xs text-neutral-600">
+                <div className="flex justify-between">
+                  <span>Bag Subtotal</span>
+                  <span>{formatPrice(Math.round(subtotalPaise / 100))}</span>
+                </div>
+                {couponDiscountPaise > 0 && (
+                  <div className="flex justify-between text-black font-bold">
+                    <span>Coupon Discount</span>
+                    <span>-{formatPrice(Math.round(couponDiscountPaise / 100))}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>Delivery</span>
+                  <span>{shippingPaise === 0 ? 'FREE' : formatPrice(Math.round(shippingPaise / 100))}</span>
+                </div>
+                {paymentMethod === 'cod' && (
+                  <div className="flex justify-between">
+                    <span>COD Handling Fee</span>
+                    <span>{formatPrice(Math.round(codFeePaise / 100))}</span>
+                  </div>
+                )}
+                <div className="pt-2 border-t border-neutral-200 flex justify-between font-extrabold text-black text-sm">
+                  <span>Total Amount</span>
+                  <span>{formatPrice(Math.round(totalPaise / 100))}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         {/* Contact Info */}
         <section className="bg-white border border-neutral-200 p-6 space-y-4">
           <h2 className="text-xs uppercase tracking-widest font-extrabold text-black pb-2 border-b border-neutral-200">
@@ -598,12 +701,17 @@ export function CheckoutForm({
               </span>
               <input
                 type="tel"
+                inputMode="tel"
+                autoComplete="tel-national"
                 maxLength={10}
                 value={phone}
-                onChange={(e) => handleFieldChange('phone', e.target.value.replace(/\D/g, ''), setPhone)}
+                onChange={(e) => {
+                  const norm = normalizeIndianMobile(e.target.value)
+                  handleFieldChange('phone', norm, setPhone)
+                }}
                 onBlur={(e) => handleBlur('phone', e.target.value)}
                 placeholder="9876543210"
-                className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
+                className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors min-h-[44px] ${
                   errors.phone ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
                 }`}
               />

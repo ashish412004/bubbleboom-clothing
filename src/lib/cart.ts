@@ -560,8 +560,6 @@ export async function mergeGuestCartIntoUserCart(userId: string, sessionId: stri
     .eq('session_id', sessionId)
     .maybeSingle()
 
-  if (!guestCart) return { success: true }
-
   const { data: userCart } = await supabase
     .from('carts')
     .select('id')
@@ -580,43 +578,77 @@ export async function mergeGuestCartIntoUserCart(userId: string, sessionId: stri
 
   if (!targetCartId) return { error: 'Failed to find or create user cart' }
 
-  const { data: guestItems } = await supabase
-    .from('cart_items')
-    .select('*, variant:product_variants(stock)')
-    .eq('cart_id', guestCart.id)
+  if (guestCart) {
+    const { data: guestItems } = await supabase
+      .from('cart_items')
+      .select('*, variant:product_variants(stock)')
+      .eq('cart_id', guestCart.id)
 
-  if (guestItems && guestItems.length > 0) {
-    for (const item of guestItems) {
-      const { data: existingUserItem } = await supabase
-        .from('cart_items')
-        .select('id, quantity')
-        .eq('cart_id', targetCartId)
-        .eq('variant_id', item.variant_id)
-        .maybeSingle()
+    if (guestItems && guestItems.length > 0) {
+      for (const item of guestItems) {
+        const { data: existingUserItem } = await supabase
+          .from('cart_items')
+          .select('id, quantity')
+          .eq('cart_id', targetCartId)
+          .eq('variant_id', item.variant_id)
+          .maybeSingle()
 
-      const maxStock = (item as any).variant?.stock ?? 999
-      if (existingUserItem) {
-        const mergedQty = Math.min(maxStock, existingUserItem.quantity + item.quantity)
-        await supabase
-          .from('cart_items')
-          .update({ quantity: mergedQty, updated_at: new Date().toISOString() })
-          .eq('id', existingUserItem.id)
-      } else {
-        const initialQty = Math.min(maxStock, item.quantity)
-        await supabase
-          .from('cart_items')
-          .insert({
-            cart_id: targetCartId,
-            variant_id: item.variant_id,
-            quantity: initialQty,
-          })
+        const maxStock = (item as any).variant?.stock ?? 999
+        if (existingUserItem) {
+          const mergedQty = Math.min(maxStock, existingUserItem.quantity + item.quantity)
+          await supabase
+            .from('cart_items')
+            .update({ quantity: mergedQty, updated_at: new Date().toISOString() })
+            .eq('id', existingUserItem.id)
+        } else {
+          const initialQty = Math.min(maxStock, item.quantity)
+          await supabase
+            .from('cart_items')
+            .insert({
+              cart_id: targetCartId,
+              variant_id: item.variant_id,
+              quantity: initialQty,
+            })
+        }
       }
-    }
 
-    // Delete guest cart items and guest cart
-    await supabase.from('cart_items').delete().eq('cart_id', guestCart.id)
-    await supabase.from('carts').delete().eq('id', guestCart.id)
+      // Delete guest cart items and guest cart
+      await supabase.from('cart_items').delete().eq('cart_id', guestCart.id)
+      await supabase.from('carts').delete().eq('id', guestCart.id)
+    }
   }
+
+  // Also merge any offline/cookie cart items if present
+  try {
+    const localItems = await getLocalCartFromCookie()
+    if (localItems && localItems.length > 0) {
+      for (const item of localItems) {
+        const { data: existingUserItem } = await supabase
+          .from('cart_items')
+          .select('id, quantity')
+          .eq('cart_id', targetCartId)
+          .eq('variant_id', item.variant_id)
+          .maybeSingle()
+
+        if (existingUserItem) {
+          const mergedQty = existingUserItem.quantity + item.quantity
+          await supabase
+            .from('cart_items')
+            .update({ quantity: mergedQty, updated_at: new Date().toISOString() })
+            .eq('id', existingUserItem.id)
+        } else {
+          await supabase
+            .from('cart_items')
+            .insert({
+              cart_id: targetCartId,
+              variant_id: item.variant_id,
+              quantity: item.quantity,
+            })
+        }
+      }
+      await setLocalCartCookie([])
+    }
+  } catch {}
 
   return { success: true }
 }
