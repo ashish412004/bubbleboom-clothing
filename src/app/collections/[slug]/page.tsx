@@ -12,6 +12,8 @@ interface CollectionPageProps {
   params: Promise<{ slug: string }>
 }
 
+export const revalidate = 60
+
 export default async function CollectionDetailPage({ params }: CollectionPageProps) {
   const { slug } = await params
   const collection = await getCollectionBySlug(slug)

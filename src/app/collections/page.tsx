@@ -10,6 +10,8 @@ export const metadata = {
   description: 'Curated capsules designed for individuality and attitude. Wear the Boom.',
 }
 
+export const revalidate = 60
+
 export default async function CollectionsPage() {
   const collections = await getCollections()
 

@@ -223,7 +223,52 @@ export function ProductInteractive({
       return
     }
 
-    setIsAdding(true)
+    // 1. Instant Optimistic UI Feedback (0ms latency)
+    incrementCart(quantity)
+    setJustAdded(true)
+    setTimeout(() => setJustAdded(false), 3000)
+
+    // Show "Added to Bag" toast immediately
+    toast.custom(
+      (t) => (
+        <div
+          className={`${
+            t.visible ? 'animate-enter' : 'animate-leave'
+          } max-w-md w-full bg-black text-white shadow-2xl pointer-events-auto flex items-center justify-between p-4 border border-neutral-700`}
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center shrink-0">
+              <Check size={16} className="text-white" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider">Added to Bag</p>
+              <p className="text-[11px] text-neutral-400 truncate max-w-[200px]">
+                {product.name} ({selectedColor} / {selectedSize} &times; {quantity})
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 pl-3 border-l border-neutral-800">
+            <Link
+              href="/cart"
+              onClick={() => toast.dismiss(t.id)}
+              className="bg-white text-black hover:bg-neutral-200 text-[10px] uppercase tracking-widest font-extrabold px-3 py-2 transition-colors shrink-0"
+            >
+              View Bag
+            </Link>
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t.id)}
+              className="text-neutral-400 hover:text-white p-1"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      ),
+      { duration: 4500, position: 'top-right' }
+    )
+
+    // 2. Perform authoritative background persistence
     try {
       const res = await fetch('/api/cart', {
         method: 'POST',
@@ -235,54 +280,16 @@ export function ProductInteractive({
       })
 
       const data = await res.json()
-      if (res.ok) {
-        incrementCart(quantity)
-        setJustAdded(true)
-        setTimeout(() => setJustAdded(false), 3000)
-
-        // Show "Added to Bag" toast with "View Bag" action
-        toast.custom(
-          (t) => (
-            <div
-              className={`${
-                t.visible ? 'animate-enter' : 'animate-leave'
-              } max-w-md w-full bg-black text-white shadow-2xl pointer-events-auto flex items-center justify-between p-4 border border-neutral-700`}
-            >
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center shrink-0">
-                  <Check size={16} className="text-white" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider">Added to Bag</p>
-                  <p className="text-[11px] text-neutral-400 truncate max-w-[200px]">
-                    {product.name} ({selectedColor} / {selectedSize} &times; {quantity})
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2 pl-3 border-l border-neutral-800">
-                <Link
-                  href="/cart"
-                  onClick={() => toast.dismiss(t.id)}
-                  className="bg-white text-black hover:bg-neutral-200 text-[10px] uppercase tracking-widest font-extrabold px-3 py-2 transition-colors shrink-0"
-                >
-                  View Bag
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => toast.dismiss(t.id)}
-                  className="text-neutral-400 hover:text-white p-1"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            </div>
-          ),
-          { duration: 4500, position: 'top-right' }
-        )
-      } else {
+      if (!res.ok || data.error) {
+        // Rollback optimistic update on server rejection
+        incrementCart(-quantity)
+        setJustAdded(false)
         toast.error(data.error || 'Failed to add to bag')
       }
     } catch {
+      // Rollback optimistic update on network drop
+      incrementCart(-quantity)
+      setJustAdded(false)
       toast.error('Could not connect to cart service.')
     } finally {
       setIsAdding(false)

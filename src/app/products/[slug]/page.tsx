@@ -8,7 +8,7 @@ import { ProductInteractive } from './product-interactive'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 60 // Cache for 60s with Incremental Static Regeneration
 
 interface ProductPageProps {
   params: Promise<{ slug: string }>

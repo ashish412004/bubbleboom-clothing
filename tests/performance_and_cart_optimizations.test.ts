@@ -124,4 +124,52 @@ describe('Performance & Optimistic Cart Optimization Suite', () => {
       expect(summaryWithDiscount.total_paise).toBe(180000)
     })
   })
+
+  describe('3. Category & Collection Lookup Optimization', () => {
+    it('filters products by category with fast in-memory category lookup', async () => {
+      const prods = await getProducts({ category: 'hoodies' })
+      expect(Array.isArray(prods)).toBe(true)
+
+      const start = performance.now()
+      const prodsCached = await getProducts({ category: 'hoodies' })
+      const duration = performance.now() - start
+
+      expect(prodsCached.length).toBe(prods.length)
+      expect(duration).toBeLessThan(15)
+    })
+
+    it('filters products by collection with fast in-memory collection lookup', async () => {
+      const prods = await getProducts({ collection: 'monochrome-originals' })
+      expect(Array.isArray(prods)).toBe(true)
+
+      const start = performance.now()
+      const prodsCached = await getProducts({ collection: 'monochrome-originals' })
+      const duration = performance.now() - start
+
+      expect(prodsCached.length).toBe(prods.length)
+      expect(duration).toBeLessThan(15)
+    })
+  })
+
+  describe('4. Next.js ISR Revalidation Architecture Verification', () => {
+    it('verifies shop page defines revalidate = 60 for edge caching', async () => {
+      const shopModule = await import('@/app/shop/page')
+      expect(shopModule.revalidate).toBe(60)
+    })
+
+    it('verifies product detail page defines revalidate = 60 for edge caching', async () => {
+      const productModule = await import('@/app/products/[slug]/page')
+      expect(productModule.revalidate).toBe(60)
+    })
+
+    it('verifies collections page defines revalidate = 60 for edge caching', async () => {
+      const collectionsModule = await import('@/app/collections/page')
+      expect(collectionsModule.revalidate).toBe(60)
+    })
+
+    it('verifies collection detail page defines revalidate = 60 for edge caching', async () => {
+      const collectionDetailModule = await import('@/app/collections/[slug]/page')
+      expect(collectionDetailModule.revalidate).toBe(60)
+    })
+  })
 })

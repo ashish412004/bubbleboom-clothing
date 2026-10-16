@@ -9,12 +9,17 @@ import path from 'path'
 const productsCache = new Map<string, { data: any[]; timestamp: number }>()
 const productSlugCache = new Map<string, { data: any; timestamp: number }>()
 const relatedProductsCache = new Map<string, { data: any[]; timestamp: number }>()
+const categoryLookupCache = new Map<string, { id: string | null; isTagFallback?: boolean; timestamp: number }>()
+const collectionLookupCache = new Map<string, { id: string | null; productIds?: string[]; timestamp: number }>()
 const PRODUCTS_TTL_MS = 60 * 1000
+const LOOKUP_TTL_MS = 5 * 60 * 1000
 
 export function clearProductCache() {
   productsCache.clear()
   productSlugCache.clear()
   relatedProductsCache.clear()
+  categoryLookupCache.clear()
+  collectionLookupCache.clear()
 }
 
 export function getDeletedProductIds(): Set<string> {
@@ -246,7 +251,7 @@ export async function getProducts(filters?: ProductFilterOptions) {
       .eq('is_published', true)
       .eq('is_active', true)
 
-    // 1. Category filter (handles both slug and UUID, case-insensitive)
+    // 1. Category filter (handles both slug and UUID, case-insensitive, with in-memory lookup cache)
     if (filters?.category) {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         filters.category
@@ -255,53 +260,75 @@ export async function getProducts(filters?: ProductFilterOptions) {
         query = query.eq('category_id', filters.category)
       } else {
         const catTarget = filters.category.toLowerCase().trim()
-        // Find category by slug (case-insensitive) or name
-        const { data: catBySlug } = await supabase
-          .from('categories')
-          .select('id')
-          .ilike('slug', catTarget)
-          .maybeSingle()
-
-        if (catBySlug) {
-          query = query.eq('category_id', catBySlug.id)
+        const cachedLookup = categoryLookupCache.get(catTarget)
+        if (cachedLookup && Date.now() - cachedLookup.timestamp < LOOKUP_TTL_MS) {
+          if (cachedLookup.id) {
+            query = query.eq('category_id', cachedLookup.id)
+          } else if (cachedLookup.isTagFallback) {
+            query = query.contains('tags', [catTarget])
+          }
         } else {
-          const { data: catByName } = await supabase
+          // Find category by slug (case-insensitive) or name
+          const { data: catBySlug } = await supabase
             .from('categories')
             .select('id')
-            .ilike('name', catTarget)
+            .ilike('slug', catTarget)
             .maybeSingle()
 
-          if (catByName) {
-            query = query.eq('category_id', catByName.id)
+          if (catBySlug) {
+            categoryLookupCache.set(catTarget, { id: catBySlug.id, timestamp: Date.now() })
+            query = query.eq('category_id', catBySlug.id)
           } else {
-            // Tag based fallback (e.g. 'men', 'women')
-            query = query.contains('tags', [catTarget])
+            const { data: catByName } = await supabase
+              .from('categories')
+              .select('id')
+              .ilike('name', catTarget)
+              .maybeSingle()
+
+            if (catByName) {
+              categoryLookupCache.set(catTarget, { id: catByName.id, timestamp: Date.now() })
+              query = query.eq('category_id', catByName.id)
+            } else {
+              // Tag based fallback (e.g. 'men', 'women')
+              categoryLookupCache.set(catTarget, { id: null, isTagFallback: true, timestamp: Date.now() })
+              query = query.contains('tags', [catTarget])
+            }
           }
         }
       }
     }
 
-    // 2. Collection filter
+    // 2. Collection filter (with in-memory lookup cache)
     if (filters?.collection) {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         filters.collection
       )
-      let collectionId = filters.collection
-      if (!isUuid) {
-        const { data: col } = await supabase
-          .from('collections')
-          .select('id')
-          .eq('slug', filters.collection)
-          .maybeSingle()
-        if (col) collectionId = col.id
+      const colTarget = filters.collection.toLowerCase().trim()
+      const cachedCol = collectionLookupCache.get(colTarget)
+      let productIds: string[] = []
+
+      if (cachedCol && Date.now() - cachedCol.timestamp < LOOKUP_TTL_MS && cachedCol.productIds) {
+        productIds = cachedCol.productIds
+      } else {
+        let collectionId = filters.collection
+        if (!isUuid) {
+          const { data: col } = await supabase
+            .from('collections')
+            .select('id')
+            .eq('slug', filters.collection)
+            .maybeSingle()
+          if (col) collectionId = col.id
+        }
+
+        const { data: colProducts } = await supabase
+          .from('collection_products')
+          .select('product_id')
+          .eq('collection_id', collectionId)
+
+        productIds = colProducts?.map((cp) => cp.product_id) || []
+        collectionLookupCache.set(colTarget, { id: collectionId, productIds, timestamp: Date.now() })
       }
 
-      const { data: colProducts } = await supabase
-        .from('collection_products')
-        .select('product_id')
-        .eq('collection_id', collectionId)
-
-      const productIds = colProducts?.map((cp) => cp.product_id) || []
       if (productIds.length > 0) {
         query = query.in('id', productIds)
       } else {

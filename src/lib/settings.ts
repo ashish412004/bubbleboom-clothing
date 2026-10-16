@@ -1,4 +1,4 @@
-import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, createPublicClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 import {
   StoreGeneralSettings,
@@ -44,12 +44,7 @@ export async function getStoreSettings<T = any>(key: 'general' | 'shipping' | 'o
   }
 
   try {
-    let supabase: any
-    try {
-      supabase = await createServerClient()
-    } catch {
-      supabase = await createServiceClient()
-    }
+    const supabase = createPublicClient()
     const { data, error } = await supabase
       .from('store_settings')
       .select('value')

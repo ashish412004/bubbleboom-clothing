@@ -6,7 +6,7 @@ import { getCategories } from '@/lib/categories'
 import { ShopFilters } from './shop-filters'
 import Link from 'next/link'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 60 // Revalidate shop page every 60s
 
 interface ShopPageProps {
   searchParams: Promise<{

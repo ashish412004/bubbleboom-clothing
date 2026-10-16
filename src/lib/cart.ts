@@ -99,7 +99,7 @@ export async function getOrCreateCart(userId?: string, sessionId?: string) {
     return { id: 'local_cart', user_id: userId || null, session_id: sessionId || null }
   }
 
-  const supabase = await createServerClient()
+  const supabase = await createServiceClient()
   if (!userId && !sessionId) return null
 
   let query = supabase.from('carts').select('*')
@@ -167,7 +167,7 @@ export async function getCart(userId?: string, sessionId?: string): Promise<Cart
     return items
   }
 
-  const supabase = await createServerClient()
+  const supabase = await createServiceClient()
   if (!userId && !sessionId) return []
 
   let cartQuery = supabase.from('carts').select('id')
@@ -295,7 +295,33 @@ export async function addToCart(
     }
   }
 
-  const supabase = await createServerClient()
+  const supabase = await createServiceClient()
+
+  // 1. High-Performance Fast Path: Atomic PostgreSQL Stored Procedure (1 single network roundtrip)
+  try {
+    const { data: rpcRes, error: rpcErr } = await (supabase as any).rpc('add_to_cart_atomic', {
+      p_variant_id: variantId,
+      p_quantity: quantity,
+      p_user_id: userId || null,
+      p_session_id: sessionId || null,
+    })
+
+    if (!rpcErr && rpcRes) {
+      if (rpcRes.error) {
+        return {
+          error: rpcRes.error,
+          available_stock: rpcRes.available_stock,
+        }
+      }
+      if (rpcRes.data) {
+        return { data: rpcRes.data }
+      }
+    }
+  } catch {
+    // If RPC is unavailable, smoothly fallback to standard batch queries
+  }
+
+  // 2. Fallback Path: Standard Database Execution
   const cart = await getOrCreateCart(userId, sessionId)
   if (!cart) return { error: 'Unable to initialize cart' }
 
@@ -390,7 +416,7 @@ export async function updateCartItemQuantity(
     }
   }
 
-  const supabase = await createServerClient()
+  const supabase = await createServiceClient()
 
   if (quantity <= 0) {
     return removeCartItem(itemId)
@@ -434,7 +460,7 @@ export async function removeCartItem(itemId: string) {
     }
   }
 
-  const supabase = await createServerClient()
+  const supabase = await createServiceClient()
   const { error } = await supabase
     .from('cart_items')
     .delete()
@@ -454,7 +480,7 @@ export async function clearCart(userId?: string, sessionId?: string) {
     return { success: true, cartCookieValue: '[]' }
   }
 
-  const supabase = await createServerClient()
+  const supabase = await createServiceClient()
   let cartQuery = supabase.from('carts').select('id')
   if (userId) {
     cartQuery = cartQuery.eq('user_id', userId)
