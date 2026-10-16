@@ -1067,8 +1067,21 @@ export function CheckoutForm({
               </button>
             </div>
             {couponMessage && (
-              <p className="text-[11px] font-semibold text-neutral-600 mt-1 flex items-center">
-                <Tag size={12} className="mr-1" /> {couponMessage}
+              <p
+                className={`text-[11px] font-bold mt-1.5 flex items-center gap-1.5 ${
+                  couponDiscountPaise > 0 ? 'text-black' : 'text-[#DC2626]'
+                }`}
+              >
+                <span
+                  className={`inline-block w-3.5 h-3.5 rounded-full text-[10px] text-center leading-3.5 font-black ${
+                    couponDiscountPaise > 0
+                      ? 'bg-black text-white'
+                      : 'bg-red-100 text-[#DC2626]'
+                  }`}
+                >
+                  {couponDiscountPaise > 0 ? '✓' : '✕'}
+                </span>
+                <span>{couponMessage}</span>
               </p>
             )}
           </div>

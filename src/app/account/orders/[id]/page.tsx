@@ -8,7 +8,7 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { OrderActions } from './order-actions'
-import { CheckCircle2, Package, Truck, Clock, ShieldCheck, ArrowLeft, ExternalLink, Mail, AlertTriangle } from 'lucide-react'
+import { CheckCircle2, Package, Truck, Clock, ShieldCheck, ArrowLeft, ExternalLink, Mail, AlertTriangle, Check } from 'lucide-react'
 import { getSafeImageUrl } from '@/lib/utils'
 
 interface OrderDetailPageProps {
@@ -149,27 +149,73 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                 )}
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
-                {TIMELINE_STEPS.map((step) => {
-                  const stepIdx = statusProgression.indexOf(step.key)
-                  const isDone = currentStatusIdx >= stepIdx && !isCancelled
-                  const Icon = step.icon
+              <div className="relative">
+                {/* Horizontal Progress Connector Line (Screen sm+) */}
+                {!isCancelled && (
+                  <div className="hidden sm:block absolute top-[18px] left-[8%] right-[8%] h-[2px] bg-neutral-200 z-0">
+                    <div
+                      className="h-full bg-black transition-all duration-300"
+                      style={{
+                        width: `${Math.max(
+                          0,
+                          Math.min(
+                            100,
+                            Math.round(
+                              ((Math.max(1, currentStatusIdx) - 1) /
+                                (TIMELINE_STEPS.length - 1)) *
+                                100
+                            )
+                          )
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                )}
 
-                  return (
-                    <div key={step.key} className="flex flex-col items-center text-center">
-                      <div
-                        className={`w-9 h-9 rounded-full border-2 border-black flex items-center justify-center mb-2 ${
-                          isDone ? 'bg-black text-white' : 'bg-white text-neutral-300'
-                        }`}
-                      >
-                        <Icon className="w-4 h-4" />
+                <div className="relative z-10 grid grid-cols-2 sm:grid-cols-6 gap-3">
+                  {TIMELINE_STEPS.map((step) => {
+                    const stepIdx = statusProgression.indexOf(step.key)
+                    const isCurrent = !isCancelled && currentStatusIdx === stepIdx
+                    const isCompleted = !isCancelled && currentStatusIdx > stepIdx
+                    const Icon = step.icon
+
+                    return (
+                      <div key={step.key} className="flex flex-col items-center text-center">
+                        <div
+                          className={`w-9 h-9 rounded-full flex items-center justify-center mb-2 transition-all duration-200 ${
+                            isCurrent
+                              ? 'bg-[#DC2626] text-white border-2 border-[#DC2626] ring-4 ring-red-100 shadow-sm scale-110'
+                              : isCompleted
+                              ? 'bg-black text-white border-2 border-black'
+                              : 'bg-white text-neutral-300 border-2 border-neutral-300'
+                          }`}
+                        >
+                          {isCompleted ? (
+                            <Check className="w-4 h-4 stroke-[3]" />
+                          ) : (
+                            <Icon className="w-4 h-4" />
+                          )}
+                        </div>
+                        <span
+                          className={`text-[10px] uppercase tracking-tight transition-colors ${
+                            isCurrent
+                              ? 'text-[#DC2626] font-black'
+                              : isCompleted
+                              ? 'text-black font-bold'
+                              : 'text-neutral-400 font-medium'
+                          }`}
+                        >
+                          {step.label}
+                        </span>
+                        {isCurrent && (
+                          <span className="mt-0.5 text-[8px] font-black uppercase tracking-wider bg-red-100 text-[#DC2626] px-1.5 py-0.5 rounded-full">
+                            Active
+                          </span>
+                        )}
                       </div>
-                      <span className={`text-[10px] font-bold uppercase tracking-tight ${isDone ? 'text-black' : 'text-neutral-400'}`}>
-                        {step.label}
-                      </span>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
 
               {/* Honest processing status before dispatch */}

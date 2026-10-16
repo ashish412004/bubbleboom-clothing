@@ -534,19 +534,31 @@ export function Footer() {
                   <input
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value)
+                      if (errorMessage) setErrorMessage('')
+                    }}
                     placeholder="Enter your email"
                     required
                     disabled={subState === 'subscribing'}
-                    className="bg-neutral-950 border border-neutral-800 text-white placeholder-neutral-500 px-4 py-2.5 text-xs flex-grow focus:outline-none focus:border-white transition-colors disabled:opacity-60"
+                    className="bg-neutral-950 border border-neutral-800 text-white placeholder-neutral-500 px-4 py-2.5 text-xs flex-grow focus:outline-none focus:border-white transition-colors disabled:opacity-60 min-h-[44px]"
                   />
                   <button
                     type="submit"
                     disabled={subState === 'subscribing'}
-                    className="bg-white text-black hover:bg-neutral-200 px-5 py-2.5 text-xs uppercase tracking-widest font-bold flex items-center justify-center transition-colors disabled:opacity-50 shrink-0"
+                    className="bg-white text-black hover:bg-neutral-200 px-5 py-2.5 text-xs uppercase tracking-widest font-bold flex items-center justify-center transition-colors disabled:opacity-50 shrink-0 min-h-[44px] cursor-pointer"
                   >
-                    <span>{subState === 'subscribing' ? 'SUBSCRIBING...' : 'SUBSCRIBE'}</span>
-                    <ArrowRight size={13} className="ml-1.5" />
+                    {subState === 'subscribing' ? (
+                      <>
+                        <RefreshCw size={13} className="mr-1.5 animate-spin" />
+                        <span>SUBSCRIBING...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>SUBSCRIBE</span>
+                        <ArrowRight size={13} className="ml-1.5" />
+                      </>
+                    )}
                   </button>
                 </form>
               )}
@@ -561,9 +573,9 @@ export function Footer() {
           )}
 
           {errorMessage && (
-            <div className="mt-3 text-xs flex items-center text-neutral-300 bg-neutral-950 p-2.5 border border-neutral-800">
-              <AlertCircle size={15} className="text-neutral-400 mr-2 shrink-0" />
-              <span>{errorMessage}</span>
+            <div className="mt-3 text-xs flex items-center text-[#DC2626] bg-red-950/20 p-2.5 border border-[#DC2626]/40">
+              <AlertCircle size={15} className="text-[#DC2626] mr-2 shrink-0" />
+              <span className="font-semibold">{errorMessage}</span>
             </div>
           )}
 

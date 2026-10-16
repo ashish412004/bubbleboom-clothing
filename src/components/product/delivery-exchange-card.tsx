@@ -156,25 +156,25 @@ export function DeliveryExchangeCard({
             </div>
 
             {errorMsg && (
-              <p className="text-[11px] text-neutral-800 font-mono flex items-center gap-1.5">
-                <AlertCircle size={13} className="text-black shrink-0" />
+              <p className="text-[11px] text-[#DC2626] font-mono font-semibold flex items-center gap-1.5">
+                <AlertCircle size={13} className="text-[#DC2626] shrink-0" />
                 <span>{errorMsg}</span>
               </p>
             )}
 
             {result && !result.is_serviceable && (
-              <div className="p-2.5 bg-neutral-100 border border-neutral-300 space-y-1.5">
-                <p className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
-                  <Ban size={14} className="text-black shrink-0" />
+              <div className="p-3 bg-red-50/70 border border-red-200 space-y-1.5">
+                <p className="text-xs font-bold text-[#DC2626] flex items-center gap-1.5">
+                  <Ban size={14} className="text-[#DC2626] shrink-0" />
                   <span>Delivery Unavailable for PIN {result.pincode}</span>
                 </p>
-                <p className="text-[11px] text-neutral-600 font-mono leading-tight">
+                <p className="text-[11px] text-red-700 font-mono leading-tight">
                   We do not currently ship to this pincode. Please try another address.
                 </p>
                 <button
                   type="button"
                   onClick={handleResetPin}
-                  className="text-[11px] font-mono underline font-bold uppercase hover:text-neutral-600 block pt-1"
+                  className="text-[11px] font-mono underline font-bold uppercase text-black hover:text-[#DC2626] block pt-1 cursor-pointer"
                 >
                   Try Another PIN Code
                 </button>

@@ -71,6 +71,9 @@ export function ProductInteractive({
   const incrementCart = useCartStore((state) => state.incrementCount)
   const isWishlistedInStore = useCartStore((state) => state.isItemWishlisted)
   const toggleWishlistStore = useCartStore((state) => state.toggleWishlistStore)
+  const isVariantInCart = useCartStore((state) => state.isVariantInCart)
+  const addToCartWithDrawer = useCartStore((state) => state.addToCartWithDrawer)
+  const openCartDrawer = useCartStore((state) => state.openCartDrawer)
 
   const categoryType = getProductCategoryType(product as any)
 
@@ -223,78 +226,19 @@ export function ProductInteractive({
       return
     }
 
-    // 1. Instant Optimistic UI Feedback (0ms latency)
-    incrementCart(quantity)
-    setJustAdded(true)
-    setTimeout(() => setJustAdded(false), 3000)
+    setIsAdding(true)
+    const result = await addToCartWithDrawer(activeVariant.id, quantity, {
+      product,
+      variant: activeVariant,
+    })
+    setIsAdding(false)
 
-    // Show "Added to Bag" toast immediately
-    toast.custom(
-      (t) => (
-        <div
-          className={`${
-            t.visible ? 'animate-enter' : 'animate-leave'
-          } max-w-md w-full bg-black text-white shadow-2xl pointer-events-auto flex items-center justify-between p-4 border border-neutral-700`}
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center shrink-0">
-              <Check size={16} className="text-white" />
-            </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider">Added to Bag</p>
-              <p className="text-[11px] text-neutral-400 truncate max-w-[200px]">
-                {product.name} ({selectedColor} / {selectedSize} &times; {quantity})
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2 pl-3 border-l border-neutral-800">
-            <Link
-              href="/cart"
-              onClick={() => toast.dismiss(t.id)}
-              className="bg-white text-black hover:bg-neutral-200 text-[10px] uppercase tracking-widest font-extrabold px-3 py-2 transition-colors shrink-0"
-            >
-              View Bag
-            </Link>
-            <button
-              type="button"
-              onClick={() => toast.dismiss(t.id)}
-              className="text-neutral-400 hover:text-white p-1"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      ),
-      { duration: 4500, position: 'top-right' }
-    )
-
-    // 2. Perform authoritative background persistence
-    try {
-      const res = await fetch('/api/cart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          variant_id: activeVariant.id,
-          quantity,
-        }),
-      })
-
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        // Rollback optimistic update on server rejection
-        incrementCart(-quantity)
-        setJustAdded(false)
-        toast.error(data.error || 'Failed to add to bag')
-      }
-    } catch {
-      // Rollback optimistic update on network drop
-      incrementCart(-quantity)
-      setJustAdded(false)
-      toast.error('Could not connect to cart service.')
-    } finally {
-      setIsAdding(false)
+    if (!result.success) {
+      toast.error(result.error || 'Failed to add to bag')
     }
   }
+
+  const isVariantAdded = Boolean(activeVariant && isVariantInCart(activeVariant.id))
 
   const handleBuyNow = (e?: React.MouseEvent) => {
     e?.preventDefault()
@@ -527,9 +471,9 @@ export function ProductInteractive({
                     key={c}
                     type="button"
                     onClick={() => handleColorChange(c)}
-                    className={`text-xs uppercase tracking-wider font-bold px-3 py-2 border transition-all flex items-center gap-2 ${
+                    className={`text-xs uppercase tracking-wider font-bold px-3 py-2 border transition-all duration-150 flex items-center gap-2 select-none active:scale-95 ${
                       isSelected
-                        ? 'bg-black text-white border-black ring-1 ring-black shadow-sm'
+                        ? 'bg-black text-white border-black ring-2 ring-[#DC2626] ring-offset-2 shadow-sm'
                         : 'bg-white text-black border-neutral-300 hover:border-black'
                     }`}
                   >
@@ -593,18 +537,18 @@ export function ProductInteractive({
                       setSelectedSize(sizeOption)
                       setQuantity(1)
                     }}
-                    className={`h-11 border text-xs font-bold transition-all relative flex flex-col items-center justify-center ${
+                    className={`h-11 border text-xs font-bold transition-all duration-150 relative flex flex-col items-center justify-center select-none active:scale-95 ${
                       !hasStock
                         ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-not-allowed opacity-40 select-none'
                         : isSelected
-                        ? 'bg-black text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                        ? 'border-2 border-[#DC2626] bg-red-50/70 text-black font-extrabold shadow-xs'
                         : 'bg-white text-black border-neutral-300 hover:border-black'
                     }`}
                     title={!hasStock ? `Size ${sizeOption} is out of stock` : `Select Size ${sizeOption}`}
                   >
                     <span className={!hasStock ? 'line-through' : ''}>{sizeOption}</span>
                     {!hasStock && (
-                      <span className="text-[8px] uppercase tracking-tighter text-red-600 font-extrabold leading-none mt-0.5">
+                      <span className="text-[8px] uppercase tracking-tighter text-[#DC2626] font-extrabold leading-none mt-0.5">
                         Sold Out
                       </span>
                     )}
@@ -665,49 +609,62 @@ export function ProductInteractive({
         {/* Action CTAs */}
         <div className="space-y-3 pt-2">
           <div className="flex gap-3">
-            <button
-              type="button"
-              disabled={!selectedSize || isOutOfStock || isAdding || isBuyingNow}
-              onClick={handleAddToCart}
-              className={`flex-1 h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-colors ${
-                isAdding
-                  ? 'bg-black text-white cursor-wait'
-                  : !selectedSize || isOutOfStock
-                  ? 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
-                  : 'bg-black text-white hover:bg-neutral-800 cursor-pointer'
-              }`}
-            >
-              {isAdding ? (
-                <>
-                  <RefreshCw size={16} className="mr-2 animate-spin text-white" />
-                  Adding to Bag...
-                </>
-              ) : justAdded ? (
-                <>
-                  <Check size={16} className="mr-2" />
-                  Added to Bag ✓
-                </>
-              ) : !selectedSize ? (
-                'Select a Size'
-              ) : isOutOfStock ? (
-                'Sold Out'
-              ) : (
-                <>
-                  <ShoppingBag size={16} className="mr-2" />
-                  Add to Cart
-                </>
-              )}
-            </button>
+            {isVariantAdded ? (
+              <button
+                type="button"
+                onClick={openCartDrawer}
+                className="flex-1 h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all duration-200 bg-[#DC2626] hover:bg-[#B91C1C] text-white shadow-sm cursor-pointer active:scale-98"
+              >
+                <Check size={16} className="mr-2 stroke-[3]" />
+                ✓ ADDED TO CART
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!selectedSize || isOutOfStock || isAdding || isBuyingNow}
+                onClick={handleAddToCart}
+                className={`flex-1 h-13 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all duration-200 ${
+                  isAdding
+                    ? 'bg-black text-white cursor-wait'
+                    : !selectedSize || isOutOfStock
+                    ? 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
+                    : 'bg-black text-white hover:bg-neutral-800 cursor-pointer active:scale-98'
+                }`}
+              >
+                {isAdding ? (
+                  <>
+                    <RefreshCw size={16} className="mr-2 animate-spin text-white" />
+                    Adding to Bag...
+                  </>
+                ) : !selectedSize ? (
+                  'Select a Size'
+                ) : isOutOfStock ? (
+                  'Sold Out'
+                ) : (
+                  <>
+                    <ShoppingBag size={16} className="mr-2" />
+                    Add to Cart
+                  </>
+                )}
+              </button>
+            )}
 
             <button
               type="button"
               onClick={toggleWishlist}
-              className={`w-13 h-13 border border-neutral-300 flex items-center justify-center hover:border-black transition-colors ${
-                isWishlisted ? 'bg-neutral-100' : 'bg-white'
+              className={`w-13 h-13 border flex items-center justify-center transition-all duration-150 active:scale-90 ${
+                isWishlisted
+                  ? 'bg-red-50/60 border-[#DC2626] text-[#DC2626]'
+                  : 'bg-white border-neutral-300 text-black hover:border-black'
               }`}
-              aria-label="Wishlist"
+              aria-label={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
             >
-              <Heart size={18} className={isWishlisted ? 'fill-black text-black' : 'text-black'} />
+              <Heart
+                size={18}
+                className={`transition-all duration-150 ${
+                  isWishlisted ? 'fill-[#DC2626] text-[#DC2626] scale-110' : 'text-black'
+                }`}
+              />
             </button>
           </div>
 

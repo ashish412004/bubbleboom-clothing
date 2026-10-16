@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { Heart } from 'lucide-react'
+import { Heart, Eye } from 'lucide-react'
 import { formatPrice, formatDiscount, getSafeImageUrl } from '@/lib/utils'
 import { useState } from 'react'
 import { useCartStore } from '@/lib/cart-store'
+import { QuickViewModal } from './quick-view-modal'
 import toast from 'react-hot-toast'
 
 export interface ProductCardProps {
@@ -20,6 +21,7 @@ export interface ProductCardProps {
       alt_text: string | null
     }>
     variants?: Array<{
+      id: string
       color: string
       size: string
       stock: number
@@ -30,6 +32,7 @@ export interface ProductCardProps {
 
 export function ProductCard({ product, priority = false }: ProductCardProps) {
   const [imageError, setImageError] = useState(false)
+  const [quickViewOpen, setQuickViewOpen] = useState(false)
   const isWishlisted = useCartStore((state) => state.isItemWishlisted(product.id))
   const toggleWishlistStore = useCartStore((state) => state.toggleWishlistStore)
 
@@ -47,7 +50,6 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
     e.preventDefault()
     e.stopPropagation()
 
-    const wasWishlisted = isWishlisted
     try {
       const res = await toggleWishlistStore(product.id)
       if (res.inWishlist) {
@@ -67,89 +69,122 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
   }
 
   return (
-    <div className="group flex flex-col bg-white">
-      {/* Product Image Area */}
-      <Link href={`/products/${product.slug}`} className="relative aspect-[3/4] bg-neutral-100 overflow-hidden mb-3">
-        {firstImage && !imageError ? (
-          <>
-            <Image
-              src={getSafeImageUrl(firstImage.image_url)}
-              alt={firstImage.alt_text || product.name}
-              fill
-              priority={priority}
-              onError={() => setImageError(true)}
-              className="object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            />
-            {secondImage && (
-              <div className="hidden sm:block absolute inset-0">
+    <>
+      <div className="group flex flex-col bg-white">
+        {/* Product Image Area */}
+        <div className="relative aspect-[3/4] bg-neutral-100 overflow-hidden mb-3">
+          <Link href={`/products/${product.slug}`} className="absolute inset-0">
+            {firstImage && !imageError ? (
+              <>
                 <Image
-                  src={getSafeImageUrl(secondImage.image_url)}
-                  alt={secondImage.alt_text || product.name}
+                  src={getSafeImageUrl(firstImage.image_url)}
+                  alt={firstImage.alt_text || product.name}
                   fill
-                  loading="lazy"
-                  className="object-cover object-center opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out"
+                  priority={priority}
+                  onError={() => setImageError(true)}
+                  className="object-cover object-center group-hover:scale-105 transition-transform duration-300 ease-out"
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                 />
+                {secondImage && (
+                  <div className="hidden sm:block absolute inset-0">
+                    <Image
+                      src={getSafeImageUrl(secondImage.image_url)}
+                      alt={secondImage.alt_text || product.name}
+                      fill
+                      loading="lazy"
+                      className="object-cover object-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-out"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-100 text-neutral-400 p-4">
+                <span className="text-xs uppercase tracking-widest font-bold">BUBBLE BOOM</span>
               </div>
             )}
-          </>
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-100 text-neutral-400 p-4">
-            <span className="text-xs uppercase tracking-widest font-bold">BUBBLE BOOM</span>
-          </div>
-        )}
+          </Link>
 
-        {/* Discount Badge */}
-        {hasDiscount && (
-          <div className="absolute top-2 left-2 z-10">
-            <span className="bg-black text-white text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 shadow-sm">
-              {discount}% OFF
-            </span>
-          </div>
-        )}
-
-        {/* Wishlist Button */}
-        <button
-          type="button"
-          aria-label={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
-          onClick={handleWishlistToggle}
-          className="absolute top-2 right-2 z-10 p-2 bg-white/90 hover:bg-white text-black transition-all rounded-full shadow-sm hover:scale-110 focus:outline-none"
-        >
-          <Heart
-            size={16}
-            className={isWishlisted ? 'fill-black text-black' : 'text-black'}
-          />
-        </button>
-      </Link>
-
-      {/* Product Information */}
-      <div className="flex flex-col flex-grow">
-        {/* Colors available */}
-        {colors.length > 0 && (
-          <p className="text-[11px] text-neutral-500 uppercase tracking-wider mb-1">
-            {colors.length === 1 ? colors[0] : `${colors.length} Colors`}
-          </p>
-        )}
-
-        <Link href={`/products/${product.slug}`} className="group-hover:underline">
-          <h3 className="text-xs sm:text-sm font-semibold tracking-tight text-black line-clamp-1 mb-1.5">
-            {product.name}
-          </h3>
-        </Link>
-
-        {/* Pricing */}
-        <div className="flex items-center gap-2 mt-auto">
-          <span className="text-sm sm:text-base font-bold text-black tracking-tight">
-            {formatPrice(product.selling_price)}
-          </span>
+          {/* Discount Badge */}
           {hasDiscount && (
-            <span className="text-xs text-neutral-400 line-through">
-              {formatPrice(product.mrp)}
-            </span>
+            <div className="absolute top-2 left-2 z-10 pointer-events-none">
+              <span className="bg-black text-white text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 shadow-sm">
+                {discount}% OFF
+              </span>
+            </div>
           )}
+
+          {/* Wishlist Button */}
+          <button
+            type="button"
+            aria-label={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+            onClick={handleWishlistToggle}
+            className={`absolute top-2 right-2 z-10 p-2 rounded-full transition-all duration-150 shadow-sm active:scale-90 focus:outline-none ${
+              isWishlisted
+                ? 'bg-red-50 text-[#DC2626] border border-[#DC2626]/30'
+                : 'bg-white/90 hover:bg-white text-black hover:scale-110'
+            }`}
+          >
+            <Heart
+              size={16}
+              className={`transition-all duration-150 ${
+                isWishlisted ? 'fill-[#DC2626] text-[#DC2626] scale-110' : 'text-black'
+              }`}
+            />
+          </button>
+
+          {/* Desktop Quick View Overlay Button */}
+          <div className="hidden sm:block absolute inset-x-2.5 bottom-2.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setQuickViewOpen(true)
+              }}
+              className="w-full py-2 bg-white/95 hover:bg-black text-black hover:text-white border border-black text-[10px] uppercase font-mono tracking-widest font-black transition-colors flex items-center justify-center gap-1.5 shadow-md cursor-pointer active:scale-98"
+            >
+              <Eye size={13} />
+              <span>Quick View</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Product Information */}
+        <div className="flex flex-col flex-grow">
+          {/* Colors available */}
+          {colors.length > 0 && (
+            <p className="text-[11px] text-neutral-500 uppercase tracking-wider mb-1">
+              {colors.length === 1 ? colors[0] : `${colors.length} Colors`}
+            </p>
+          )}
+
+          <Link href={`/products/${product.slug}`} className="group-hover:underline">
+            <h3 className="text-xs sm:text-sm font-semibold tracking-tight text-black line-clamp-1 mb-1.5">
+              {product.name}
+            </h3>
+          </Link>
+
+          {/* Pricing */}
+          <div className="flex items-center gap-2 mt-auto">
+            <span className="text-sm sm:text-base font-bold text-black tracking-tight">
+              {formatPrice(product.selling_price)}
+            </span>
+            {hasDiscount && (
+              <span className="text-xs text-neutral-400 line-through">
+                {formatPrice(product.mrp)}
+              </span>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Quick View Modal */}
+      <QuickViewModal
+        product={product as any}
+        isOpen={quickViewOpen}
+        onClose={() => setQuickViewOpen(false)}
+      />
+    </>
   )
 }

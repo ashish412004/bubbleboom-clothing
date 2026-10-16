@@ -412,10 +412,16 @@ export function CartView({
                   Apply
                 </button>
               </div>
-              {couponError && <p className="text-[11px] text-neutral-500 font-semibold">{couponError}</p>}
+              {couponError && (
+                <p className="text-[11px] text-[#DC2626] font-bold flex items-center gap-1.5 pt-0.5">
+                  <span className="inline-block w-3.5 h-3.5 rounded-full bg-red-100 text-[#DC2626] text-[10px] text-center leading-3.5 font-black">✕</span>
+                  <span>{couponError}</span>
+                </p>
+              )}
               {couponSuccess && (
-                <p className="text-[11px] text-black font-semibold flex items-center">
-                  <Tag size={12} className="mr-1" /> {couponSuccess}
+                <p className="text-[11px] text-black font-bold flex items-center gap-1.5 pt-0.5">
+                  <span className="inline-block w-3.5 h-3.5 rounded-full bg-black text-white text-[10px] text-center leading-3.5 font-black">✓</span>
+                  <span>{couponSuccess}</span>
                 </p>
               )}
             </form>

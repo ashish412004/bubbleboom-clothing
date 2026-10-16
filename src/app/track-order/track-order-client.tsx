@@ -176,7 +176,8 @@ export function TrackOrderClient() {
     const currentRank = rankMap[currentStatus] ?? 0
     const stepTargetRank = stepIndex + 1
 
-    if (currentRank >= stepTargetRank) return 'completed'
+    if (currentRank === stepTargetRank) return 'current'
+    if (currentRank > stepTargetRank) return 'completed'
     return 'upcoming'
   }
 
@@ -407,28 +408,56 @@ export function TrackOrderClient() {
                 {ORDER_STEPS.map((step, idx) => {
                   const status = getStepStatus(idx, order.status)
                   const isCompleted = status === 'completed'
+                  const isCurrent = status === 'current'
                   const Icon = step.icon
 
                   return (
                     <div key={step.key} className="relative group">
                       {/* Circle icon */}
                       <div
-                        className={`absolute -left-[35px] top-0 w-6 h-6 rounded-full border-2 border-black flex items-center justify-center transition-colors ${
-                          isCompleted ? 'bg-black text-white' : 'bg-white text-neutral-400'
+                        className={`absolute -left-[35px] top-0 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 ${
+                          isCurrent
+                            ? 'bg-[#DC2626] text-white border-2 border-[#DC2626] ring-4 ring-red-100 scale-110 shadow-sm'
+                            : isCompleted
+                            ? 'bg-black text-white border-2 border-black'
+                            : 'bg-white text-neutral-400 border-2 border-neutral-300'
                         }`}
                       >
-                        <Icon className="w-3.5 h-3.5" />
+                        {isCompleted ? (
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        ) : (
+                          <Icon className="w-3.5 h-3.5" />
+                        )}
                       </div>
 
                       <div>
-                        <h5
-                          className={`text-sm font-bold uppercase tracking-tight ${
-                            isCompleted ? 'text-black' : 'text-neutral-400'
+                        <div className="flex items-center gap-2">
+                          <h5
+                            className={`text-sm uppercase tracking-tight transition-colors ${
+                              isCurrent
+                                ? 'text-[#DC2626] font-black'
+                                : isCompleted
+                                ? 'text-black font-bold'
+                                : 'text-neutral-400 font-medium'
+                            }`}
+                          >
+                            {step.label}
+                          </h5>
+                          {isCurrent && (
+                            <span className="text-[9px] font-black uppercase tracking-wider bg-red-100 text-[#DC2626] px-1.5 py-0.5 rounded-full">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <p
+                          className={`text-xs mt-0.5 ${
+                            isCurrent
+                              ? 'text-neutral-700 font-medium'
+                              : 'text-neutral-500'
                           }`}
                         >
-                          {step.label}
-                        </h5>
-                        <p className="text-xs text-neutral-500 mt-0.5">{step.desc}</p>
+                          {step.desc}
+                        </p>
                       </div>
                     </div>
                   )

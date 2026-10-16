@@ -20,6 +20,7 @@ export function Header({
   const [mounted, setMounted] = useState(false)
   const itemCount = useCartStore((state) => state.itemCount)
   const wishlistCount = useCartStore((state) => state.wishlistCount)
+  const openCartDrawer = useCartStore((state) => state.openCartDrawer)
   const authUser = useAuthStore((state) => state.user)
   const refreshUser = useAuthStore((state) => state.refreshUser)
   const refreshWishlist = useCartStore((state) => state.refreshWishlist)
@@ -170,26 +171,27 @@ export function Header({
               className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm relative focus:outline-none focus:ring-1 focus:ring-black hidden sm:inline-flex"
               aria-label="View wishlist"
             >
-              <Heart size={20} strokeWidth={2} />
+              <Heart size={20} strokeWidth={2} className={mounted && wishlistCount > 0 ? 'text-[#DC2626]' : 'text-black'} />
               {mounted && wishlistCount > 0 && (
-                <span className="absolute top-1 right-1 bg-black text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                <span className="absolute top-1 right-1 bg-[#DC2626] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center ring-1 ring-white">
                   {wishlistCount > 99 ? '99+' : wishlistCount}
                 </span>
               )}
             </Link>
 
-            <Link
-              href="/cart"
-              className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm relative focus:outline-none focus:ring-1 focus:ring-black"
+            <button
+              type="button"
+              onClick={openCartDrawer}
+              className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm relative focus:outline-none focus:ring-1 focus:ring-black cursor-pointer"
               aria-label="View shopping bag"
             >
               <ShoppingBag size={20} strokeWidth={2} />
               {mounted && itemCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 bg-black text-white text-[10px] font-bold min-w-5 h-5 px-1 rounded-full flex items-center justify-center ring-2 ring-white">
+                <span className="absolute -top-0.5 -right-0.5 bg-[#DC2626] text-white text-[10px] font-bold min-w-5 h-5 px-1 rounded-full flex items-center justify-center ring-2 ring-white">
                   {itemCount > 99 ? '99+' : itemCount}
                 </span>
               )}
-            </Link>
+            </button>
           </div>
         </div>
       </div>
