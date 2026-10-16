@@ -8,6 +8,7 @@ import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 export interface HeroSlide {
   id: string
   src: string
+  mobileSrc?: string
   fallbackSrc?: string
   alt: string
   title?: string
@@ -27,6 +28,7 @@ export const HERO_SLIDES: HeroSlide[] = [
   {
     id: 'hero-1',
     src: '/images/brand/hero-banner-1.webp',
+    mobileSrc: '/images/brand/hero-banner-1-mobile.png',
     fallbackSrc: '/images/brand/hero-banner-1.png',
     alt: 'Bubble Boom Streetwear Originals - Editorial Apparel on Concrete Pedestals',
     title: 'Bubble Boom Originals',
@@ -34,6 +36,7 @@ export const HERO_SLIDES: HeroSlide[] = [
   {
     id: 'hero-2',
     src: '/images/brand/hero-banner-2.webp',
+    mobileSrc: '/images/brand/hero-banner-2-mobile.jpg',
     fallbackSrc: '/images/brand/hero-banner-2.png',
     alt: 'Bubble Boom Oversized Hoodies & Signature Tees with Velvet Texture',
     title: 'Street Luxury Hoodies',
@@ -41,6 +44,7 @@ export const HERO_SLIDES: HeroSlide[] = [
   {
     id: 'hero-3',
     src: '/images/brand/hero-banner-3.webp',
+    mobileSrc: '/images/brand/hero-banner-3-mobile.jpg',
     fallbackSrc: '/images/brand/hero-banner-3.png',
     alt: 'Bubble Boom Capsule Collection Rack under Studio Spotlight',
     title: 'Capsule Drops on Rack',
@@ -48,6 +52,7 @@ export const HERO_SLIDES: HeroSlide[] = [
   {
     id: 'hero-4',
     src: '/images/brand/hero-banner-4.webp',
+    mobileSrc: '/images/brand/hero-banner-4-mobile.jpg',
     fallbackSrc: '/images/brand/hero-banner-4.png',
     alt: 'Bubble Boom Official Luxury Unboxing & Streetwear Collection',
     title: 'Official Packaging Unboxing',
@@ -202,16 +207,33 @@ export function HeroCarousel({
               } ${isActive ? 'opacity-100 z-[2]' : 'opacity-0 z-[1]'}`}
               aria-hidden={!isActive}
             >
-              <Image
-                src={slide.src}
-                alt={slide.alt}
-                fill
-                priority={index === 0}
-                loading={index === 0 ? undefined : 'lazy'}
-                quality={80}
-                className="object-cover object-[72%_center] sm:object-center select-none"
-                sizes="100vw"
-              />
+              {/* Desktop Landscape Background (768px and above): completely unchanged */}
+              <div className="hidden md:block absolute inset-0">
+                <Image
+                  src={slide.src}
+                  alt={slide.alt}
+                  fill
+                  priority={index === 0}
+                  loading={index === 0 ? undefined : 'lazy'}
+                  quality={80}
+                  className="object-cover object-[72%_center] sm:object-center select-none"
+                  sizes="(min-width: 768px) 100vw, 1px"
+                />
+              </div>
+
+              {/* Mobile Vertical 9:16 Background (below 768px): supplied vertical mobile photoshoot image */}
+              <div className="block md:hidden absolute inset-0">
+                <Image
+                  src={slide.mobileSrc || slide.src}
+                  alt={slide.alt}
+                  fill
+                  priority={index === 0}
+                  loading={index === 0 ? undefined : 'lazy'}
+                  quality={85}
+                  className="object-cover object-center select-none"
+                  sizes="(max-width: 767px) 100vw, 1px"
+                />
+              </div>
             </div>
           )
         })}

@@ -63,4 +63,41 @@ describe('Homepage Hero Background Carousel Assets & Optimization', () => {
     expect(content).toContain('onTouchStart')
     expect(content).toContain('onTouchEnd')
   })
+
+  it('provides dedicated vertical mobile hero images for all 4 slides', () => {
+    for (let i = 1; i <= 4; i++) {
+      const ext = i === 1 ? 'png' : 'jpg'
+      const mobileFile = path.join(brandDir, `hero-banner-${i}-mobile.${ext}`)
+      expect(fs.existsSync(mobileFile), `hero-banner-${i}-mobile.${ext} exists`).toBe(true)
+
+      const slide = HERO_SLIDES[i - 1]
+      expect(slide.mobileSrc).toBe(`/images/brand/hero-banner-${i}-mobile.${ext}`)
+    }
+  })
+
+  it('implements responsive image separation with 768px (md) breakpoint and LCP priority', () => {
+    const componentPath = path.join(process.cwd(), 'src', 'components', 'home', 'hero-carousel.tsx')
+    const content = fs.readFileSync(componentPath, 'utf-8')
+
+    // Desktop container hidden on mobile (< 768px), visible on md and up
+    expect(content).toContain('hidden md:block absolute inset-0')
+    // Mobile container visible on mobile (< 768px), hidden on md and up
+    expect(content).toContain('block md:hidden absolute inset-0')
+
+    // Uses separate mobileSrc with fallback to slide.src
+    expect(content).toContain('src={slide.mobileSrc || slide.src}')
+
+    // Preserves original desktop src and cropping
+    expect(content).toContain('src={slide.src}')
+    expect(content).toContain('object-[72%_center] sm:object-center')
+
+    // Preserves LCP priority on primary slide
+    expect(content).toContain('priority={index === 0}')
+
+    // Preserves all CTAs and brand identity text
+    expect(content).toContain('BUBBLE BOOM ORIGINALS')
+    expect(content).toContain('WEAR THE BOOM.')
+    expect(content).toContain('SHOP NOW')
+    expect(content).toContain('EXPLORE COLLECTIONS')
+  })
 })
