@@ -1,6 +1,6 @@
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
-import { getCollectionBySlug } from '@/lib/collections'
+import { getCollections, getCollectionBySlug } from '@/lib/collections'
 import { getProducts } from '@/lib/products'
 import { ProductCard } from '@/components/product/product-card'
 import Link from 'next/link'
@@ -10,6 +10,15 @@ import { parseProductImage } from '@/lib/utils'
 
 interface CollectionPageProps {
   params: Promise<{ slug: string }>
+}
+
+export async function generateStaticParams() {
+  try {
+    const collections = await getCollections()
+    return collections.filter((c) => Boolean(c.slug)).map((c) => ({ slug: c.slug }))
+  } catch {
+    return []
+  }
 }
 
 export const revalidate = 60

@@ -66,9 +66,14 @@ export function HeroCarousel({
   const slides = (customSlides && customSlides.length > 0) ? customSlides : HERO_SLIDES
 
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [mounted, setMounted] = useState(false)
   const [isTabVisible, setIsTabVisible] = useState(true)
   const [isReducedMotion, setIsReducedMotion] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const touchStartXRef = useRef<number | null>(null)
   const touchStartYRef = useRef<number | null>(null)
@@ -187,6 +192,8 @@ export function HeroCarousel({
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         {slides.map((slide, index) => {
           const isActive = index === currentIndex
+          // Render only the LCP primary slide on initial SSR/HTML payload, mount remaining slides after hydration
+          if (index !== 0 && !mounted) return null
           return (
             <div
               key={slide.id}
@@ -200,7 +207,8 @@ export function HeroCarousel({
                 alt={slide.alt}
                 fill
                 priority={index === 0}
-                quality={90}
+                loading={index === 0 ? undefined : 'lazy'}
+                quality={80}
                 className="object-cover object-[72%_center] sm:object-center select-none"
                 sizes="100vw"
               />

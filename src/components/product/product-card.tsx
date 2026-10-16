@@ -82,13 +82,16 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             />
             {secondImage && (
-              <Image
-                src={getSafeImageUrl(secondImage.image_url)}
-                alt={secondImage.alt_text || product.name}
-                fill
-                className="object-cover object-center opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out"
-                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              />
+              <div className="hidden sm:block absolute inset-0">
+                <Image
+                  src={getSafeImageUrl(secondImage.image_url)}
+                  alt={secondImage.alt_text || product.name}
+                  fill
+                  loading="lazy"
+                  className="object-cover object-center opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out"
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                />
+              </div>
             )}
           </>
         ) : (

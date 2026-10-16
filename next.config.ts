@@ -10,6 +10,23 @@ if (supabaseUrl) {
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  compress: true,
+  experimental: {
+    optimizePackageImports: ['lucide-react', '@supabase/ssr', '@supabase/supabase-js'],
+  },
+  async headers() {
+    return [
+      {
+        source: '/images/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ]
+  },
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [

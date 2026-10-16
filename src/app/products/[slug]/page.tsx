@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { ProductCard } from '@/components/product/product-card'
-import { getProductBySlug, getRelatedProducts } from '@/lib/products'
+import { getProducts, getProductBySlug, getRelatedProducts } from '@/lib/products'
 import { getStoreSettings, StoreShippingSettings, StoreExchangeSettings } from '@/lib/settings'
 import { ProductInteractive } from './product-interactive'
 import Link from 'next/link'
@@ -12,6 +12,15 @@ export const revalidate = 60 // Cache for 60s with Incremental Static Regenerati
 
 interface ProductPageProps {
   params: Promise<{ slug: string }>
+}
+
+export async function generateStaticParams() {
+  try {
+    const products = await getProducts()
+    return products.filter((p) => Boolean(p.slug)).map((p) => ({ slug: p.slug }))
+  } catch {
+    return []
+  }
 }
 
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {

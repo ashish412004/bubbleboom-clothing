@@ -23,6 +23,27 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
+  const allCookies = request.cookies.getAll()
+  const hasAuthTokenCookie = allCookies.some((c) => c.name.startsWith('sb-') && c.name.includes('-auth-token'))
+  const rawAuth = request.cookies.get('bb_auth_user')?.value
+  const hasPotentialAuth = hasAuthTokenCookie || Boolean(rawAuth)
+
+  const pathname = request.nextUrl.pathname
+
+  // Fast path: if visitor has no auth cookies whatsoever, resolve instantly in 0ms
+  if (!hasPotentialAuth) {
+    if (pathname === '/login' || pathname === '/signup') {
+      return response
+    }
+    if (pathname.startsWith('/admin')) {
+      if (process.env.NODE_ENV !== 'production') return response
+      return NextResponse.redirect(new URL('/login?next=' + encodeURIComponent(pathname), request.url))
+    }
+    if (pathname.startsWith('/account')) {
+      return NextResponse.redirect(new URL('/login?next=' + encodeURIComponent(pathname), request.url))
+    }
+  }
+
   const supabase = createServerClient(
     supabaseUrl,
     supabaseAnonKey,
@@ -52,7 +73,7 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const hasAuth = Boolean(user || request.cookies.get('bb_auth_user')?.value)
+  const hasAuth = Boolean(user || rawAuth)
 
   // Redirect already signed-in customer away from /login and /signup to homepage
   if (
