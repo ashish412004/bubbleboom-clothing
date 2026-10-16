@@ -18,6 +18,10 @@ interface CartStore {
   toggleWishlistStore: (productId?: string, variantId?: string) => Promise<{ inWishlist: boolean }>
 }
 
+let lastCartRefreshTime = 0
+let lastWishlistRefreshTime = 0
+const REFRESH_THROTTLE_MS = 20000 // 20s throttle
+
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
@@ -32,7 +36,12 @@ export const useCartStore = create<CartStore>()(
       setWishlistCount: (count) => set({ wishlistCount: Math.max(0, count) }),
       decrementWishlist: (delta = 1) =>
         set((state) => ({ wishlistCount: Math.max(0, state.wishlistCount - delta) })),
-      refreshCart: async () => {
+
+      refreshCart: async (force: boolean = false) => {
+        if (!force && Date.now() - lastCartRefreshTime < REFRESH_THROTTLE_MS) {
+          return
+        }
+        lastCartRefreshTime = Date.now()
         try {
           const res = await fetch('/api/cart')
           if (res.ok) {
@@ -48,7 +57,11 @@ export const useCartStore = create<CartStore>()(
           // Ignore network errors in background cart count refresh
         }
       },
-      refreshWishlist: async () => {
+      refreshWishlist: async (force: boolean = false) => {
+        if (!force && Date.now() - lastWishlistRefreshTime < REFRESH_THROTTLE_MS) {
+          return
+        }
+        lastWishlistRefreshTime = Date.now()
         try {
           const res = await fetch('/api/wishlist')
           if (res.ok) {

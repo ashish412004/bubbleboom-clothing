@@ -96,26 +96,33 @@ export async function updatePassword(newPassword: string) {
 }
 
 export async function getCurrentUser() {
-  if (isSupabaseConfigured()) {
-    try {
+  try {
+    const cookieStore = await cookies()
+    const allCookies = cookieStore.getAll()
+
+    // 1. Fast path for local auth cookie (0ms)
+    const rawAuth = cookieStore.get('bb_auth_user')?.value
+    if (rawAuth) {
+      try {
+        const u = JSON.parse(rawAuth)
+        if (u && u.id) return u
+      } catch {}
+    }
+
+    // 2. Only make a network call to Supabase Auth if an auth token cookie actually exists!
+    const hasSupabaseCookie = allCookies.some(
+      (c) => c.name.startsWith('sb-') && c.name.includes('-auth-token')
+    )
+
+    if (hasSupabaseCookie && isSupabaseConfigured()) {
       const supabase = await createServerClient()
       const { data: { user }, error } = await supabase.auth.getUser()
       if (!error && user) {
         return user
       }
-    } catch {
-      // fallback
-    }
-  }
-
-  try {
-    const cookieStore = await cookies()
-    const rawAuth = cookieStore.get('bb_auth_user')?.value
-    if (rawAuth) {
-      return JSON.parse(rawAuth)
     }
   } catch {
-    // ignore
+    // fallback
   }
 
   return null

@@ -156,7 +156,6 @@ export async function DELETE(request: NextRequest) {
       return response
     }
 
-    const { userId, sessionId } = await getAuthAndSession()
     const result = await clearCart(userId, sessionId)
     const response = NextResponse.json(result)
     response.cookies.delete('bb_cart')

@@ -33,7 +33,7 @@ describe('Production Supabase Migration & RPC Verification', () => {
     console.log('Production Products query latency:', durationP.toFixed(2), 'ms', 'Count:', prods?.length, 'Slugs:', prods?.map(p => p.slug))
     expect(prodErr).toBeNull()
 
-    // Probe 2: RPC add_to_cart_atomic
+    // Probe 2: RPC add_to_cart_atomic probe
     const startRpc = performance.now()
     const { data: rpcData, error: rpcErr } = await supabase.rpc('add_to_cart_atomic', {
       p_variant_id: '00000000-0000-0000-0000-000000000000',
@@ -41,6 +41,14 @@ describe('Production Supabase Migration & RPC Verification', () => {
       p_session_id: 'test_probe'
     })
     const durationRpc = performance.now() - startRpc
-    console.log('Production add_to_cart_atomic RPC:', { rpcData, rpcErr, durationMs: durationRpc.toFixed(2) })
+    console.log('Production add_to_cart_atomic RPC:', { rpcData, rpcErr: rpcErr?.code, durationMs: durationRpc.toFixed(2) })
+
+    // Probe 3: Supabase Region Diagnostic
+    const sbRes = await fetch(`${url}/rest/v1/`, { headers: { apikey: anonKey } })
+    console.log('Supabase CF Ray:', sbRes.headers.get('cf-ray'), 'Server:', sbRes.headers.get('server'))
+
+    // Probe 4: Vercel Region Diagnostic
+    const vRes = await fetch('https://bubbleboom-clothing.vercel.app/api/cart')
+    console.log('Vercel Function Region (x-vercel-id):', vRes.headers.get('x-vercel-id'))
   })
 })

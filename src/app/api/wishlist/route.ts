@@ -45,17 +45,24 @@ function applySessionCookie(response: NextResponse, sessionId: string, isNew: bo
 export async function GET() {
   try {
     const { userId, sessionId, isNewSession } = await getSessionIdentifiers()
-    const [items, summary] = await Promise.all([
-      getWishlist(userId, sessionId),
-      getWishlistSummary(userId, sessionId),
-    ])
+    const items = await getWishlist(userId, sessionId)
+
+    const count = items.length
+    const variantIds = items.map((i) => i.variant_id)
+    const productIds = Array.from(
+      new Set(
+        items
+          .map((i) => (i.variant as any)?.product_id || (i.variant as any)?.product?.id)
+          .filter(Boolean)
+      )
+    )
 
     const response = NextResponse.json({
       success: true,
       items,
-      count: summary.count,
-      productIds: summary.productIds,
-      variantIds: summary.variantIds,
+      count,
+      productIds,
+      variantIds,
     })
 
     applySessionCookie(response, sessionId, isNewSession)
