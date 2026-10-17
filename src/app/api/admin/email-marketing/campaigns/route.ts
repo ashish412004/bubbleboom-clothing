@@ -67,12 +67,19 @@ export async function POST(req: NextRequest) {
       body_text: rawContent.body_text !== undefined ? rawContent.body_text : preset.defaultContent.body_text,
       hero_image_url: rawContent.hero_image_url !== undefined ? rawContent.hero_image_url : preset.defaultContent.hero_image_url,
       hero_image_alt: rawContent.hero_image_alt !== undefined ? rawContent.hero_image_alt : preset.defaultContent.hero_image_alt,
+      text_alignment: rawContent.text_alignment || preset.defaultContent.text_alignment || 'center',
+      text_color: rawContent.text_color || '#262626',
+      card_background_color: rawContent.card_background_color || '#ffffff',
       // Optional CTA Button: Defaults strictly to false
       show_cta: Boolean(rawContent.show_cta),
       cta_text: rawContent.cta_text || preset.defaultContent.cta_text || 'VISIT STORE',
       cta_url: rawContent.cta_url || preset.defaultContent.cta_url || 'https://bubbleboomstore.com',
       cta_style: rawContent.cta_style || 'black',
+      cta_bg_color: rawContent.cta_bg_color,
+      cta_text_color: rawContent.cta_text_color,
+      cta_alignment: rawContent.cta_alignment || 'center',
       secondary_blocks: Array.isArray(rawContent.secondary_blocks) ? rawContent.secondary_blocks : [],
+      specific_recipients: Array.isArray(rawContent.specific_recipients) ? rawContent.specific_recipients : [],
     }
 
     if (!isSupabaseConfigured()) {

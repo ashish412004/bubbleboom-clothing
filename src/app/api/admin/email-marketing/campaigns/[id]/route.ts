@@ -75,12 +75,19 @@ export async function PATCH(
         body_text: rawContent.body_text,
         hero_image_url: rawContent.hero_image_url,
         hero_image_alt: rawContent.hero_image_alt,
+        text_alignment: rawContent.text_alignment || 'center',
+        text_color: rawContent.text_color || '#262626',
+        card_background_color: rawContent.card_background_color || '#ffffff',
         // Optional CTA Button: strictly boolean
         show_cta: Boolean(rawContent.show_cta),
         cta_text: rawContent.cta_text,
         cta_url: rawContent.cta_url,
-        cta_style: rawContent.cta_style,
+        cta_style: rawContent.cta_style || 'black',
+        cta_bg_color: rawContent.cta_bg_color,
+        cta_text_color: rawContent.cta_text_color,
+        cta_alignment: rawContent.cta_alignment || 'center',
         secondary_blocks: Array.isArray(rawContent.secondary_blocks) ? rawContent.secondary_blocks : [],
+        specific_recipients: Array.isArray(rawContent.specific_recipients) ? rawContent.specific_recipients : [],
       }
       updates.content = content as any
     }

@@ -96,8 +96,12 @@ export async function POST(
       .eq('id', id)
 
     // Retrieve strictly eligible opted-in recipients
+    const specificEmails = Array.isArray(content.specific_recipients)
+      ? content.specific_recipients
+      : []
     const recipients = await getEligibleRecipients(
-      (campaign.audience_type as CampaignAudienceType) || 'all_opted_in'
+      (campaign.audience_type as CampaignAudienceType) || 'all_registered',
+      specificEmails
     )
 
     if (recipients.length === 0) {

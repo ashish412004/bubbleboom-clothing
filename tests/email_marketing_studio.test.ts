@@ -14,14 +14,19 @@ describe('Bubble Boom – Email Marketing Studio & Updates Suite', () => {
   // 1. OPTIONAL CTA BUTTON REQUIREMENT
   // =========================================================================
   describe('1. Optional CTA Button Requirements', () => {
-    it('defaults show_cta to false across all 5 preset templates', () => {
-      const templateKeys = Object.keys(CAMPAIGN_PRESET_TEMPLATES) as Array<
-        keyof typeof CAMPAIGN_PRESET_TEMPLATES
-      >
-      expect(templateKeys).toHaveLength(5)
+    it('defaults show_cta to false across all preset templates', () => {
+      const corePresets = [
+        'coming_soon',
+        'first_drop',
+        'new_collection',
+        'exclusive_offer',
+        'back_in_stock',
+        'custom_blank',
+      ] as const
 
-      for (const key of templateKeys) {
+      for (const key of corePresets) {
         const preset = CAMPAIGN_PRESET_TEMPLATES[key]
+        expect(preset, `Preset ${key} should exist`).toBeDefined()
         expect(preset.defaultContent.show_cta).toBe(false)
       }
     })
@@ -232,6 +237,112 @@ describe('Bubble Boom – Email Marketing Studio & Updates Suite', () => {
       const data = await res.json()
       expect(data.success).toBe(true)
       expect(data.message).toContain('subscriber@example.com')
+    })
+  })
+
+  // =========================================================================
+  // 5. 6 STREETWEAR PRESET TEMPLATES
+  // =========================================================================
+  describe('5. Streetwear Preset Templates Specification', () => {
+    const requiredPresets = [
+      'coming_soon',
+      'first_drop',
+      'new_collection',
+      'exclusive_offer',
+      'back_in_stock',
+      'custom_blank',
+    ] as const
+
+    it('contains all 6 required preset templates with valid metadata', () => {
+      for (const id of requiredPresets) {
+        const preset = CAMPAIGN_PRESET_TEMPLATES[id]
+        expect(preset).toBeDefined()
+        expect(preset.name).toBeTruthy()
+        expect(preset.description).toBeTruthy()
+        expect(preset.defaultSubject).toBeTruthy()
+        expect(preset.defaultPreheader).toBeTruthy()
+        expect(preset.defaultContent).toBeDefined()
+      }
+    })
+
+    it('generates valid HTML with mandatory website link for every preset template', () => {
+      for (const id of requiredPresets) {
+        const preset = CAMPAIGN_PRESET_TEMPLATES[id]
+        const html = generateCampaignHtml(preset.defaultContent, {
+          subject: preset.defaultSubject,
+          preheader: preset.defaultPreheader,
+        })
+        expect(html).toContain('BUBBLE BOOM')
+        expect(html).toContain(OFFICIAL_WEBSITE_URL)
+        expect(html).toContain('BUBBLEBOOMSTORE.COM &rarr;')
+      }
+    })
+  })
+
+  // =========================================================================
+  // 6. TYPOGRAPHY, ALIGNMENT & COLOR CUSTOMIZATION
+  // =========================================================================
+  describe('6. Design Studio Typography & Color Customization', () => {
+    it('applies left, center, and right text alignment correctly', () => {
+      const leftContent: CampaignContent = {
+        heading: 'LEFT ALIGNED',
+        body_text: 'Left aligned paragraph.',
+        text_alignment: 'left',
+        show_cta: false,
+      }
+      const leftHtml = generateCampaignHtml(leftContent)
+      expect(leftHtml).toContain('text-align: left')
+
+      const centerContent: CampaignContent = {
+        heading: 'CENTER ALIGNED',
+        body_text: 'Center aligned paragraph.',
+        text_alignment: 'center',
+        show_cta: false,
+      }
+      const centerHtml = generateCampaignHtml(centerContent)
+      expect(centerHtml).toContain('text-align: center')
+
+      const rightContent: CampaignContent = {
+        heading: 'RIGHT ALIGNED',
+        body_text: 'Right aligned paragraph.',
+        text_alignment: 'right',
+        show_cta: false,
+      }
+      const rightHtml = generateCampaignHtml(rightContent)
+      expect(rightHtml).toContain('text-align: right')
+    })
+
+    it('applies custom text color and card background color', () => {
+      const customContent: CampaignContent = {
+        heading: 'CUSTOM COLOR TEST',
+        body_text: 'Custom colored text content.',
+        text_color: '#4a4a4a',
+        card_background_color: '#fdfbf7',
+        show_cta: false,
+      }
+
+      const html = generateCampaignHtml(customContent)
+      expect(html).toContain('color: #4a4a4a')
+      expect(html).toContain('background-color: #fdfbf7')
+    })
+
+    it('applies CTA alignment and button styling when CTA is enabled', () => {
+      const ctaContent: CampaignContent = {
+        heading: 'CTA TEST',
+        show_cta: true,
+        cta_text: 'ORDER TODAY',
+        cta_url: 'https://bubbleboomstore.com/shop',
+        cta_alignment: 'left',
+        cta_style: 'custom',
+        cta_bg_color: '#111827',
+        cta_text_color: '#f9fafb',
+      }
+
+      const html = generateCampaignHtml(ctaContent)
+      expect(html).toContain('ORDER TODAY')
+      expect(html).toContain('background-color: #111827')
+      expect(html).toContain('color: #f9fafb')
+      expect(html).toContain('text-align: left')
     })
   })
 })

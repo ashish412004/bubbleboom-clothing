@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Suspense } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useSearchParams, useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import {
   Mail,
@@ -25,6 +26,11 @@ import {
   Sparkles,
   FileText,
   Filter,
+  Check,
+  X,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
 } from 'lucide-react'
 import {
   CampaignContent,
@@ -43,7 +49,10 @@ import {
 type StudioTab = 'campaigns' | 'composer' | 'customers' | 'subscribers'
 type PreviewDevice = 'desktop' | 'mobile'
 
-export default function AdminEmailMarketingPage() {
+function EmailMarketingStudioContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [activeTab, setActiveTab] = useState<StudioTab>('campaigns')
   const [loading, setLoading] = useState(false)
 
@@ -70,21 +79,31 @@ export default function AdminEmailMarketingPage() {
   const [subject, setSubject] = useState('')
   const [preheader, setPreheader] = useState('')
   const [senderName, setSenderName] = useState('Bubble Boom')
-  const [audienceType, setAudienceType] = useState<CampaignAudienceType>('all_opted_in')
-  const [selectedTemplate, setSelectedTemplate] = useState<CampaignTemplateId>('drop_soon')
+  const [audienceType, setAudienceType] = useState<CampaignAudienceType>('all_registered')
+  const [selectedTemplate, setSelectedTemplate] = useState<CampaignTemplateId>('coming_soon')
 
-  // Content state
+  // Specific customers recipient pool
+  const [specificEmails, setSpecificEmails] = useState<string[]>([])
+  const [specificEmailInput, setSpecificEmailInput] = useState('')
+
+  // Design & Typography state
   const [heading, setHeading] = useState('')
   const [subheading, setSubheading] = useState('')
   const [bodyText, setBodyText] = useState('')
   const [heroImageUrl, setHeroImageUrl] = useState('')
   const [heroImageAlt, setHeroImageAlt] = useState('')
+  const [textAlignment, setTextAlignment] = useState<'left' | 'center' | 'right'>('center')
+  const [textColor, setTextColor] = useState('#262626')
+  const [cardBgColor, setCardBgColor] = useState('#ffffff')
 
   // OPTIONAL CTA BUTTON (Default: false)
   const [showCta, setShowCta] = useState(false)
   const [ctaText, setCtaText] = useState('EXPLORE COLLECTION')
   const [ctaUrl, setCtaUrl] = useState('https://bubbleboomstore.com/shop')
-  const [ctaStyle, setCtaStyle] = useState<'black' | 'white' | 'outline'>('black')
+  const [ctaStyle, setCtaStyle] = useState<'black' | 'white' | 'outline' | 'custom'>('black')
+  const [ctaBgColor, setCtaBgColor] = useState('#000000')
+  const [ctaTextColor, setCtaTextColor] = useState('#ffffff')
+  const [ctaAlignment, setCtaAlignment] = useState<'left' | 'center' | 'right'>('center')
 
   // Secondary blocks
   const [secondaryBlocks, setSecondaryBlocks] = useState<
@@ -151,20 +170,82 @@ export default function AdminEmailMarketingPage() {
     fetchDirectory()
   }, [])
 
-  // Calculate live eligible recipient count based on selected audience
-  const eligibleRecipientsCount = useMemo(() => {
-    return directoryEntries.filter((e) => {
-      if (e.consent_status !== 'opted_in') return false
-      if (audienceType === 'all_opted_in') return true
-      if (audienceType === 'newsletter_only') return e.is_newsletter_subscriber
-      if (audienceType === 'customers_opted_in') return e.is_registered_customer
-      return true
-    }).length
-  }, [directoryEntries, audienceType])
+  // Check URL params on mount
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    const aud = searchParams.get('audience')
+    if (tab === 'composer') {
+      setActiveTab('composer')
+    }
+    if (aud === 'specific_customers') {
+      setAudienceType('specific_customers')
+      const stored = sessionStorage.getItem('bb_campaign_specific_recipients')
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored)
+          if (Array.isArray(parsed)) {
+            setSpecificEmails(parsed)
+          }
+        } catch {}
+      }
+    }
+  }, [searchParams])
+
+  // Calculate live audience breakdown with strict marketing consent enforcement
+  const audienceBreakdown = useMemo(() => {
+    let pool: CustomerDirectoryEntry[] = []
+
+    if (audienceType === 'all_registered' || audienceType === 'marketing_eligible_registered') {
+      pool = directoryEntries.filter((e) => e.is_registered_customer)
+    } else if (audienceType === 'specific_customers') {
+      const specificSet = new Set(specificEmails.map((e) => e.trim().toLowerCase()))
+      pool = directoryEntries.filter((e) => specificSet.has(e.email))
+    } else {
+      // 'existing_opted_in' or 'all_opted_in'
+      pool = directoryEntries
+    }
+
+    const eligibleRecipients: { email: string; name?: string }[] = []
+    let noConsentCount = 0
+    let unsubscribedCount = 0
+
+    const seen = new Set<string>()
+
+    for (const contact of pool) {
+      if (contact.consent_status === 'opted_in') {
+        if (!seen.has(contact.email)) {
+          seen.add(contact.email)
+          eligibleRecipients.push({
+            email: contact.email,
+            name: contact.full_name || undefined,
+          })
+        }
+      } else if (contact.consent_status === 'unsubscribed') {
+        unsubscribedCount++
+      } else {
+        noConsentCount++
+      }
+    }
+
+    const totalCount = pool.length
+    const eligibleCount = eligibleRecipients.length
+    const excludedCount = totalCount - eligibleCount
+
+    return {
+      totalCount,
+      eligibleCount,
+      excludedCount,
+      eligibleRecipients,
+      exclusionReasons: {
+        no_consent: noConsentCount,
+        unsubscribed: unsubscribedCount,
+      },
+    }
+  }, [directoryEntries, audienceType, specificEmails])
 
   // Apply a template preset
   const handleApplyPreset = (templateId: CampaignTemplateId) => {
-    const preset = CAMPAIGN_PRESET_TEMPLATES[templateId]
+    const preset = CAMPAIGN_PRESET_TEMPLATES[templateId] || CAMPAIGN_PRESET_TEMPLATES.coming_soon
     if (!preset) return
 
     setSelectedTemplate(templateId)
@@ -175,21 +256,23 @@ export default function AdminEmailMarketingPage() {
     setBodyText(preset.defaultContent.body_text || '')
     setHeroImageUrl(preset.defaultContent.hero_image_url || '')
     setHeroImageAlt(preset.defaultContent.hero_image_alt || '')
-    // Default CTA is strictly OFF per requirements
+    setTextAlignment(preset.defaultContent.text_alignment || 'center')
+    // Default CTA is strictly OFF
     setShowCta(Boolean(preset.defaultContent.show_cta))
     setCtaText(preset.defaultContent.cta_text || 'VISIT STORE')
     setCtaUrl(preset.defaultContent.cta_url || 'https://bubbleboomstore.com')
     setCtaStyle(preset.defaultContent.cta_style || 'black')
+    setCtaAlignment(preset.defaultContent.cta_alignment || 'center')
     setSecondaryBlocks(preset.defaultContent.secondary_blocks || [])
 
     toast.success(`Loaded preset: ${preset.name}`)
   }
 
   // Initialize new composer
-  const handleNewCampaign = (templateId: CampaignTemplateId = 'drop_soon') => {
+  const handleNewCampaign = (templateId: CampaignTemplateId = 'coming_soon') => {
     setCampaignId(null)
     setCampaignName(`Campaign ${new Date().toLocaleDateString('en-GB')}`)
-    setAudienceType('all_opted_in')
+    setAudienceType('all_registered')
     handleApplyPreset(templateId)
     setActiveTab('composer')
   }
@@ -210,38 +293,30 @@ export default function AdminEmailMarketingPage() {
     setBodyText(c.body_text || '')
     setHeroImageUrl(c.hero_image_url || '')
     setHeroImageAlt(c.hero_image_alt || '')
+    setTextAlignment(c.text_alignment || 'center')
+    setTextColor(c.text_color || '#262626')
+    setCardBgColor(c.card_background_color || '#ffffff')
+
     setShowCta(Boolean(c.show_cta))
     setCtaText(c.cta_text || 'EXPLORE COLLECTION')
     setCtaUrl(c.cta_url || 'https://bubbleboomstore.com/shop')
     setCtaStyle(c.cta_style || 'black')
+    setCtaBgColor(c.cta_bg_color || '#000000')
+    setCtaTextColor(c.cta_text_color || '#ffffff')
+    setCtaAlignment(c.cta_alignment || 'center')
     setSecondaryBlocks(c.secondary_blocks || [])
+    if (Array.isArray(c.specific_recipients)) {
+      setSpecificEmails(c.specific_recipients)
+    }
 
     setActiveTab('composer')
   }
 
   // Duplicate campaign
   const handleDuplicateCampaign = (camp: MarketingCampaign) => {
+    handleEditCampaign(camp)
     setCampaignId(null)
     setCampaignName(`${camp.name} (Copy)`)
-    setSubject(camp.subject)
-    setPreheader(camp.preheader || '')
-    setSenderName(camp.sender_name || 'Bubble Boom')
-    setAudienceType(camp.audience_type)
-    setSelectedTemplate(camp.template_id)
-
-    const c = camp.content || {}
-    setHeading(c.heading || '')
-    setSubheading(c.subheading || '')
-    setBodyText(c.body_text || '')
-    setHeroImageUrl(c.hero_image_url || '')
-    setHeroImageAlt(c.hero_image_alt || '')
-    setShowCta(Boolean(c.show_cta))
-    setCtaText(c.cta_text || 'EXPLORE COLLECTION')
-    setCtaUrl(c.cta_url || 'https://bubbleboomstore.com/shop')
-    setCtaStyle(c.cta_style || 'black')
-    setSecondaryBlocks(c.secondary_blocks || [])
-
-    setActiveTab('composer')
     toast.success('Campaign duplicated as a new draft.')
   }
 
@@ -283,13 +358,32 @@ export default function AdminEmailMarketingPage() {
 
       if (data.urls && data.urls[0]) {
         setHeroImageUrl(data.urls[0])
-        toast.success('Promotional banner uploaded successfully!')
+        toast.success('Promotional poster uploaded successfully!')
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to upload image')
     } finally {
       setUploadingBanner(false)
     }
+  }
+
+  // Add specific email
+  const handleAddSpecificEmail = () => {
+    const clean = specificEmailInput.trim().toLowerCase()
+    if (!clean || !clean.includes('@')) {
+      toast.error('Please enter a valid email address.')
+      return
+    }
+    if (specificEmails.includes(clean)) {
+      toast.error('Email already in list.')
+      return
+    }
+    setSpecificEmails((prev) => [...prev, clean])
+    setSpecificEmailInput('')
+  }
+
+  const handleRemoveSpecificEmail = (email: string) => {
+    setSpecificEmails((prev) => prev.filter((e) => e !== email))
   }
 
   // Construct current campaign content
@@ -300,12 +394,19 @@ export default function AdminEmailMarketingPage() {
       body_text: bodyText.trim(),
       hero_image_url: heroImageUrl.trim(),
       hero_image_alt: heroImageAlt.trim(),
+      text_alignment: textAlignment,
+      text_color: textColor,
+      card_background_color: cardBgColor,
       // Optional CTA Button: strictly boolean
       show_cta: showCta,
       cta_text: ctaText.trim(),
       cta_url: ctaUrl.trim(),
       cta_style: ctaStyle,
+      cta_bg_color: ctaBgColor,
+      cta_text_color: ctaTextColor,
+      cta_alignment: ctaAlignment,
       secondary_blocks: secondaryBlocks,
+      specific_recipients: specificEmails,
     }
   }, [
     heading,
@@ -313,11 +414,18 @@ export default function AdminEmailMarketingPage() {
     bodyText,
     heroImageUrl,
     heroImageAlt,
+    textAlignment,
+    textColor,
+    cardBgColor,
     showCta,
     ctaText,
     ctaUrl,
     ctaStyle,
+    ctaBgColor,
+    ctaTextColor,
+    ctaAlignment,
     secondaryBlocks,
+    specificEmails,
   ])
 
   // Current compiled HTML
@@ -392,7 +500,6 @@ export default function AdminEmailMarketingPage() {
       return
     }
 
-    // Save first if not saved
     let targetId = campaignId
     if (!targetId) {
       try {
@@ -455,8 +562,8 @@ export default function AdminEmailMarketingPage() {
       toast.error('Please save your campaign draft first.')
       return
     }
-    if (eligibleRecipientsCount === 0) {
-      toast.error('No eligible opted-in subscribers found for this audience.')
+    if (audienceBreakdown.eligibleCount === 0) {
+      toast.error('No eligible opted-in contacts found in this audience pool.')
       return
     }
 
@@ -474,7 +581,7 @@ export default function AdminEmailMarketingPage() {
       }
 
       toast.success(
-        `Campaign dispatched successfully! Sent to ${data.summary?.sent || 0} opted-in subscribers.`
+        `Campaign dispatched successfully! Sent to ${data.summary?.sent || 0} opted-in recipients.`
       )
       setShowDispatchModal(false)
       fetchCampaigns()
@@ -486,21 +593,6 @@ export default function AdminEmailMarketingPage() {
     }
   }
 
-  // Filtered customer directory
-  const filteredDirectory = useMemo(() => {
-    return directoryEntries.filter((item) => {
-      const matchesSearch =
-        searchQuery === '' ||
-        item.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.full_name && item.full_name.toLowerCase().includes(searchQuery.toLowerCase()))
-
-      const matchesConsent =
-        consentFilter === 'all' || item.consent_status === consentFilter
-
-      return matchesSearch && matchesConsent
-    })
-  }, [directoryEntries, searchQuery, consentFilter])
-
   return (
     <div className="space-y-6 pb-20">
       {/* Header */}
@@ -508,23 +600,31 @@ export default function AdminEmailMarketingPage() {
         <div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-mono tracking-widest text-neutral-400 uppercase">
-              BUBBLE BOOM // MARKETING STUDIO
+              BUBBLE BOOM // EMAIL MARKETING STUDIO
             </span>
             <span className="bg-white text-black px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider">
-              PROD
+              ENTERPRISE
             </span>
           </div>
           <h1 className="text-2xl font-black uppercase tracking-tight text-white mt-1">
             Email Marketing Studio
           </h1>
           <p className="text-xs text-neutral-400 mt-0.5">
-            Design visual streetwear marketing campaigns &amp; manage verified opt-in customer contacts.
+            Design streetwear drops, select registered audiences with strict consent filtering, and dispatch campaigns.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
+          <Link
+            href="/admin/customers"
+            className="bg-neutral-900 border border-neutral-700 text-neutral-300 px-3.5 py-2 text-xs font-mono uppercase tracking-wider hover:text-white hover:border-neutral-500 transition-colors flex items-center gap-2"
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Customer Directory</span>
+          </Link>
+
           <button
-            onClick={() => handleNewCampaign('drop_soon')}
+            onClick={() => handleNewCampaign('coming_soon')}
             className="bg-white text-black px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider hover:bg-neutral-200 transition-colors flex items-center gap-2 cursor-pointer shadow-[3px_3px_0px_0px_rgba(255,255,255,0.3)]"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -533,7 +633,7 @@ export default function AdminEmailMarketingPage() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Navigation Tabs */}
       <div className="flex border-b border-neutral-800 gap-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('campaigns')}
@@ -543,7 +643,7 @@ export default function AdminEmailMarketingPage() {
               : 'border-transparent text-neutral-400 hover:text-white'
           }`}
         >
-          Campaigns &amp; Drafts ({campaigns.length})
+          Campaigns &amp; Sent History ({campaigns.length})
         </button>
 
         <button
@@ -555,35 +655,20 @@ export default function AdminEmailMarketingPage() {
           }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Visual Composer {campaignId && '(Active)'}</span>
+          <span>Design Studio Composer {campaignId && '(Active)'}</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('customers')}
-          className={`px-4 py-2 text-xs font-mono uppercase tracking-wider transition-colors border-b-2 cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'customers'
-              ? 'border-white text-white font-bold'
-              : 'border-transparent text-neutral-400 hover:text-white'
-          }`}
+        <Link
+          href="/admin/customers"
+          className="px-4 py-2 text-xs font-mono uppercase tracking-wider transition-colors border-b-2 border-transparent text-neutral-400 hover:text-white flex items-center gap-1.5"
         >
           <Users className="w-3.5 h-3.5" />
-          <span>Customer Directory ({directoryEntries.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('subscribers')}
-          className={`px-4 py-2 text-xs font-mono uppercase tracking-wider transition-colors border-b-2 cursor-pointer ${
-            activeTab === 'subscribers'
-              ? 'border-white text-white font-bold'
-              : 'border-transparent text-neutral-400 hover:text-white'
-          }`}
-        >
-          Opted-In Subscribers ({directoryStats.optedInCount})
-        </button>
+          <span>Registered Customers ({directoryStats.totalCustomers})</span>
+        </Link>
       </div>
 
       {/* ========================================================================= */}
-      {/* TAB 1: CAMPAIGNS LIST                                                     */}
+      {/* TAB 1: CAMPAIGNS & SENT HISTORY                                           */}
       {/* ========================================================================= */}
       {activeTab === 'campaigns' && (
         <div className="space-y-4">
@@ -598,7 +683,7 @@ export default function AdminEmailMarketingPage() {
             </div>
             <div className="p-4 bg-neutral-900 border border-neutral-800">
               <span className="text-[10px] font-mono tracking-wider text-neutral-400 block uppercase">
-                Sent Campaigns
+                Sent Dispatches
               </span>
               <span className="text-2xl font-black text-emerald-400 mt-1 block">
                 {campaigns.filter((c) => c.status === 'sent').length}
@@ -606,7 +691,7 @@ export default function AdminEmailMarketingPage() {
             </div>
             <div className="p-4 bg-neutral-900 border border-neutral-800">
               <span className="text-[10px] font-mono tracking-wider text-neutral-400 block uppercase">
-                Drafts in Progress
+                Saved Drafts
               </span>
               <span className="text-2xl font-black text-neutral-300 mt-1 block">
                 {campaigns.filter((c) => c.status === 'draft').length}
@@ -614,7 +699,7 @@ export default function AdminEmailMarketingPage() {
             </div>
             <div className="p-4 bg-neutral-900 border border-neutral-800">
               <span className="text-[10px] font-mono tracking-wider text-neutral-400 block uppercase">
-                Eligible Subscribers
+                Consented Subscribers
               </span>
               <span className="text-2xl font-black text-white mt-1 block">
                 {directoryStats.optedInCount}
@@ -624,7 +709,7 @@ export default function AdminEmailMarketingPage() {
 
           {loadingCampaigns ? (
             <div className="p-12 text-center text-xs font-mono text-neutral-400 bg-neutral-900 border border-neutral-800">
-              Loading marketing campaigns...
+              Loading campaigns history...
             </div>
           ) : campaigns.length === 0 ? (
             <div className="p-12 text-center bg-neutral-900 border border-neutral-800">
@@ -632,14 +717,14 @@ export default function AdminEmailMarketingPage() {
               <h3 className="text-sm font-black uppercase text-white tracking-wider">
                 No Campaigns Created Yet
               </h3>
-              <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
-                Start composing your first streetwear marketing drop announcement or product launch email.
+              <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto font-mono">
+                Launch the Design Studio to create and preview promotional emails for registered customers.
               </p>
               <button
-                onClick={() => handleNewCampaign('drop_soon')}
+                onClick={() => handleNewCampaign('coming_soon')}
                 className="mt-4 bg-white text-black px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider hover:bg-neutral-200"
               >
-                Launch Studio Composer
+                Launch Design Studio
               </button>
             </div>
           ) : (
@@ -694,7 +779,7 @@ export default function AdminEmailMarketingPage() {
                       onClick={() => handleEditCampaign(camp)}
                       className="px-3 py-1.5 bg-neutral-800 text-white text-xs font-mono hover:bg-neutral-700 transition-colors cursor-pointer"
                     >
-                      {camp.status === 'sent' ? 'View Details' : 'Edit Composer'}
+                      {camp.status === 'sent' ? 'View Details' : 'Edit Studio'}
                     </button>
                     <button
                       onClick={() => handleDuplicateCampaign(camp)}
@@ -719,47 +804,59 @@ export default function AdminEmailMarketingPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: VISUAL COMPOSER & PREVIEW                                          */}
+      {/* TAB 2: DESIGN STUDIO COMPOSER & PREVIEW                                   */}
       {/* ========================================================================= */}
       {activeTab === 'composer' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* LEFT COLUMN: Controls & Content Editor (7 Cols) */}
           <div className="lg:col-span-7 space-y-6">
-            {/* Presets Bar */}
+            {/* 6 Reusable Presets Bar */}
             <div className="p-4 bg-neutral-900 border border-neutral-800 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-300">
-                  Streetwear Template Presets
+                  Bubble Boom Streetwear Presets (6 Templates)
                 </span>
                 <span className="text-[10px] font-mono text-neutral-400">
-                  Click to populate theme
+                  Select to load theme
                 </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {Object.values(CAMPAIGN_PRESET_TEMPLATES).map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleApplyPreset(preset.id)}
-                    className={`p-2.5 text-left text-xs font-mono border transition-all cursor-pointer ${
-                      selectedTemplate === preset.id
-                        ? 'border-white bg-white text-black font-bold'
-                        : 'border-neutral-800 bg-black text-neutral-300 hover:border-neutral-600'
-                    }`}
-                  >
-                    <span className="block truncate font-bold uppercase">{preset.name}</span>
-                    <span className="text-[9px] block text-neutral-400 truncate mt-0.5">
-                      {preset.id}
-                    </span>
-                  </button>
-                ))}
+                {[
+                  'coming_soon',
+                  'first_drop',
+                  'new_collection',
+                  'exclusive_offer',
+                  'back_in_stock',
+                  'custom_blank',
+                ].map((key) => {
+                  const preset = CAMPAIGN_PRESET_TEMPLATES[key]
+                  if (!preset) return null
+                  const isSelected = selectedTemplate === preset.id
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handleApplyPreset(preset.id as CampaignTemplateId)}
+                      className={`p-2.5 text-left text-xs font-mono border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-white bg-white text-black font-bold'
+                          : 'border-neutral-800 bg-black text-neutral-300 hover:border-neutral-600'
+                      }`}
+                    >
+                      <span className="block truncate font-bold uppercase">{preset.name}</span>
+                      <span className="text-[9px] block text-neutral-400 truncate mt-0.5">
+                        {preset.id}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
-            {/* Campaign Metadata */}
+            {/* Campaign Metadata & Audience Selector */}
             <div className="p-5 bg-neutral-900 border border-neutral-800 space-y-4">
               <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-white border-b border-neutral-800 pb-2">
-                1. Campaign Settings &amp; Target Audience
+                1. Campaign Details &amp; Audience Selection
               </h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -816,76 +913,168 @@ export default function AdminEmailMarketingPage() {
                 />
               </div>
 
+              {/* Phase 3 Audience Selector */}
               <div>
                 <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
-                  Target Audience (Strictly Opted-In Only)
+                  Select Recipient Audience
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setAudienceType('all_opted_in')}
-                    className={`p-2.5 border text-xs font-mono text-left cursor-pointer transition-colors ${
-                      audienceType === 'all_opted_in'
+                    onClick={() => setAudienceType('all_registered')}
+                    className={`p-3 border text-xs font-mono text-left cursor-pointer transition-colors ${
+                      audienceType === 'all_registered'
                         ? 'border-white bg-neutral-800 text-white font-bold'
                         : 'border-neutral-800 bg-black text-neutral-400 hover:text-white'
                     }`}
                   >
-                    <span className="block font-bold">All Opted-In</span>
+                    <span className="block font-bold">All Registered Customers</span>
                     <span className="text-[10px] text-neutral-400 block mt-0.5">
-                      Subscribers &amp; Customers
+                      Filters automatically to marketing-consented contacts
                     </span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setAudienceType('newsletter_only')}
-                    className={`p-2.5 border text-xs font-mono text-left cursor-pointer transition-colors ${
-                      audienceType === 'newsletter_only'
+                    onClick={() => setAudienceType('marketing_eligible_registered')}
+                    className={`p-3 border text-xs font-mono text-left cursor-pointer transition-colors ${
+                      audienceType === 'marketing_eligible_registered'
                         ? 'border-white bg-neutral-800 text-white font-bold'
                         : 'border-neutral-800 bg-black text-neutral-400 hover:text-white'
                     }`}
                   >
-                    <span className="block font-bold">Newsletter Only</span>
+                    <span className="block font-bold">Marketing-Eligible Only</span>
                     <span className="text-[10px] text-neutral-400 block mt-0.5">
-                      Website Opt-Ins
+                      Registered users with explicit marketing consent
                     </span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setAudienceType('customers_opted_in')}
-                    className={`p-2.5 border text-xs font-mono text-left cursor-pointer transition-colors ${
-                      audienceType === 'customers_opted_in'
+                    onClick={() => setAudienceType('specific_customers')}
+                    className={`p-3 border text-xs font-mono text-left cursor-pointer transition-colors ${
+                      audienceType === 'specific_customers'
                         ? 'border-white bg-neutral-800 text-white font-bold'
                         : 'border-neutral-800 bg-black text-neutral-400 hover:text-white'
                     }`}
                   >
-                    <span className="block font-bold">Customers Only</span>
+                    <span className="block font-bold">Specific Customers ({specificEmails.length})</span>
                     <span className="text-[10px] text-neutral-400 block mt-0.5">
-                      Registered &amp; Opted-In
+                      Hand-pick VIP customer email addresses
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAudienceType('existing_opted_in')}
+                    className={`p-3 border text-xs font-mono text-left cursor-pointer transition-colors ${
+                      audienceType === 'existing_opted_in'
+                        ? 'border-white bg-neutral-800 text-white font-bold'
+                        : 'border-neutral-800 bg-black text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    <span className="block font-bold">All Opted-In Contacts</span>
+                    <span className="text-[10px] text-neutral-400 block mt-0.5">
+                      Includes newsletter opt-ins and registered customers
                     </span>
                   </button>
                 </div>
 
-                <div className="mt-2.5 p-2 bg-black border border-neutral-800 flex items-center justify-between text-xs font-mono">
-                  <span className="text-neutral-400">Authoritative Eligible Recipients:</span>
-                  <strong className="text-emerald-400 font-bold">
-                    {eligibleRecipientsCount} verified contacts
-                  </strong>
+                {/* Specific Customers Input Panel */}
+                {audienceType === 'specific_customers' && (
+                  <div className="mt-3 p-3 bg-black border border-neutral-800 space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        value={specificEmailInput}
+                        onChange={(e) => setSpecificEmailInput(e.target.value)}
+                        placeholder="Add customer email..."
+                        className="flex-1 bg-neutral-900 border border-neutral-700 p-2 text-xs text-white font-mono focus:outline-none focus:border-white"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleAddSpecificEmail()
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddSpecificEmail}
+                        className="px-3 py-2 bg-neutral-800 text-white text-xs font-mono hover:bg-neutral-700"
+                      >
+                        Add
+                      </button>
+                    </div>
+
+                    {specificEmails.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {specificEmails.map((email) => (
+                          <span
+                            key={email}
+                            className="bg-neutral-900 border border-neutral-700 text-white text-[10px] font-mono px-2 py-1 flex items-center gap-1.5"
+                          >
+                            <span>{email}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSpecificEmail(email)}
+                              className="text-neutral-400 hover:text-red-400"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Detailed Audience Calculation Breakdown (Phase 3 Requirement) */}
+                <div className="mt-3 p-3.5 bg-black border border-neutral-800 space-y-2 font-mono text-xs">
+                  <div className="flex justify-between items-center text-neutral-400 pb-1.5 border-b border-neutral-800">
+                    <span>Total Pool Count:</span>
+                    <strong className="text-white">{audienceBreakdown.totalCount} contacts</strong>
+                  </div>
+                  <div className="flex justify-between items-center text-emerald-400 pb-1.5 border-b border-neutral-800">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Eligible Recipients (Marketing Consented):</span>
+                    </span>
+                    <strong className="text-emerald-400 text-sm font-bold">
+                      {audienceBreakdown.eligibleCount} recipients
+                    </strong>
+                  </div>
+                  <div className="flex justify-between items-center text-neutral-400 pt-0.5">
+                    <span>Excluded (Safe from Send):</span>
+                    <strong className="text-neutral-300">
+                      {audienceBreakdown.excludedCount} contacts
+                    </strong>
+                  </div>
+                  {audienceBreakdown.excludedCount > 0 && (
+                    <div className="text-[10px] text-neutral-500 pt-1 space-y-0.5">
+                      <div>
+                        • {audienceBreakdown.exclusionReasons.no_consent} excluded: No promotional marketing consent given.
+                      </div>
+                      {audienceBreakdown.exclusionReasons.unsubscribed > 0 && (
+                        <div>
+                          • {audienceBreakdown.exclusionReasons.unsubscribed} excluded: Unsubscribed from marketing.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Content Editor */}
+            {/* Content & Design Editor (Phase 6) */}
             <div className="p-5 bg-neutral-900 border border-neutral-800 space-y-4">
               <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-white border-b border-neutral-800 pb-2">
-                2. Visual Content &amp; Media
+                2. Visual Content &amp; Design Customization
               </h2>
 
-              {/* Hero Banner Image */}
+              {/* Promotional Poster / Hero Banner */}
               <div>
                 <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
-                  Promotional Banner Image (Optional)
+                  Promotional Poster / Banner Image (Optional)
                 </label>
                 <div className="space-y-2">
                   <div className="flex gap-2">
@@ -893,12 +1082,12 @@ export default function AdminEmailMarketingPage() {
                       type="text"
                       value={heroImageUrl}
                       onChange={(e) => setHeroImageUrl(e.target.value)}
-                      placeholder="https://... or upload photo"
+                      placeholder="https://... or upload poster from device"
                       className="flex-1 bg-black border border-neutral-700 p-2.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-white font-mono"
                     />
                     <label className="bg-neutral-800 hover:bg-neutral-700 text-white px-3 py-2 text-xs font-mono flex items-center gap-1.5 cursor-pointer shrink-0">
                       <Upload className="w-3.5 h-3.5" />
-                      <span>{uploadingBanner ? 'Uploading...' : 'Upload'}</span>
+                      <span>{uploadingBanner ? 'Uploading...' : 'Upload Poster'}</span>
                       <input
                         type="file"
                         accept="image/png,image/jpeg,image/webp"
@@ -909,7 +1098,7 @@ export default function AdminEmailMarketingPage() {
                     </label>
                   </div>
                   {heroImageUrl && (
-                    <div className="relative h-32 w-full max-w-sm border border-neutral-700 bg-black overflow-hidden">
+                    <div className="relative h-36 w-full max-w-sm border border-neutral-700 bg-black overflow-hidden">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={heroImageUrl}
@@ -928,11 +1117,11 @@ export default function AdminEmailMarketingPage() {
                 </div>
               </div>
 
-              {/* Subheading & Heading */}
+              {/* Headings */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
-                    Subheading / Eyebrow (Optional)
+                    Subtitle / Eyebrow (Optional)
                   </label>
                   <input
                     type="text"
@@ -965,29 +1154,110 @@ export default function AdminEmailMarketingPage() {
                   rows={4}
                   value={bodyText}
                   onChange={(e) => setBodyText(e.target.value)}
-                  placeholder="Write your email body copy. Paragraphs are automatically formatted."
+                  placeholder="Write your email body copy. Paragraphs are automatically separated by empty lines."
                   className="w-full bg-black border border-neutral-700 p-2.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-white font-mono"
                 />
               </div>
 
+              {/* Typography & Color Customization Controls (Phase 6) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-neutral-800">
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-neutral-400 mb-1">
+                    Text Alignment
+                  </label>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setTextAlignment('left')}
+                      className={`p-2 border text-xs font-mono flex-1 flex justify-center cursor-pointer ${
+                        textAlignment === 'left' ? 'bg-white text-black border-white' : 'bg-black text-neutral-400 border-neutral-700'
+                      }`}
+                      title="Left Align"
+                    >
+                      <AlignLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTextAlignment('center')}
+                      className={`p-2 border text-xs font-mono flex-1 flex justify-center cursor-pointer ${
+                        textAlignment === 'center' ? 'bg-white text-black border-white' : 'bg-black text-neutral-400 border-neutral-700'
+                      }`}
+                      title="Center Align"
+                    >
+                      <AlignCenter className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTextAlignment('right')}
+                      className={`p-2 border text-xs font-mono flex-1 flex justify-center cursor-pointer ${
+                        textAlignment === 'right' ? 'bg-white text-black border-white' : 'bg-black text-neutral-400 border-neutral-700'
+                      }`}
+                      title="Right Align"
+                    >
+                      <AlignRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-neutral-400 mb-1">
+                    Text Colour
+                  </label>
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      type="color"
+                      value={textColor}
+                      onChange={(e) => setTextColor(e.target.value)}
+                      className="w-8 h-8 p-0 bg-transparent border border-neutral-700 cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={textColor}
+                      onChange={(e) => setTextColor(e.target.value)}
+                      className="flex-1 bg-black border border-neutral-700 p-1.5 text-xs text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-neutral-400 mb-1">
+                    Card Background
+                  </label>
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      type="color"
+                      value={cardBgColor}
+                      onChange={(e) => setCardBgColor(e.target.value)}
+                      className="w-8 h-8 p-0 bg-transparent border border-neutral-700 cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={cardBgColor}
+                      onChange={(e) => setCardBgColor(e.target.value)}
+                      className="flex-1 bg-black border border-neutral-700 p-1.5 text-xs text-white font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* ========================================================================= */}
-              {/* REQUIREMENT 1: OPTIONAL CTA BUTTON (TOGGLE ON/OFF, DEFAULT OFF)           */}
+              {/* PHASE 7: OPTIONAL CTA BUTTON (TOGGLE ON/OFF, DEFAULT OFF)                 */}
               {/* ========================================================================= */}
               <div className="pt-3 border-t border-neutral-800 space-y-3">
-                <div className="flex items-center justify-between p-3 bg-black border border-neutral-800">
+                <div className="flex items-center justify-between p-3.5 bg-black border border-neutral-800">
                   <div>
                     <span className="text-xs font-mono font-bold uppercase text-white block">
                       Add CTA Button
                     </span>
                     <span className="text-[10px] text-neutral-400 font-mono">
-                      Optional clickable call-to-action button. When OFF, completely omitted with no empty space.
+                      Optional call-to-action button. When OFF, completely removed with zero placeholder spacing.
                     </span>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => setShowCta(!showCta)}
-                    className={`px-3 py-1 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer border ${
+                    className={`px-3.5 py-1 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer border ${
                       showCta
                         ? 'bg-emerald-500 text-black border-emerald-400'
                         : 'bg-neutral-800 text-neutral-400 border-neutral-700'
@@ -1027,54 +1297,89 @@ export default function AdminEmailMarketingPage() {
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] font-mono uppercase text-neutral-400 mb-1">
-                        Button Styling
-                      </label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setCtaStyle('black')}
-                          className={`px-3 py-1.5 text-[11px] font-mono border cursor-pointer ${
-                            ctaStyle === 'black'
-                              ? 'bg-white text-black font-bold border-white'
-                              : 'bg-black text-neutral-300 border-neutral-700'
-                          }`}
-                        >
-                          Black Solid
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCtaStyle('white')}
-                          className={`px-3 py-1.5 text-[11px] font-mono border cursor-pointer ${
-                            ctaStyle === 'white'
-                              ? 'bg-white text-black font-bold border-white'
-                              : 'bg-black text-neutral-300 border-neutral-700'
-                          }`}
-                        >
-                          White Solid
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCtaStyle('outline')}
-                          className={`px-3 py-1.5 text-[11px] font-mono border cursor-pointer ${
-                            ctaStyle === 'outline'
-                              ? 'bg-white text-black font-bold border-white'
-                              : 'bg-black text-neutral-300 border-neutral-700'
-                          }`}
-                        >
-                          Monochrome Outline
-                        </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-neutral-400 mb-1">
+                          Button Style
+                        </label>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCtaStyle('black')}
+                            className={`px-2.5 py-1 text-[10px] font-mono border cursor-pointer ${
+                              ctaStyle === 'black'
+                                ? 'bg-white text-black font-bold border-white'
+                                : 'bg-black text-neutral-300 border-neutral-700'
+                            }`}
+                          >
+                            Black Solid
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCtaStyle('white')}
+                            className={`px-2.5 py-1 text-[10px] font-mono border cursor-pointer ${
+                              ctaStyle === 'white'
+                                ? 'bg-white text-black font-bold border-white'
+                                : 'bg-black text-neutral-300 border-neutral-700'
+                            }`}
+                          >
+                            White Solid
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCtaStyle('outline')}
+                            className={`px-2.5 py-1 text-[10px] font-mono border cursor-pointer ${
+                              ctaStyle === 'outline'
+                                ? 'bg-white text-black font-bold border-white'
+                                : 'bg-black text-neutral-300 border-neutral-700'
+                            }`}
+                          >
+                            Outline
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-neutral-400 mb-1">
+                          Button Alignment
+                        </label>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCtaAlignment('left')}
+                            className={`px-2.5 py-1 text-[10px] font-mono border cursor-pointer ${
+                              ctaAlignment === 'left' ? 'bg-white text-black border-white' : 'bg-black text-neutral-300 border-neutral-700'
+                            }`}
+                          >
+                            Left
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCtaAlignment('center')}
+                            className={`px-2.5 py-1 text-[10px] font-mono border cursor-pointer ${
+                              ctaAlignment === 'center' ? 'bg-white text-black border-white' : 'bg-black text-neutral-300 border-neutral-700'
+                            }`}
+                          >
+                            Center
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCtaAlignment('right')}
+                            className={`px-2.5 py-1 text-[10px] font-mono border cursor-pointer ${
+                              ctaAlignment === 'right' ? 'bg-white text-black border-white' : 'bg-black text-neutral-300 border-neutral-700'
+                            }`}
+                          >
+                            Right
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* ========================================================================= */}
-              {/* REQUIREMENT 2: MANDATORY WEBSITE LINK NOTICE                              */}
-              {/* ========================================================================= */}
-              <div className="p-3 bg-neutral-950 border border-neutral-800 text-[11px] font-mono flex items-start gap-2.5">
+              {/* PHASE 8: MANDATORY WEBSITE LINK NOTICE */}
+              <div className="p-3.5 bg-neutral-950 border border-neutral-800 text-[11px] font-mono flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div className="text-neutral-400 leading-relaxed">
                   <strong className="text-white block">Official Website Hyperlink: Always Included</strong>
@@ -1110,10 +1415,10 @@ export default function AdminEmailMarketingPage() {
               <button
                 type="button"
                 onClick={() => setShowDispatchModal(true)}
-                disabled={eligibleRecipientsCount === 0}
+                disabled={audienceBreakdown.eligibleCount === 0}
                 className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-neutral-700 text-black px-5 py-2 text-xs font-mono font-black uppercase tracking-widest transition-colors cursor-pointer shadow-[2px_2px_0px_0px_rgba(255,255,255,0.4)]"
               >
-                Dispatch Campaign ({eligibleRecipientsCount})
+                Dispatch Campaign ({audienceBreakdown.eligibleCount})
               </button>
             </div>
           </div>
@@ -1182,7 +1487,10 @@ export default function AdminEmailMarketingPage() {
                   previewDevice === 'mobile' ? 'max-w-[375px]' : 'max-w-[600px]'
                 }`}
               >
-                <div className="border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(255,255,255,0.2)] text-black overflow-hidden">
+                <div
+                  className="border-2 border-black shadow-[6px_6px_0px_0px_rgba(255,255,255,0.2)] overflow-hidden"
+                  style={{ backgroundColor: cardBgColor }}
+                >
                   {/* Email Header */}
                   <div className="p-5 bg-black text-white text-center border-b-2 border-black">
                     <span className="text-lg font-black tracking-[4px] uppercase block">
@@ -1207,7 +1515,10 @@ export default function AdminEmailMarketingPage() {
 
                   {/* Content Area */}
                   {(heading || subheading || bodyText || showCta || secondaryBlocks.length > 0) && (
-                    <div className="p-6 space-y-4 text-center">
+                    <div
+                      className="p-6 space-y-4"
+                      style={{ textAlign: textAlignment }}
+                    >
                       {subheading && (
                         <span className="text-[10px] font-mono font-bold tracking-[2px] text-neutral-500 uppercase block">
                           {subheading}
@@ -1215,13 +1526,19 @@ export default function AdminEmailMarketingPage() {
                       )}
 
                       {heading && (
-                        <h2 className="text-xl font-black uppercase tracking-tight text-black leading-tight">
+                        <h2
+                          className="text-xl font-black uppercase tracking-tight leading-tight"
+                          style={{ color: textColor }}
+                        >
                           {heading}
                         </h2>
                       )}
 
                       {bodyText && (
-                        <div className="text-xs text-neutral-700 leading-relaxed text-left space-y-2">
+                        <div
+                          className="text-xs leading-relaxed space-y-2"
+                          style={{ color: textColor, textAlign: textAlignment }}
+                        >
                           {bodyText.split(/\n\s*\n/).map((para, i) => (
                             <p key={i}>{para}</p>
                           ))}
@@ -1244,7 +1561,10 @@ export default function AdminEmailMarketingPage() {
 
                       {/* CTA Button Preview: ONLY IF showCta is TRUE */}
                       {showCta && (
-                        <div className="pt-2">
+                        <div
+                          className="pt-2"
+                          style={{ textAlign: ctaAlignment }}
+                        >
                           <span
                             className={`inline-block text-xs font-black tracking-widest uppercase px-6 py-3 border-2 transition-all cursor-pointer ${
                               ctaStyle === 'white'
@@ -1311,237 +1631,6 @@ export default function AdminEmailMarketingPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: CUSTOMER EMAIL DIRECTORY                                           */}
-      {/* ========================================================================= */}
-      {activeTab === 'customers' && (
-        <div className="space-y-4">
-          {/* Top Search & Filter */}
-          <div className="p-4 bg-neutral-900 border border-neutral-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-3" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search email or customer name..."
-                className="w-full bg-black border border-neutral-700 pl-9 pr-3 py-2 text-xs text-white placeholder:text-neutral-500 font-mono focus:outline-none focus:border-white"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <span className="text-[11px] font-mono text-neutral-400 shrink-0">Filter Consent:</span>
-              <select
-                value={consentFilter}
-                onChange={(e) => setConsentFilter(e.target.value)}
-                className="bg-black border border-neutral-700 text-xs text-white p-2 font-mono focus:outline-none"
-              >
-                <option value="all">All Contacts ({directoryEntries.length})</option>
-                <option value="opted_in">Opted-In ({directoryStats.optedInCount})</option>
-                <option value="not_opted_in">Not Subscribed ({directoryStats.notOptedInCount})</option>
-                <option value="unsubscribed">Unsubscribed ({directoryStats.unsubscribedCount})</option>
-              </select>
-
-              <button
-                onClick={fetchDirectory}
-                className="p-2 bg-neutral-800 text-neutral-300 hover:text-white"
-                title="Refresh contacts"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Directory Stats Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div className="p-3 bg-neutral-900 border border-neutral-800">
-              <span className="text-[10px] font-mono text-neutral-400 block uppercase">
-                Total Contacts
-              </span>
-              <strong className="text-lg font-black text-white">{directoryEntries.length}</strong>
-            </div>
-            <div className="p-3 bg-neutral-900 border border-neutral-800">
-              <span className="text-[10px] font-mono text-neutral-400 block uppercase">
-                Registered Users
-              </span>
-              <strong className="text-lg font-black text-neutral-300">
-                {directoryStats.totalCustomers}
-              </strong>
-            </div>
-            <div className="p-3 bg-neutral-900 border border-neutral-800">
-              <span className="text-[10px] font-mono text-neutral-400 block uppercase">
-                Opted-In (Eligible)
-              </span>
-              <strong className="text-lg font-black text-emerald-400">
-                {directoryStats.optedInCount}
-              </strong>
-            </div>
-            <div className="p-3 bg-neutral-900 border border-neutral-800">
-              <span className="text-[10px] font-mono text-neutral-400 block uppercase">
-                Not Subscribed
-              </span>
-              <strong className="text-lg font-black text-neutral-400">
-                {directoryStats.notOptedInCount}
-              </strong>
-            </div>
-            <div className="p-3 bg-neutral-900 border border-neutral-800">
-              <span className="text-[10px] font-mono text-neutral-400 block uppercase">
-                Unsubscribed
-              </span>
-              <strong className="text-lg font-black text-rose-400">
-                {directoryStats.unsubscribedCount}
-              </strong>
-            </div>
-          </div>
-
-          {/* Table */}
-          {loadingDirectory ? (
-            <div className="p-12 text-center text-xs font-mono text-neutral-400 bg-neutral-900 border border-neutral-800">
-              Loading customer directory...
-            </div>
-          ) : filteredDirectory.length === 0 ? (
-            <div className="p-12 text-center bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400">
-              No contacts matching the criteria.
-            </div>
-          ) : (
-            <div className="border border-neutral-800 bg-neutral-900 overflow-x-auto">
-              <table className="w-full text-left text-xs font-mono">
-                <thead className="bg-black text-neutral-400 uppercase text-[10px] border-b border-neutral-800">
-                  <tr>
-                    <th className="p-3">Customer Email</th>
-                    <th className="p-3">Name</th>
-                    <th className="p-3">Registered On</th>
-                    <th className="p-3">Last Sign In</th>
-                    <th className="p-3">Auth Provider</th>
-                    <th className="p-3">Marketing Consent</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-800 text-neutral-300">
-                  {filteredDirectory.map((entry) => (
-                    <tr key={entry.email} className="hover:bg-neutral-800/40">
-                      <td className="p-3 font-bold text-white truncate max-w-xs">{entry.email}</td>
-                      <td className="p-3 text-neutral-400">{entry.full_name || '—'}</td>
-                      <td className="p-3 text-neutral-400 whitespace-nowrap">
-                        {entry.created_at
-                          ? new Date(entry.created_at).toLocaleDateString('en-GB')
-                          : '—'}
-                      </td>
-                      <td className="p-3 text-neutral-400 whitespace-nowrap">
-                        {entry.last_sign_in_at
-                          ? new Date(entry.last_sign_in_at).toLocaleDateString('en-GB')
-                          : '—'}
-                      </td>
-                      <td className="p-3 text-neutral-400 uppercase text-[10px]">
-                        {entry.provider}
-                      </td>
-                      <td className="p-3">
-                        <span
-                          className={`text-[9px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider inline-block ${
-                            entry.consent_status === 'opted_in'
-                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                              : entry.consent_status === 'unsubscribed'
-                              ? 'bg-rose-950 text-rose-400 border border-rose-800'
-                              : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
-                          }`}
-                        >
-                          {entry.consent_status.replace('_', ' ')}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 4: OPTED-IN SUBSCRIBERS                                               */}
-      {/* ========================================================================= */}
-      {activeTab === 'subscribers' && (
-        <div className="space-y-4">
-          <div className="p-4 bg-neutral-900 border border-neutral-800 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-black uppercase text-white tracking-wider">
-                Active Marketing Subscribers ({directoryStats.optedInCount})
-              </h3>
-              <p className="text-xs text-neutral-400 mt-0.5">
-                These addresses have explicitly opted in and will receive broadcast marketing emails.
-              </p>
-            </div>
-            <button
-              onClick={fetchDirectory}
-              className="p-2 bg-neutral-800 text-neutral-300 hover:text-white"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="border border-neutral-800 bg-neutral-900 overflow-x-auto">
-            <table className="w-full text-left text-xs font-mono">
-              <thead className="bg-black text-neutral-400 uppercase text-[10px] border-b border-neutral-800">
-                <tr>
-                  <th className="p-3">Subscriber Email</th>
-                  <th className="p-3">Name</th>
-                  <th className="p-3">Source</th>
-                  <th className="p-3">Opt-In Date</th>
-                  <th className="p-3">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-800 text-neutral-300">
-                {directoryEntries
-                  .filter((e) => e.consent_status === 'opted_in')
-                  .map((sub) => (
-                    <tr key={sub.email} className="hover:bg-neutral-800/40">
-                      <td className="p-3 font-bold text-white">{sub.email}</td>
-                      <td className="p-3 text-neutral-400">{sub.full_name || '—'}</td>
-                      <td className="p-3 text-neutral-400 uppercase text-[10px]">
-                        {sub.is_registered_customer ? 'Registered Customer' : 'Newsletter Form'}
-                      </td>
-                      <td className="p-3 text-neutral-400">
-                        {sub.marketing_consent_at
-                          ? new Date(sub.marketing_consent_at).toLocaleDateString('en-GB')
-                          : sub.created_at
-                          ? new Date(sub.created_at).toLocaleDateString('en-GB')
-                          : '—'}
-                      </td>
-                      <td className="p-3">
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (
-                              !window.confirm(
-                                `Manually unsubscribe ${sub.email} from marketing emails?`
-                              )
-                            )
-                              return
-                            try {
-                              const res = await fetch('/api/admin/email-marketing/subscribers', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ email: sub.email, action: 'unsubscribe' }),
-                              })
-                              if (!res.ok) throw new Error('Failed to update')
-                              toast.success(`${sub.email} unsubscribed`)
-                              fetchDirectory()
-                            } catch {
-                              toast.error('Failed to unsubscribe')
-                            }
-                          }}
-                          className="text-[10px] text-neutral-400 hover:text-red-400 underline cursor-pointer"
-                        >
-                          Manual Opt-Out
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
       {/* TEST SEND MODAL                                                           */}
       {/* ========================================================================= */}
       {showTestModal && (
@@ -1551,7 +1640,7 @@ export default function AdminEmailMarketingPage() {
               Send Test Email Preview
             </h3>
             <p className="text-xs text-neutral-400 mb-4 leading-relaxed font-mono">
-              Deliver a live test rendering of this marketing email directly to your inbox to inspect formatting, images, typography, and buttons.
+              Deliver a live test rendering of this marketing email directly to your inbox to inspect typography, images, and styling without contacting customers.
             </p>
 
             <div className="space-y-4">
@@ -1615,21 +1704,27 @@ export default function AdminEmailMarketingPage() {
                 <span className="text-white font-bold">{subject}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-neutral-800">
-                <span className="text-neutral-400">Target Audience:</span>
+                <span className="text-neutral-400">Audience Selected:</span>
                 <span className="text-white font-bold">{audienceType.replace(/_/g, ' ')}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-neutral-800">
-                <span className="text-neutral-400">CTA Button:</span>
-                <span className="text-white font-bold">{showCta ? `ON (${ctaText})` : 'OFF (Omitted)'}</span>
+                <span className="text-neutral-400">Total Pool:</span>
+                <span className="text-neutral-400">{audienceBreakdown.totalCount} contacts</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-neutral-800">
+                <span className="text-neutral-400">Excluded (No Consent):</span>
+                <span className="text-neutral-400">{audienceBreakdown.excludedCount} contacts</span>
               </div>
               <div className="flex justify-between py-1">
-                <span className="text-neutral-400">Verified Opted-In Count:</span>
-                <span className="text-emerald-400 font-bold">{eligibleRecipientsCount} recipients</span>
+                <span className="text-emerald-400 font-bold">Authorized Eligible Recipients:</span>
+                <span className="text-emerald-400 text-sm font-bold">
+                  {audienceBreakdown.eligibleCount} recipients
+                </span>
               </div>
             </div>
 
             <p className="text-[11px] text-neutral-400 font-mono leading-relaxed">
-              Emails will strictly be sent to verified opted-in subscribers. Unsubscribed or non-opted customers are automatically excluded.
+              Emails will strictly be delivered to verified opted-in contacts. Unconsented accounts are automatically filtered out.
             </p>
 
             <div className="flex justify-end gap-2 pt-2">
@@ -1653,5 +1748,13 @@ export default function AdminEmailMarketingPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function AdminEmailMarketingPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-neutral-500 font-mono text-xs">Loading studio...</div>}>
+      <EmailMarketingStudioContent />
+    </Suspense>
   )
 }
