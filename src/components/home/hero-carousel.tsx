@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowRight, Play, Pause } from 'lucide-react'
 
 export interface HeroSlide {
   id: string
@@ -59,6 +59,8 @@ export const HERO_SLIDES: HeroSlide[] = [
   },
 ]
 
+const AUTOPLAY_INTERVAL = 5000 // 5 seconds per slide
+
 export function HeroCarousel({
   heroTitle,
   heroDescription,
@@ -75,14 +77,19 @@ export function HeroCarousel({
   const [isTabVisible, setIsTabVisible] = useState(true)
   const [isReducedMotion, setIsReducedMotion] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+  const [isControlsFocused, setIsControlsFocused] = useState(false)
+  const [isPausedByUser, setIsPausedByUser] = useState(false)
+  const [animKey, setAnimKey] = useState(0)
+
+  const remainingTimeRef = useRef(AUTOPLAY_INTERVAL)
+  const startTimeRef = useRef<number>(Date.now())
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const touchStartXRef = useRef<number | null>(null)
+  const touchStartYRef = useRef<number | null>(null)
 
   useEffect(() => {
     setMounted(true)
   }, [])
-
-  const touchStartXRef = useRef<number | null>(null)
-  const touchStartYRef = useRef<number | null>(null)
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Detect user preference for reduced motion
   useEffect(() => {
@@ -110,7 +117,7 @@ export function HeroCarousel({
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [])
 
-  // Slide navigation callbacks
+  // Navigation callbacks
   const nextSlide = useCallback(() => {
     setCurrentIndex((prev) => (prev + 1) % slides.length)
   }, [slides.length])
@@ -123,27 +130,53 @@ export function HeroCarousel({
     setCurrentIndex(index)
   }, [])
 
-  // Autoplay management with pause-on-hover & intelligent restart
-  const startTimer = useCallback((delay = 5000) => {
-    if (timerRef.current) clearInterval(timerRef.current)
-    if (!isTabVisible || isReducedMotion || isHovered || slides.length <= 1) return
+  const togglePlayPause = () => {
+    setIsPausedByUser((prev) => !prev)
+  }
 
-    timerRef.current = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % slides.length)
-    }, delay)
-  }, [isTabVisible, isReducedMotion, isHovered, slides.length])
+  // Determine whether autoplay is actively paused
+  const isAutoplayPaused =
+    isHovered ||
+    isControlsFocused ||
+    !isTabVisible ||
+    isReducedMotion ||
+    isPausedByUser ||
+    slides.length <= 1
 
-  // Reset and restart autoplay on manual interaction (provides 6.5s grace period)
-  const handleManualAction = useCallback(() => {
-    startTimer(6500)
-  }, [startTimer])
-
+  // Whenever currentIndex changes, reset remaining countdown & animation cycle
   useEffect(() => {
-    startTimer(5000)
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
+    remainingTimeRef.current = AUTOPLAY_INTERVAL
+    setAnimKey((prev) => prev + 1)
+  }, [currentIndex])
+
+  // Synchronized countdown timer with pause/resume support
+  useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
     }
-  }, [startTimer])
+
+    if (isAutoplayPaused) {
+      // Record elapsed time while running so we can resume accurately
+      const elapsed = Date.now() - startTimeRef.current
+      remainingTimeRef.current = Math.max(0, remainingTimeRef.current - elapsed)
+      return
+    }
+
+    startTimeRef.current = Date.now()
+    const delay = remainingTimeRef.current > 0 ? remainingTimeRef.current : AUTOPLAY_INTERVAL
+
+    timerRef.current = setTimeout(() => {
+      nextSlide()
+    }, delay)
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [currentIndex, isAutoplayPaused, nextSlide])
 
   // Touch event listeners for mobile swipe gestures
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -156,14 +189,13 @@ export function HeroCarousel({
     const diffX = touchStartXRef.current - e.changedTouches[0].clientX
     const diffY = touchStartYRef.current - e.changedTouches[0].clientY
 
-    // Trigger only if swipe is predominantly horizontal
+    // Trigger only if swipe is predominantly horizontal to preserve vertical scroll
     if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 40) {
       if (diffX > 0) {
         nextSlide()
       } else {
         prevSlide()
       }
-      handleManualAction()
     }
     touchStartXRef.current = null
     touchStartYRef.current = null
@@ -173,10 +205,8 @@ export function HeroCarousel({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowLeft') {
       prevSlide()
-      handleManualAction()
     } else if (e.key === 'ArrowRight') {
       nextSlide()
-      handleManualAction()
     }
   }
 
@@ -193,7 +223,15 @@ export function HeroCarousel({
       aria-roledescription="carousel"
       aria-label="Bubble Boom Brand Hero Banner Carousel"
     >
-      {/* 1. Background Slides with smooth crossfade */}
+      {/* Dynamic Keyframes for smooth GPU-accelerated progress animation */}
+      <style>{`
+        @keyframes heroProgressFill {
+          0% { transform: scaleX(0); }
+          100% { transform: scaleX(1); }
+        }
+      `}</style>
+
+      {/* 1. Background Slides with smooth 500ms crossfade */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         {slides.map((slide, index) => {
           const isActive = index === currentIndex
@@ -203,7 +241,7 @@ export function HeroCarousel({
             <div
               key={slide.id}
               className={`absolute inset-0 ${
-                isReducedMotion ? 'transition-none' : 'transition-opacity duration-700 ease-in-out'
+                isReducedMotion ? 'transition-none' : 'transition-opacity duration-500 ease-in-out'
               } ${isActive ? 'opacity-100 z-[2]' : 'opacity-0 z-[1]'}`}
               aria-hidden={!isActive}
             >
@@ -261,42 +299,7 @@ export function HeroCarousel({
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] rounded-full border border-neutral-500/20" />
       </div>
 
-      {/* 3. Manual Navigation Arrows (Desktop & Mobile Accessible) */}
-      {slides.length > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              prevSlide()
-              handleManualAction()
-            }}
-            aria-label="Previous slide"
-            className="absolute left-2.5 sm:left-6 md:left-8 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-black/45 hover:bg-white text-white hover:text-black border border-white/25 hover:border-white backdrop-blur-md transition-all duration-200 hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-white/80 cursor-pointer shadow-xl group"
-          >
-            <ChevronLeft
-              className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:-translate-x-0.5"
-              strokeWidth={2.5}
-            />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              nextSlide()
-              handleManualAction()
-            }}
-            aria-label="Next slide"
-            className="absolute right-2.5 sm:right-6 md:right-8 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-black/45 hover:bg-white text-white hover:text-black border border-white/25 hover:border-white backdrop-blur-md transition-all duration-200 hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-white/80 cursor-pointer shadow-xl group"
-          >
-            <ChevronRight
-              className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:translate-x-0.5"
-              strokeWidth={2.5}
-            />
-          </button>
-        </>
-      )}
-
-      {/* 4. Fixed Headline, Description & CTAs (Completely stable, zero layout shift) */}
+      {/* 3. Fixed Headline, Description & CTAs (Completely stable, zero layout shift) */}
       <div className="relative z-10 max-w-5xl mx-auto px-12 sm:px-16 md:px-20 py-16 sm:py-20 text-center flex flex-col items-center">
         {/* Hero Main Heading */}
         <h1 className="text-4xl sm:text-7xl md:text-8xl lg:text-9xl font-extrabold tracking-tighter uppercase leading-[0.9] mb-4 sm:mb-6 text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)]">
@@ -326,14 +329,32 @@ export function HeroCarousel({
         </div>
       </div>
 
-      {/* 5. Slide Indicators (Pagination dots with progress indication) */}
+      {/* 4. Minimal Animated Progress Bars (Option 5) with Accessible Pause/Play Control */}
       {slides.length > 1 && (
-        <div className="absolute bottom-6 sm:bottom-8 inset-x-0 z-20 flex items-center justify-center pointer-events-none">
+        <div className="absolute bottom-4 sm:bottom-6 md:bottom-7 inset-x-0 z-20 flex items-center justify-center pointer-events-none">
           <div
-            className="inline-flex items-center gap-2.5 bg-black/50 backdrop-blur-md border border-white/20 px-3.5 py-2 rounded-full pointer-events-auto shadow-lg"
+            className="inline-flex items-center gap-2 bg-black/45 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-full pointer-events-auto shadow-2xl"
             role="tablist"
-            aria-label="Hero carousel slide pagination"
+            aria-label="Hero carousel slide navigation"
+            onFocus={() => setIsControlsFocused(true)}
+            onBlur={() => setIsControlsFocused(false)}
           >
+            {/* Subtle Pause/Play button */}
+            <button
+              type="button"
+              onClick={togglePlayPause}
+              aria-label={isPausedByUser ? 'Resume autoplay' : 'Pause autoplay'}
+              aria-pressed={isPausedByUser}
+              className="p-1.5 text-white/70 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full cursor-pointer mr-0.5"
+            >
+              {isPausedByUser ? (
+                <Play size={11} className="fill-current" />
+              ) : (
+                <Pause size={11} className="fill-current" />
+              )}
+            </button>
+
+            {/* Slide Progress Bars */}
             {slides.map((slide, idx) => {
               const isActive = idx === currentIndex
               return (
@@ -343,16 +364,31 @@ export function HeroCarousel({
                   role="tab"
                   aria-selected={isActive}
                   aria-label={`Go to slide ${idx + 1}: ${slide.title || slide.alt}`}
-                  onClick={() => {
-                    goToSlide(idx)
-                    handleManualAction()
-                  }}
-                  className={`transition-all duration-300 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/80 ${
-                    isActive
-                      ? 'w-7 sm:w-9 h-2 bg-white shadow-[0_0_8px_rgba(255,255,255,0.6)]'
-                      : 'w-2 h-2 bg-white/40 hover:bg-white/80'
-                  }`}
-                />
+                  onClick={() => goToSlide(idx)}
+                  className="group relative flex items-center justify-center h-10 min-w-[32px] sm:min-w-[36px] px-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full"
+                >
+                  <span className="sr-only">{`Go to slide ${idx + 1}`}</span>
+                  {/* Progress bar track: 3.5px height, 44px active width, 28px inactive width, fully rounded */}
+                  <div
+                    className={`h-[3.5px] rounded-full overflow-hidden transition-all duration-300 ease-out ${
+                      isActive
+                        ? 'w-[44px] bg-white/30 relative'
+                        : 'w-[28px] bg-white/30 group-hover:bg-white/60'
+                    }`}
+                  >
+                    {isActive && (
+                      <div
+                        key={`progress-${idx}-${animKey}`}
+                        className="hero-progress-fill absolute inset-0 bg-white rounded-full origin-left"
+                        style={{
+                          animation: isReducedMotion ? 'none' : `heroProgressFill ${AUTOPLAY_INTERVAL}ms linear forwards`,
+                          animationPlayState: isAutoplayPaused ? 'paused' : 'running',
+                          transformOrigin: 'left',
+                        }}
+                      />
+                    )}
+                  </div>
+                </button>
               )
             })}
           </div>

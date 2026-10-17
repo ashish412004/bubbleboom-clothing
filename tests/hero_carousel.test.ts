@@ -42,15 +42,28 @@ describe('Homepage Hero Background Carousel Assets & Optimization', () => {
     }
   })
 
-  it('verifies hero-carousel.tsx includes manual arrows and reduced darkness styling', () => {
+  it('verifies hero-carousel.tsx removes old circular arrows and implements minimal animated progress bars', () => {
     const componentPath = path.join(process.cwd(), 'src', 'components', 'home', 'hero-carousel.tsx')
     const content = fs.readFileSync(componentPath, 'utf-8')
 
-    // Verifies arrows are present
-    expect(content).toContain('Previous slide')
-    expect(content).toContain('Next slide')
-    expect(content).toContain('ChevronLeft')
-    expect(content).toContain('ChevronRight')
+    // Verifies old circular arrows are completely removed
+    expect(content).not.toContain('ChevronLeft')
+    expect(content).not.toContain('ChevronRight')
+    expect(content).not.toContain('aria-label="Previous slide"')
+    expect(content).not.toContain('aria-label="Next slide"')
+
+    // Verifies minimal animated progress bars (Option 5: 44px active, 28px inactive, 3.5px height, rounded)
+    expect(content).toContain('w-[44px]')
+    expect(content).toContain('w-[28px]')
+    expect(content).toContain('h-[3.5px]')
+    expect(content).toContain('rounded-full')
+    expect(content).toContain('heroProgressFill')
+    expect(content).toContain('hero-progress-fill')
+
+    // Verifies accessible Pause/Play control
+    expect(content).toContain('Pause autoplay')
+    expect(content).toContain('Resume autoplay')
+    expect(content).toContain('togglePlayPause')
 
     // Verifies reduced darkness overlay styling
     expect(content).toContain('radial-gradient')
@@ -62,6 +75,8 @@ describe('Homepage Hero Background Carousel Assets & Optimization', () => {
     expect(content).toContain('onMouseLeave')
     expect(content).toContain('onTouchStart')
     expect(content).toContain('onTouchEnd')
+    expect(content).toContain('onFocus')
+    expect(content).toContain('onBlur')
   })
 
   it('provides dedicated vertical mobile hero images for all 4 slides', () => {
