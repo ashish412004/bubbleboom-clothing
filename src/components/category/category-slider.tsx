@@ -187,7 +187,7 @@ export function CategorySlider({ categories }: CategorySliderProps) {
           </Link>
         </div>
 
-        {/* Horizontal Category Carousel Row: 78-80vw on mobile so next card is partially visible on right */}
+        {/* Horizontal Category Carousel Row: 72-74vw on mobile so next card is clearly visible on right with elegant proportion */}
         <div
           ref={sliderRef}
           onMouseDown={handleMouseDown}
@@ -203,7 +203,7 @@ export function CategorySlider({ categories }: CategorySliderProps) {
             <div
               key={cat.id}
               data-category-card
-              className="snap-start shrink-0 flex-[0_0_78vw] sm:flex-[0_0_42%] md:flex-[0_0_36%] lg:flex-[0_0_30.5%] xl:flex-[0_0_23.5%] max-w-[340px]"
+              className="snap-start shrink-0 flex-[0_0_73vw] sm:flex-[0_0_42%] md:flex-[0_0_36%] lg:flex-[0_0_30.5%] xl:flex-[0_0_23.5%] max-w-[305px] sm:max-w-[340px]"
             >
               <CategoryCard
                 category={cat}

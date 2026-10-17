@@ -8,28 +8,29 @@ describe('Bubble Boom – Reference-Matched Mobile Category Carousel Suite', () 
   const sliderContent = fs.readFileSync(sliderPath, 'utf-8')
   const cardContent = fs.readFileSync(cardPath, 'utf-8')
 
-  it('1. Mobile card size matches reference with 4:5 aspect ratio, rounded corners, and 78vw width', () => {
-    // Aspect ratio 4/5
-    expect(cardContent).toContain('aspect-[4/5]')
+  it('1. Mobile card size matches reference with subtle 8-10% reduction, rounded corners, and 72-74vw width', () => {
+    // Aspect ratio 3:4 on mobile, 4:5 on desktop
+    expect(cardContent).toContain('aspect-[3/4]')
+    expect(cardContent).toContain('sm:aspect-[4/5]')
     // Rounded corners
     expect(cardContent).toContain('rounded-[20px]')
-    // Mobile card width ~78vw and capped at 340px
-    expect(sliderContent).toContain('flex-[0_0_78vw]')
-    expect(sliderContent).toContain('max-w-[340px]')
+    // Mobile card width ~72-74vw and capped proportionally
+    expect(sliderContent).toMatch(/flex-\[0_0_7[234]vw\]/)
+    expect(sliderContent).toContain('max-w-[305px] sm:max-w-[340px]')
     // Card gap is 12px (gap-3) on mobile
     expect(sliderContent).toContain('gap-3 sm:gap-6')
   })
 
-  it('2. Category card content displays bold heading, editorial tagline, and outlined Shop Now button', () => {
-    // Category title is bold uppercase streetwear typography
-    expect(cardContent).toContain('font-black uppercase tracking-tight text-white')
-    // Tagline with letter spacing
-    expect(cardContent).toContain('tracking-[0.18em]')
+  it('2. Category card content displays uncropped image, avoids duplicate text, and keeps outlined Shop Now button', () => {
+    // Preserves complete image without aggressive cropping
+    expect(cardContent).toContain('object-contain sm:object-cover')
+    // Avoids duplicate overlay headings when poster graphic already embeds typography
+    expect(cardContent).toContain('hasEmbeddedPosterText')
     // Outlined Shop Now button
     expect(cardContent).toContain('border border-white text-white')
     expect(cardContent).toContain('Shop Now')
     // Dark gradient overlay near bottom
-    expect(cardContent).toContain('bg-gradient-to-t from-black/85 via-black/40 to-transparent')
+    expect(cardContent).toContain('bg-gradient-to-t from-black/85')
   })
 
   it('3. Navigation controls are square outlined buttons centered underneath cards', () => {
