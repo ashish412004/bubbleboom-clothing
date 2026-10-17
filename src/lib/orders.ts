@@ -697,7 +697,7 @@ export async function createCashfreeSessionForOrder(order: Order) {
   // Ensure customer phone is a valid 10-digit number for Cashfree
   const rawPhone = order.guest_phone || (order.shipping_address as any)?.phone || ''
   const cleanDigits = rawPhone.replace(/\D/g, '').slice(-10)
-  const customerPhone = cleanDigits.length === 10 ? cleanDigits : '9876543210'
+  const customerPhone = cleanDigits.length === 10 ? cleanDigits : '9999999999'
 
   const cfRes = await createCashfreeOrder({
     order_id: order.order_number,
@@ -822,7 +822,7 @@ export async function getOrRenewCashfreeSessionForOrder(order: any) {
 
   const rawPhone = order.guest_phone || (order.shipping_address as any)?.phone || ''
   const cleanDigits = rawPhone.replace(/\D/g, '').slice(-10)
-  const customerPhone = cleanDigits.length === 10 ? cleanDigits : '9876543210'
+  const customerPhone = cleanDigits.length === 10 ? cleanDigits : '9999999999'
 
   const cfRes = await createCashfreeOrder({
     order_id: gatewayOrderRef,

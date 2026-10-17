@@ -253,7 +253,7 @@ export default function ForgotPasswordPage() {
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="name@example.com"
+                        placeholder="you@example.com"
                         autoComplete="email"
                         disabled={loading}
                         className="w-full border border-black p-3 pl-10 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
@@ -356,7 +356,7 @@ export default function ForgotPasswordPage() {
                         required
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="At least 8 characters"
+                        placeholder="Enter your password"
                         autoComplete="new-password"
                         disabled={loading}
                         className="w-full border border-black p-3 pl-10 pr-10 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
@@ -385,7 +385,7 @@ export default function ForgotPasswordPage() {
                         required
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Re-enter new password"
+                        placeholder="Re-enter your password"
                         autoComplete="new-password"
                         disabled={loading}
                         className="w-full border border-black p-3 pl-10 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"

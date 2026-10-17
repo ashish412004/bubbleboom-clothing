@@ -9,21 +9,7 @@ function getDevAddresses(cookieStore: any): any[] {
     const raw = cookieStore.get('bb_dev_addresses')?.value
     if (raw) return JSON.parse(raw)
   } catch {}
-  return [
-    {
-      id: 'addr-dev-1',
-      full_name: 'Bubble Boom Member',
-      phone: '9876543210',
-      address_line1: 'Flat 402, Boom Street',
-      address_line2: 'Sector 15',
-      city: 'Mumbai',
-      state: 'Maharashtra',
-      pin_code: '400001',
-      country: 'IN',
-      is_default: true,
-      created_at: new Date().toISOString(),
-    },
-  ]
+  return []
 }
 
 export async function GET() {

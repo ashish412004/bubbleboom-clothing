@@ -517,7 +517,7 @@ export function CartView({
                   type="text"
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  placeholder="Coupon Code (e.g. BOOM10)"
+                  placeholder="Enter coupon code"
                   className="bg-white border border-neutral-300 px-3 py-2 text-xs flex-grow font-semibold focus:outline-none focus:border-black uppercase"
                 />
                 <button

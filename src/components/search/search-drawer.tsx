@@ -442,8 +442,8 @@ export function SearchDrawer() {
                 type="text"
                 value={query}
                 onChange={handleInputChange}
-                placeholder="Search Bubble Boom..."
-                aria-label="Search Bubble Boom"
+                placeholder="Search products..."
+                aria-label="Search products"
                 className="w-full bg-neutral-100 rounded-full py-2.5 pl-4 pr-9 text-sm font-medium text-black placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
               />
               <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center">

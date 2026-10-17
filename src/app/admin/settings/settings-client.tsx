@@ -128,7 +128,7 @@ export function SettingsClient({
 
     const cleanWaDigits = whatsappNumber.replace(/\D/g, '')
     if (whatsappSupportEnabled && cleanWaDigits.length < 10) {
-      toast.error('Please enter a valid WhatsApp business number with country code (e.g. 919876543210) before enabling WhatsApp support.')
+      toast.error('Please enter a valid WhatsApp business number with country code (e.g. 919000000000) before enabling WhatsApp support.')
       return
     }
 
@@ -810,7 +810,7 @@ export function SettingsClient({
                 type="text"
                 value={whatsappNumber}
                 onChange={(e) => setWhatsappNumber(e.target.value)}
-                placeholder="e.g. 919876543210 (Leave empty until official)"
+                placeholder="e.g. 919000000000 (Leave empty until official)"
                 className="w-full border border-black p-2.5 text-xs font-mono focus:outline-none min-h-[40px]"
               />
               <p className="text-[10px] text-neutral-500 font-mono mt-1">

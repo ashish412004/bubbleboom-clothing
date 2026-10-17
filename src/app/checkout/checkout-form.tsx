@@ -705,7 +705,7 @@ export function CheckoutForm({
                 value={fullName}
                 onChange={(e) => handleFieldChange('fullName', e.target.value, setFullName)}
                 onBlur={(e) => handleBlur('fullName', e.target.value)}
-                placeholder="e.g. Mihir Sharma"
+                placeholder="Enter your full name"
                 className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
                   errors.fullName ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
                 }`}
@@ -726,7 +726,7 @@ export function CheckoutForm({
                 value={email}
                 onChange={(e) => handleFieldChange('email', e.target.value, setEmail)}
                 onBlur={(e) => handleBlur('email', e.target.value)}
-                placeholder="mihir@example.com"
+                placeholder="you@example.com"
                 className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
                   errors.email ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
                 }`}
@@ -760,7 +760,7 @@ export function CheckoutForm({
                   handleFieldChange('phone', norm, setPhone)
                 }}
                 onBlur={(e) => handleBlur('phone', e.target.value)}
-                placeholder="9876543210"
+                placeholder="Enter 10-digit mobile number"
                 className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors min-h-[44px] ${
                   errors.phone ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
                 }`}
@@ -857,7 +857,7 @@ export function CheckoutForm({
               value={addressLine1}
               onChange={(e) => handleFieldChange('addressLine1', e.target.value, setAddressLine1)}
               onBlur={(e) => handleBlur('addressLine1', e.target.value)}
-              placeholder="e.g. Flat 402, Block C, Green Park Residency"
+              placeholder="e.g., House/Flat no., street and area"
               className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
                 errors.addressLine1 ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
               }`}
@@ -879,7 +879,7 @@ export function CheckoutForm({
                 type="text"
                 value={addressLine2}
                 onChange={(e) => setAddressLine2(e.target.value)}
-                placeholder="e.g. 4th Floor"
+                placeholder="e.g., Building name or floor number"
                 className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
               />
             </div>
@@ -891,7 +891,7 @@ export function CheckoutForm({
                 type="text"
                 value={landmark}
                 onChange={(e) => setLandmark(e.target.value)}
-                placeholder="e.g. Near Metro Station / Behind Mall"
+                placeholder="e.g., Near a school or main road"
                 className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
               />
             </div>
@@ -920,7 +920,7 @@ export function CheckoutForm({
                 value={pinCode}
                 onChange={(e) => handlePinChange(e.target.value)}
                 onBlur={(e) => handleBlur('pinCode', e.target.value)}
-                placeholder="e.g. 110001"
+                placeholder="Enter 6-digit PIN code"
                 className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
                   errors.pinCode ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
                 }`}
@@ -941,7 +941,7 @@ export function CheckoutForm({
                 value={city}
                 onChange={(e) => handleFieldChange('city', e.target.value, setCity)}
                 onBlur={(e) => handleBlur('city', e.target.value)}
-                placeholder="New Delhi"
+                placeholder="Enter your city"
                 className={`w-full bg-white border px-3.5 py-2.5 text-xs font-medium focus:outline-none transition-colors ${
                   errors.city ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
                 }`}
@@ -965,7 +965,7 @@ export function CheckoutForm({
                   errors.state ? 'border-red-500 bg-red-50/20 focus:border-red-500' : 'border-neutral-300 focus:border-black'
                 }`}
               >
-                <option value="">Select State</option>
+                <option value="">Select your state</option>
                 {indianStates.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
@@ -986,7 +986,7 @@ export function CheckoutForm({
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Leave at front door or call upon arrival"
+              placeholder="e.g., Call before delivery"
               className="w-full bg-white border border-neutral-300 px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-black"
             />
           </div>
@@ -1229,7 +1229,7 @@ export function CheckoutForm({
                   type="text"
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  placeholder="Discount Code"
+                  placeholder="Enter coupon code"
                   className="bg-white border border-neutral-300 px-3 py-2 text-xs flex-grow uppercase font-semibold focus:outline-none focus:border-black font-mono"
                 />
                 <button

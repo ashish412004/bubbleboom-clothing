@@ -585,7 +585,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Aryan Sharma"
+                  placeholder="Enter your full name"
                   className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
                 />
               </div>
@@ -599,7 +599,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="e.g. 9876543210"
+                  placeholder="Enter 10-digit mobile number"
                   className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-mono"
                 />
               </div>
@@ -614,7 +614,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                 required
                 value={line1}
                 onChange={(e) => setLine1(e.target.value)}
-                placeholder="e.g. Flat 402, Skyline Residency, Linking Road"
+                placeholder="e.g., House/Flat no., street and area"
                 className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
               />
             </div>
@@ -627,7 +627,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                 type="text"
                 value={line2}
                 onChange={(e) => setLine2(e.target.value)}
-                placeholder="e.g. Near Bandra Post Office"
+                placeholder="e.g., Near a school or main road"
                 className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
               />
             </div>
@@ -655,7 +655,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                   maxLength={6}
                   value={pinCode}
                   onChange={(e) => handlePinChange(e.target.value, false)}
-                  placeholder="e.g. 400050"
+                  placeholder="Enter 6-digit PIN code"
                   className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black font-mono focus:outline-none focus:border-black"
                 />
               </div>
@@ -669,7 +669,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                   required
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  placeholder="e.g. Mumbai"
+                  placeholder="Enter your city"
                   className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
                 />
               </div>
@@ -684,7 +684,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                   onChange={(e) => setState(e.target.value)}
                   className="w-full h-11 px-3 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
                 >
-                  <option value="">Select State</option>
+                  <option value="">Select your state</option>
                   {indianStates.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
@@ -789,6 +789,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                   required
                   value={editFullName}
                   onChange={(e) => setEditFullName(e.target.value)}
+                  placeholder="Enter your full name"
                   className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
                 />
               </div>
@@ -802,6 +803,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                   required
                   value={editPhone}
                   onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="Enter 10-digit mobile number"
                   className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-mono"
                 />
               </div>
@@ -816,6 +818,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                 required
                 value={editLine1}
                 onChange={(e) => setEditLine1(e.target.value)}
+                placeholder="e.g., House/Flat no., street and area"
                 className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
               />
             </div>
@@ -828,6 +831,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                 type="text"
                 value={editLine2}
                 onChange={(e) => setEditLine2(e.target.value)}
+                placeholder="e.g., Near a school or main road"
                 className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
               />
             </div>
@@ -855,6 +859,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                   maxLength={6}
                   value={editPinCode}
                   onChange={(e) => handlePinChange(e.target.value, true)}
+                  placeholder="Enter 6-digit PIN code"
                   className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black font-mono focus:outline-none focus:border-black"
                 />
               </div>
@@ -868,6 +873,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                   required
                   value={editCity}
                   onChange={(e) => setEditCity(e.target.value)}
+                  placeholder="Enter your city"
                   className="w-full h-11 px-3.5 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
                 />
               </div>
@@ -882,7 +888,7 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
                   onChange={(e) => setEditState(e.target.value)}
                   className="w-full h-11 px-3 rounded-xl bg-white border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
                 >
-                  <option value="">Select State</option>
+                  <option value="">Select your state</option>
                   {indianStates.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}

@@ -142,7 +142,7 @@ export function DeliveryExchangeCard({
                   setPinCode(e.target.value.replace(/\D/g, ''))
                   setErrorMsg('')
                 }}
-                placeholder="Enter 6-digit Indian PIN"
+                placeholder="Enter 6-digit PIN code"
                 className="bg-white border border-black px-3 py-2 text-xs font-mono placeholder-neutral-400 flex-grow focus:outline-none focus:ring-1 focus:ring-black"
                 disabled={loading}
               />

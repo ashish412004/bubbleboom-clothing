@@ -135,7 +135,7 @@ export function ProfileDetailsForm({
                 type="text"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
-                placeholder="First Name"
+                placeholder="Enter first name"
                 className="w-full h-12 px-4 rounded-xl bg-[#F9F9FB] border border-neutral-200/80 text-sm text-black placeholder:text-neutral-400 focus:outline-none focus:border-black focus:bg-white transition-all font-medium"
                 required
               />
@@ -152,7 +152,7 @@ export function ProfileDetailsForm({
                 type="text"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
-                placeholder="Last Name"
+                placeholder="Enter last name"
                 className="w-full h-12 px-4 rounded-xl bg-[#F9F9FB] border border-neutral-200/80 text-sm text-black placeholder:text-neutral-400 focus:outline-none focus:border-black focus:bg-white transition-all font-medium"
               />
             </div>

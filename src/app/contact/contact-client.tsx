@@ -181,7 +181,7 @@ export function ContactClient({ initialSocial }: ContactClientProps) {
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Rahul Verma"
+                placeholder="Enter your full name"
                 className="w-full border border-black p-2.5 text-xs focus:outline-none"
               />
             </div>
@@ -195,7 +195,7 @@ export function ContactClient({ initialSocial }: ContactClientProps) {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
+                placeholder="you@example.com"
                 className="w-full border border-black p-2.5 text-xs focus:outline-none"
               />
             </div>
@@ -239,7 +239,7 @@ export function ContactClient({ initialSocial }: ContactClientProps) {
                 required
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Describe your inquiry in detail..."
+                placeholder="Describe how we can help you"
                 className="w-full border border-black p-2.5 text-xs focus:outline-none"
               />
             </div>

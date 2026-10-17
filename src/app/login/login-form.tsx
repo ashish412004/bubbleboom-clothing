@@ -409,7 +409,7 @@ export function LoginForm() {
                     required
                     value={otpEmail}
                     onChange={(e) => setOtpEmail(e.target.value)}
-                    placeholder="name@example.com"
+                    placeholder="you@example.com"
                     autoComplete="email"
                     disabled={loading}
                     className="w-full border border-black p-3 pl-10 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
@@ -511,7 +511,7 @@ export function LoginForm() {
                 required
                 value={passwordEmail}
                 onChange={(e) => setPasswordEmail(e.target.value)}
-                placeholder="name@example.com"
+                placeholder="you@example.com"
                 autoComplete="email"
                 disabled={loading}
                 className="w-full border border-black p-3 pl-10 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
@@ -538,7 +538,7 @@ export function LoginForm() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="Enter your password"
                 autoComplete="current-password"
                 disabled={loading}
                 className="w-full border border-black p-3 pl-10 pr-10 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"

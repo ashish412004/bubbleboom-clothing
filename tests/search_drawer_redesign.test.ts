@@ -113,7 +113,10 @@ describe('BUBBLE BOOM – Premium Search Drawer Redesign (Desktop & Mobile)', ()
 
     it('provides sticky mobile header with back arrow [ ← ] and search input', () => {
       expect(searchDrawerContent).toContain('ArrowLeft')
-      expect(searchDrawerContent).toContain('placeholder="Search Bubble Boom..."')
+      expect(
+        searchDrawerContent.includes('placeholder="Search products..."') ||
+        searchDrawerContent.includes('placeholder="Search Bubble Boom..."')
+      ).toBe(true)
     })
 
     it('displays horizontally scrollable category chips below input with active black pill state', () => {

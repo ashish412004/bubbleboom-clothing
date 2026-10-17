@@ -634,7 +634,7 @@ export function OrderActions({
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. username@okhdfcbank"
+                        placeholder="e.g., yourname@upi"
                         value={upiId}
                         onChange={(e) => setUpiId(e.target.value)}
                         className="w-full border border-black p-1.5 text-xs font-mono bg-white"
@@ -648,21 +648,21 @@ export function OrderActions({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input
                           type="text"
-                          placeholder="Account Holder Name"
+                          placeholder="Enter account holder name"
                           value={bankHolder}
                           onChange={(e) => setBankHolder(e.target.value)}
                           className="border border-black p-1.5 text-xs bg-white"
                         />
                         <input
                           type="text"
-                          placeholder="Account Number"
+                          placeholder="Enter account number"
                           value={bankAccNumber}
                           onChange={(e) => setBankAccNumber(e.target.value)}
                           className="border border-black p-1.5 text-xs font-mono bg-white"
                         />
                         <input
                           type="text"
-                          placeholder="IFSC Code (e.g. HDFC0001234)"
+                          placeholder="Enter IFSC code (e.g., HDFC0001234)"
                           value={bankIfsc}
                           onChange={(e) => setBankIfsc(e.target.value.toUpperCase())}
                           className="border border-black p-1.5 text-xs font-mono uppercase bg-white col-span-1 sm:col-span-2"
@@ -714,7 +714,7 @@ export function OrderActions({
                   rows={2}
                   value={returnNotes}
                   onChange={(e) => setReturnNotes(e.target.value)}
-                  placeholder="Details regarding the size fit, defects or specific instructions..."
+                  placeholder="Describe how we can help you"
                   className="w-full border border-black p-2 text-xs focus:outline-none"
                 />
               </div>

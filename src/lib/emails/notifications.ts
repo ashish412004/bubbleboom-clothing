@@ -839,7 +839,7 @@ export async function sendTestOrderEmail(
     ],
     shipping_address: {
       full_name: 'Alex Mercer',
-      phone: '9876543210',
+      phone: '9000000000',
       address_line1: 'Flat 402, Highrise Tower, Indiranagar',
       address_line2: '100ft Road',
       city: 'Bengaluru',

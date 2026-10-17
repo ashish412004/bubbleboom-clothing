@@ -225,7 +225,7 @@ export function ProfileForm({
                 type={showPassword ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="At least 8 characters"
+                placeholder="Enter your password"
                 autoComplete="new-password"
                 required
                 className="w-full h-11 px-3.5 pr-10 rounded-xl bg-[#F9F9FB] border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
@@ -253,7 +253,7 @@ export function ProfileForm({
                 type={showPassword ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter password"
+                placeholder="Re-enter your password"
                 autoComplete="new-password"
                 required
                 className="w-full h-11 px-3.5 rounded-xl bg-[#F9F9FB] border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"

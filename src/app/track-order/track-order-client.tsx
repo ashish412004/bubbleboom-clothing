@@ -217,7 +217,7 @@ export function TrackOrderClient() {
                 required
                 value={verifier}
                 onChange={(e) => setVerifier(e.target.value)}
-                placeholder="e.g. 9876543210 or yourname@gmail.com"
+                placeholder="Enter 10-digit mobile number or you@example.com"
                 className="w-full border border-black p-3 text-sm placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-black"
               />
             </div>
