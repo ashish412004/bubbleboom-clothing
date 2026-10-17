@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { X, Navigation, MapPin, Loader2, Check, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Edit3, Crosshair } from 'lucide-react'
+import 'leaflet/dist/leaflet.css'
 
 export interface LocationAddressResult {
   address_line1: string
@@ -31,6 +32,12 @@ const DEFAULT_MAP_LON = 78.9629
 const DEFAULT_MAP_ZOOM = 5
 const VERIFIED_ZOOM = 16
 
+// In-memory reverse-geocoding cache to eliminate redundant network requests
+const geocodeCache = new Map<string, LocationAddressResult>()
+
+// Module-level cached Leaflet instance across modal toggles in the same session
+let cachedLeafletModule: any = null
+
 export function LocationPickerModal({
   isOpen,
   onClose,
@@ -45,6 +52,7 @@ export function LocationPickerModal({
   const accuracyCircleRef = useRef<any>(null)
   const isGoogleMapRef = useRef<boolean>(false)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const userMovedPinRef = useRef<boolean>(false)
 
   const hasInitialCoords = Boolean(
     typeof initialLat === 'number' &&
@@ -70,6 +78,7 @@ export function LocationPickerModal({
   const [permissionNote, setPermissionNote] = useState<string | null>(null)
   const [permissionDenied, setPermissionDenied] = useState<boolean>(false)
   const [mapReady, setMapReady] = useState(false)
+  const [tileLoadError, setTileLoadError] = useState(false)
 
   // Debounced reverse geocode and stale response prevention refs
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -91,8 +100,16 @@ export function LocationPickerModal({
     }
   }, [isOpen])
 
-  // 1. Reverse Geocoding Function with Stale Request Cancellation
+  // 1. Reverse Geocoding Function with In-Memory Cache and Stale Request Cancellation
   const resolveAddressFromCoords = useCallback(async (latitude: number, longitude: number) => {
+    const cacheKey = `${latitude.toFixed(4)},${longitude.toFixed(4)}`
+    const cached = geocodeCache.get(cacheKey)
+    if (cached) {
+      setCurrentAddress({ ...cached, lat: latitude, lon: longitude })
+      setIsResolvingAddress(false)
+      return
+    }
+
     const requestId = ++geocodeRequestIdRef.current
     setIsResolvingAddress(true)
     try {
@@ -103,7 +120,7 @@ export function LocationPickerModal({
         return
       }
       if (data.success && data.address) {
-        setCurrentAddress({
+        const resolved: LocationAddressResult = {
           address_line1: data.address.address_line1 || '',
           address_line2: data.address.address_line2 || '',
           landmark: data.address.landmark || '',
@@ -114,7 +131,9 @@ export function LocationPickerModal({
           formatted_address: data.address.formatted_address || '',
           lat: latitude,
           lon: longitude,
-        })
+        }
+        geocodeCache.set(cacheKey, resolved)
+        setCurrentAddress(resolved)
       }
     } catch (err) {
       if (requestId === geocodeRequestIdRef.current) {
@@ -140,7 +159,7 @@ export function LocationPickerModal({
     [resolveAddressFromCoords]
   )
 
-  // 2. Request GPS Geolocation Function
+  // 2. Request GPS Geolocation Function (Non-blocking, Asynchronous)
   const requestCurrentLocation = useCallback((panToCurrent = true) => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
       setPermissionNote('Geolocation is not supported by your browser.')
@@ -157,40 +176,44 @@ export function LocationPickerModal({
         const lat = pos.coords.latitude
         const lon = pos.coords.longitude
         const accuracy = pos.coords.accuracy
-        setCoords({ lat, lon })
-        setIsLocationVerified(true)
-        setPermissionNote(null)
-        setPermissionDenied(false)
 
-        if (panToCurrent) {
-          if (isGoogleMapRef.current && mapInstanceRef.current) {
-            mapInstanceRef.current.panTo({ lat, lng: lon })
-            mapInstanceRef.current.setZoom(VERIFIED_ZOOM)
-          } else if (leafletInstanceRef.current) {
-            leafletInstanceRef.current.setView([lat, lon], VERIFIED_ZOOM, { animate: true })
+        // Only update coords if user has not manually moved the pin in the interim
+        if (!userMovedPinRef.current || !panToCurrent) {
+          setCoords({ lat, lon })
+          setIsLocationVerified(true)
+          setPermissionNote(null)
+          setPermissionDenied(false)
 
-            // Display subtle GPS accuracy radius circle on the map
-            const L = (window as any).L
-            if (L && accuracy && accuracy > 0) {
-              if (accuracyCircleRef.current) {
+          if (panToCurrent) {
+            if (isGoogleMapRef.current && mapInstanceRef.current) {
+              mapInstanceRef.current.panTo({ lat, lng: lon })
+              mapInstanceRef.current.setZoom(VERIFIED_ZOOM)
+            } else if (leafletInstanceRef.current) {
+              leafletInstanceRef.current.setView([lat, lon], VERIFIED_ZOOM, { animate: true })
+
+              // Display subtle GPS accuracy radius circle on the map
+              const L = (window as any).L || cachedLeafletModule
+              if (L && accuracy && accuracy > 0) {
+                if (accuracyCircleRef.current) {
+                  try {
+                    leafletInstanceRef.current.removeLayer(accuracyCircleRef.current)
+                  } catch {}
+                }
                 try {
-                  leafletInstanceRef.current.removeLayer(accuracyCircleRef.current)
+                  accuracyCircleRef.current = L.circle([lat, lon], {
+                    radius: Math.min(accuracy, 300),
+                    color: '#000000',
+                    fillColor: '#000000',
+                    fillOpacity: 0.08,
+                    weight: 1.5,
+                    dashArray: '3, 4',
+                  }).addTo(leafletInstanceRef.current)
                 } catch {}
               }
-              try {
-                accuracyCircleRef.current = L.circle([lat, lon], {
-                  radius: Math.min(accuracy, 300),
-                  color: '#000000',
-                  fillColor: '#000000',
-                  fillOpacity: 0.08,
-                  weight: 1.5,
-                  dashArray: '3, 4',
-                }).addTo(leafletInstanceRef.current)
-              } catch {}
             }
           }
+          triggerReverseGeocode(lat, lon)
         }
-        triggerReverseGeocode(lat, lon)
       },
       (err) => {
         setIsLocating(false)
@@ -212,14 +235,30 @@ export function LocationPickerModal({
     )
   }, [triggerReverseGeocode])
 
-  // Helper to load Leaflet assets safely
-  const loadLeafletAssets = (): Promise<void> => {
-    return new Promise((resolve) => {
-      if (typeof window === 'undefined') {
-        resolve()
-        return
-      }
+  // Helper to dynamically load Leaflet assets (bundles locally with CDN fallback)
+  const loadLeafletAssets = async (): Promise<any> => {
+    if (cachedLeafletModule) return cachedLeafletModule
+    if (typeof window === 'undefined') return null
 
+    if ((window as any).L) {
+      cachedLeafletModule = (window as any).L
+      return cachedLeafletModule
+    }
+
+    // Dynamic import from local bundle first (ultra-fast, ~0ms extra network latency)
+    try {
+      const mod = await import('leaflet')
+      const L = mod.default || mod
+      if (L) {
+        cachedLeafletModule = L
+        ;(window as any).L = L
+        return L
+      }
+    } catch {
+      // Fallback to CDN if dynamic import fails
+    }
+
+    return new Promise((resolve) => {
       if (!document.getElementById('leaflet-css')) {
         const link = document.createElement('link')
         link.id = 'leaflet-css'
@@ -228,21 +267,17 @@ export function LocationPickerModal({
         document.head.appendChild(link)
       }
 
-      if ((window as any).L) {
-        resolve()
-        return
-      }
-
       if (document.getElementById('leaflet-js')) {
         const interval = setInterval(() => {
           if ((window as any).L) {
             clearInterval(interval)
-            resolve()
+            cachedLeafletModule = (window as any).L
+            resolve(cachedLeafletModule)
           }
         }, 50)
         setTimeout(() => {
           clearInterval(interval)
-          resolve()
+          resolve((window as any).L || null)
         }, 3500)
         return
       }
@@ -250,8 +285,11 @@ export function LocationPickerModal({
       const script = document.createElement('script')
       script.id = 'leaflet-js'
       script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
-      script.onload = () => resolve()
-      script.onerror = () => resolve()
+      script.onload = () => {
+        cachedLeafletModule = (window as any).L
+        resolve(cachedLeafletModule)
+      }
+      script.onerror = () => resolve(null)
       document.head.appendChild(script)
     })
   }
@@ -263,6 +301,8 @@ export function LocationPickerModal({
       setIsLocationVerified(false)
       setCurrentAddress(null)
       setPermissionNote(null)
+      setTileLoadError(false)
+      userMovedPinRef.current = false
       return
     }
 
@@ -307,6 +347,7 @@ export function LocationPickerModal({
 
         map.addListener('dragstart', () => {
           setIsPanning(true)
+          userMovedPinRef.current = true
         })
 
         map.addListener('dragend', () => {
@@ -335,11 +376,8 @@ export function LocationPickerModal({
     const initLeafletMap = async () => {
       if (!isMounted || !mapContainerRef.current) return
 
-      await loadLeafletAssets()
-      if (!isMounted || !mapContainerRef.current) return
-
-      const L = (window as any).L
-      if (!L) return
+      const L = await loadLeafletAssets()
+      if (!isMounted || !mapContainerRef.current || !L) return
 
       if (leafletInstanceRef.current) {
         try {
@@ -366,18 +404,23 @@ export function LocationPickerModal({
         ? `https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${encodeURIComponent(cartoApiKey)}`
         : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
 
-      L.tileLayer(tileUrl, {
+      const tileLayer = L.tileLayer(tileUrl, {
         maxZoom: 19,
         subdomains: 'abcd',
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>',
       }).addTo(map)
 
+      tileLayer.on('tileerror', () => {
+        setTileLoadError(true)
+      })
+
       leafletInstanceRef.current = map
       isGoogleMapRef.current = false
 
       map.on('movestart', () => {
         setIsPanning(true)
+        userMovedPinRef.current = true
       })
 
       map.on('moveend', () => {
@@ -393,6 +436,7 @@ export function LocationPickerModal({
 
       map.on('click', (e: any) => {
         setIsLocationVerified(true)
+        userMovedPinRef.current = true
         map.panTo(e.latlng, { animate: true })
       })
 
@@ -407,27 +451,27 @@ export function LocationPickerModal({
         resizeObserverRef.current = ro
       }
 
-      // Multi-stage size invalidation to fix desktop/mobile grey tile issues during transitions
+      // Single post-transition size invalidation to avoid repeated layout recalculations
       const invalidate = () => {
         if (leafletInstanceRef.current) {
           leafletInstanceRef.current.invalidateSize({ pan: false })
         }
       }
 
-      invalidate()
       if (typeof requestAnimationFrame !== 'undefined') {
         requestAnimationFrame(invalidate)
       }
-      setTimeout(invalidate, 100)
-      setTimeout(invalidate, 300)
-      setTimeout(invalidate, 600)
-      setTimeout(invalidate, 1000)
+      const postAnimTimer = setTimeout(invalidate, 250)
 
       setMapReady(true)
 
       // Only reverse-geocode if caller supplied real initial coordinates (e.g. edit mode or pre-detected GPS)
       if (hasInitialCoords) {
         triggerReverseGeocode(coords.lat, coords.lon)
+      }
+
+      return () => {
+        clearTimeout(postAnimTimer)
       }
     }
 
@@ -447,7 +491,7 @@ export function LocationPickerModal({
       initLeafletMap()
     }
 
-    // If caller didn't supply initial verified coordinates, attempt automatic GPS detection
+    // Non-blocking asynchronous GPS detection on modal open when caller didn't provide coordinates
     if (!hasInitialCoords) {
       requestCurrentLocation(true)
     }
@@ -590,7 +634,10 @@ export function LocationPickerModal({
             <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
               <button
                 type="button"
-                onClick={() => requestCurrentLocation(true)}
+                onClick={() => {
+                  userMovedPinRef.current = false
+                  requestCurrentLocation(true)
+                }}
                 disabled={isLocating}
                 className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 sm:px-2.5 sm:py-1 bg-white border border-neutral-300 rounded hover:bg-neutral-50 transition-colors flex items-center gap-1 text-black cursor-pointer"
               >
@@ -609,8 +656,37 @@ export function LocationPickerModal({
           </div>
         )}
 
+        {/* Tile Loading Error Notice */}
+        {tileLoadError && (
+          <div className="px-3.5 py-1.5 bg-amber-50 border-b border-amber-200 text-amber-900 text-[11px] flex items-center justify-between gap-2 shrink-0">
+            <span>Slow connection: Some map tiles took longer to render.</span>
+            <button
+              type="button"
+              onClick={() => {
+                setTileLoadError(false)
+                if (leafletInstanceRef.current) {
+                  leafletInstanceRef.current.invalidateSize({ pan: false })
+                }
+              }}
+              className="text-[10px] font-bold underline cursor-pointer"
+            >
+              Refresh Tiles
+            </button>
+          </div>
+        )}
+
         {/* Map Area */}
         <div className="relative flex-1 w-full min-h-[220px] h-[38dvh] sm:h-[360px] bg-[#f4f3f0] overflow-hidden">
+          {/* Lightweight non-blocking skeleton loader while Leaflet initializes */}
+          {!mapReady && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#f4f3f0]/90 backdrop-blur-xs">
+              <Loader2 size={24} className="animate-spin text-black mb-2" />
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-neutral-600">
+                Loading interactive map...
+              </span>
+            </div>
+          )}
+
           {/* Map canvas with improved contrast/brightness for clearer roads & buildings */}
           <div
             ref={mapContainerRef}
@@ -671,7 +747,10 @@ export function LocationPickerModal({
           <div className="absolute top-2.5 right-3 sm:top-3 sm:right-4 z-20">
             <button
               type="button"
-              onClick={() => requestCurrentLocation(true)}
+              onClick={() => {
+                userMovedPinRef.current = false
+                requestCurrentLocation(true)
+              }}
               disabled={isLocating}
               aria-label="Use Current Location"
               title="Detect and use my current location"
@@ -690,7 +769,10 @@ export function LocationPickerModal({
           <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-20 flex flex-col gap-1.5 sm:gap-2">
             <button
               type="button"
-              onClick={() => requestCurrentLocation(true)}
+              onClick={() => {
+                userMovedPinRef.current = false
+                requestCurrentLocation(true)
+              }}
               disabled={isLocating}
               aria-label="Recenter to my current location"
               title="Recenter to my current location"
@@ -743,7 +825,7 @@ export function LocationPickerModal({
                 SELECTED DELIVERY LOCATION
               </p>
 
-              {isLocating ? (
+              {isLocating && !isLocationVerified ? (
                 <div className="space-y-0.5 py-0.5">
                   <p className="text-xs font-semibold text-black animate-pulse">Detecting your GPS position...</p>
                   <p className="text-[11px] text-neutral-500">Please allow browser location access</p>
@@ -787,7 +869,7 @@ export function LocationPickerModal({
             >
               <Check size={16} />
               <span>
-                {isLocating
+                {isLocating && !isLocationVerified
                   ? 'DETECTING LOCATION...'
                   : isResolvingAddress
                   ? 'RESOLVING ADDRESS...'
