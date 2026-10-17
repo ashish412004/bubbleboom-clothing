@@ -316,18 +316,18 @@ export function HeroCarousel({
 
         {/* BOTTOM ZONE – STACKED CTAS & COMPACT SLIDER INDICATORS */}
         <div className="w-full flex flex-col items-center">
-          {/* CTA Buttons: Vertically stacked, centered, identical width, 10-12px gap, 44-50px height */}
-          <div className="flex flex-col gap-2.5 sm:gap-3 w-full max-w-[280px] min-[380px]:max-w-[320px] mb-5 min-[380px]:mb-6">
+          {/* CTA Buttons: Vertically stacked, centered, identical 240px width (max-w-[78vw]), 10px gap, 44px height */}
+          <div className="flex flex-col gap-2.5 w-[240px] max-w-[78vw] mx-auto mb-5 min-[380px]:mb-6">
             <Link
               href={primaryCtaLink || '/shop'}
-              className="w-full h-11 min-[380px]:h-12 bg-white text-black hover:bg-neutral-200 px-6 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all active:scale-98 shadow-2xl"
+              className="w-full h-11 bg-white text-black hover:bg-neutral-200 px-4 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all active:scale-98 shadow-2xl"
             >
               {primaryCtaText || 'SHOP NOW'}
               <ArrowRight size={15} className="ml-2" />
             </Link>
             <Link
               href={secondaryCtaLink || '/collections'}
-              className="w-full h-11 min-[380px]:h-12 bg-black/60 backdrop-blur-md border border-white text-white hover:bg-white hover:text-black px-6 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all active:scale-98 shadow-2xl"
+              className="w-full h-11 bg-black/60 backdrop-blur-md border border-white text-white hover:bg-white hover:text-black px-4 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all active:scale-98 shadow-2xl whitespace-nowrap"
             >
               {secondaryCtaText || 'EXPLORE COLLECTIONS'}
             </Link>

@@ -28,8 +28,8 @@ describe('Bubble Boom – Mobile Homepage Hero Redesign Suite', () => {
   })
 
   it('3. Bottom zone has vertically stacked CTA buttons with equal widths and proper separation', () => {
-    expect(content).toContain('flex flex-col gap-2.5 sm:gap-3 w-full max-w-[280px] min-[380px]:max-w-[320px]')
-    expect(content).toContain('h-11 min-[380px]:h-12')
+    expect(content).toContain('flex flex-col gap-2.5 w-[240px] max-w-[78vw] mx-auto')
+    expect(content).toContain('h-11 bg-white text-black')
     expect(content).toContain('mb-5 min-[380px]:mb-6')
   })
 
