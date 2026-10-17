@@ -156,6 +156,30 @@ describe('Bubble Boom – Google Maps Style Location Picker & Address Autofill S
     // Mobile safe-area inset
     expect(modalContent).toContain('env(safe-area-inset-bottom)')
   })
+
+  it('12. Enforces compact mobile modal layout and avoids oversized 92vh height', () => {
+    // Compact mobile width and constrained max-height
+    expect(modalContent).toContain('w-[calc(100vw-24px)]')
+    expect(modalContent).toContain('max-h-[82dvh]')
+    expect(modalContent).toContain('rounded-2xl')
+    // Background scroll lock
+    expect(modalContent).toContain("document.body.style.overflow = 'hidden'")
+  })
+
+  it('13. Enforces scoped Leaflet tile styling to prevent grey map distortion from Tailwind preflight', () => {
+    expect(modalContent).toContain('max-width: none !important')
+    expect(modalContent).toContain('width: 256px !important')
+    expect(modalContent).toContain('height: 256px !important')
+    expect(modalContent).toContain('position: absolute !important')
+    expect(modalContent).toContain('resizeObserverRef')
+    expect(modalContent).toContain('ResizeObserver')
+  })
+
+  it('14. Prevents race conditions and stale reverse-geocode responses from overwriting newer pin locations', () => {
+    expect(modalContent).toContain('geocodeRequestIdRef')
+    expect(modalContent).toContain('requestId !== geocodeRequestIdRef.current')
+  })
 })
+
 
 

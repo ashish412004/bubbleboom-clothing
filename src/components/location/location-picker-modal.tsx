@@ -44,6 +44,7 @@ export function LocationPickerModal({
   const leafletInstanceRef = useRef<any>(null)
   const accuracyCircleRef = useRef<any>(null)
   const isGoogleMapRef = useRef<boolean>(false)
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
 
   const hasInitialCoords = Boolean(
     typeof initialLat === 'number' &&
@@ -70,15 +71,37 @@ export function LocationPickerModal({
   const [permissionDenied, setPermissionDenied] = useState<boolean>(false)
   const [mapReady, setMapReady] = useState(false)
 
-  // Debounced reverse geocode ref
+  // Debounced reverse geocode and stale response prevention refs
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const geocodeRequestIdRef = useRef<number>(0)
 
-  // 1. Reverse Geocoding Function
+  // Background body scroll lock while modal is open
+  useEffect(() => {
+    if (!isOpen) return
+    const originalOverflow = document.body.style.overflow
+    const originalPaddingRight = document.body.style.paddingRight
+    const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth
+    if (scrollBarWidth > 0) {
+      document.body.style.paddingRight = `${scrollBarWidth}px`
+    }
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
+      document.body.style.paddingRight = originalPaddingRight
+    }
+  }, [isOpen])
+
+  // 1. Reverse Geocoding Function with Stale Request Cancellation
   const resolveAddressFromCoords = useCallback(async (latitude: number, longitude: number) => {
+    const requestId = ++geocodeRequestIdRef.current
     setIsResolvingAddress(true)
     try {
       const res = await fetch(`/api/location/reverse?lat=${latitude}&lon=${longitude}`)
       const data = await res.json()
+      // Ignore stale response if user panned or re-located in the interim
+      if (requestId !== geocodeRequestIdRef.current) {
+        return
+      }
       if (data.success && data.address) {
         setCurrentAddress({
           address_line1: data.address.address_line1 || '',
@@ -94,9 +117,13 @@ export function LocationPickerModal({
         })
       }
     } catch (err) {
-      console.warn('[LocationPicker] Reverse geocode error:', err)
+      if (requestId === geocodeRequestIdRef.current) {
+        console.warn('[LocationPicker] Reverse geocode error:', err)
+      }
     } finally {
-      setIsResolvingAddress(false)
+      if (requestId === geocodeRequestIdRef.current) {
+        setIsResolvingAddress(false)
+      }
     }
   }, [])
 
@@ -108,7 +135,7 @@ export function LocationPickerModal({
       }
       debounceTimerRef.current = setTimeout(() => {
         resolveAddressFromCoords(latitude, longitude)
-      }, 400)
+      }, 350)
     },
     [resolveAddressFromCoords]
   )
@@ -150,14 +177,16 @@ export function LocationPickerModal({
                   leafletInstanceRef.current.removeLayer(accuracyCircleRef.current)
                 } catch {}
               }
-              accuracyCircleRef.current = L.circle([lat, lon], {
-                radius: Math.min(accuracy, 300),
-                color: '#000000',
-                fillColor: '#000000',
-                fillOpacity: 0.08,
-                weight: 1.5,
-                dashArray: '3, 4',
-              }).addTo(leafletInstanceRef.current)
+              try {
+                accuracyCircleRef.current = L.circle([lat, lon], {
+                  radius: Math.min(accuracy, 300),
+                  color: '#000000',
+                  fillColor: '#000000',
+                  fillOpacity: 0.08,
+                  weight: 1.5,
+                  dashArray: '3, 4',
+                }).addTo(leafletInstanceRef.current)
+              } catch {}
             }
           }
         }
@@ -182,6 +211,50 @@ export function LocationPickerModal({
       }
     )
   }, [triggerReverseGeocode])
+
+  // Helper to load Leaflet assets safely
+  const loadLeafletAssets = (): Promise<void> => {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined') {
+        resolve()
+        return
+      }
+
+      if (!document.getElementById('leaflet-css')) {
+        const link = document.createElement('link')
+        link.id = 'leaflet-css'
+        link.rel = 'stylesheet'
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+        document.head.appendChild(link)
+      }
+
+      if ((window as any).L) {
+        resolve()
+        return
+      }
+
+      if (document.getElementById('leaflet-js')) {
+        const interval = setInterval(() => {
+          if ((window as any).L) {
+            clearInterval(interval)
+            resolve()
+          }
+        }, 50)
+        setTimeout(() => {
+          clearInterval(interval)
+          resolve()
+        }, 3500)
+        return
+      }
+
+      const script = document.createElement('script')
+      script.id = 'leaflet-js'
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+      script.onload = () => resolve()
+      script.onerror = () => resolve()
+      document.head.appendChild(script)
+    })
+  }
 
   // 3. Initialize Interactive Map on Modal Open
   useEffect(() => {
@@ -259,92 +332,102 @@ export function LocationPickerModal({
     }
 
     // Function to initialize Leaflet with CARTO Basemaps API key
-    const initLeafletMap = () => {
+    const initLeafletMap = async () => {
       if (!isMounted || !mapContainerRef.current) return
 
-      // Load Leaflet CSS
-      if (!document.getElementById('leaflet-css')) {
-        const link = document.createElement('link')
-        link.id = 'leaflet-css'
-        link.rel = 'stylesheet'
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-        document.head.appendChild(link)
+      await loadLeafletAssets()
+      if (!isMounted || !mapContainerRef.current) return
+
+      const L = (window as any).L
+      if (!L) return
+
+      if (leafletInstanceRef.current) {
+        try {
+          leafletInstanceRef.current.remove()
+        } catch {}
+        leafletInstanceRef.current = null
       }
 
-      // Load Leaflet JS
-      const initL = () => {
-        if (!isMounted || !mapContainerRef.current) return
-        const L = (window as any).L
-        if (!L) return
+      const map = L.map(mapContainerRef.current, {
+        center: [coords.lat, coords.lon],
+        zoom: initialZoom,
+        zoomControl: false,
+        attributionControl: true,
+        tap: false,
+        touchZoom: true,
+        dragging: true,
+        scrollWheelZoom: true,
+        bounceAtZoomLimits: false,
+      })
 
-        if (leafletInstanceRef.current) {
-          try {
-            leafletInstanceRef.current.remove()
-          } catch {}
-        }
+      // Official CARTO Voyager raster URL with API key parameter
+      // If NEXT_PUBLIC_CARTO_BASEMAPS_API_KEY is present, it passes ?key=... to remove watermarks
+      const tileUrl = cartoApiKey
+        ? `https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${encodeURIComponent(cartoApiKey)}`
+        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
 
-        const map = L.map(mapContainerRef.current, {
-          center: [coords.lat, coords.lon],
-          zoom: initialZoom,
-          zoomControl: false,
-          attributionControl: true,
-        })
+      L.tileLayer(tileUrl, {
+        maxZoom: 19,
+        subdomains: 'abcd',
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>',
+      }).addTo(map)
 
-        // Official CARTO Voyager raster URL with API key parameter
-        // If NEXT_PUBLIC_CARTO_BASEMAPS_API_KEY is present, it passes ?key=... to remove watermarks
-        const tileUrl = cartoApiKey
-          ? `https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${encodeURIComponent(cartoApiKey)}`
-          : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+      leafletInstanceRef.current = map
+      isGoogleMapRef.current = false
 
-        L.tileLayer(tileUrl, {
-          maxZoom: 19,
-          subdomains: 'abcd',
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>',
-        }).addTo(map)
+      map.on('movestart', () => {
+        setIsPanning(true)
+      })
 
-        leafletInstanceRef.current = map
-        isGoogleMapRef.current = false
-
-        map.on('movestart', () => {
-          setIsPanning(true)
-        })
-
-        map.on('moveend', () => {
-          setIsPanning(false)
-          const center = map.getCenter()
+      map.on('moveend', () => {
+        setIsPanning(false)
+        const center = map.getCenter()
+        if (center) {
           setCoords({ lat: center.lat, lon: center.lng })
           // Moving the map signifies intentional user pin placement
           setIsLocationVerified(true)
           triggerReverseGeocode(center.lat, center.lng)
+        }
+      })
+
+      map.on('click', (e: any) => {
+        setIsLocationVerified(true)
+        map.panTo(e.latlng, { animate: true })
+      })
+
+      // ResizeObserver to continually adapt to modal layout stabilization, window resize, or rotation
+      if (typeof ResizeObserver !== 'undefined' && mapContainerRef.current) {
+        const ro = new ResizeObserver(() => {
+          if (leafletInstanceRef.current) {
+            leafletInstanceRef.current.invalidateSize({ pan: false })
+          }
         })
+        ro.observe(mapContainerRef.current)
+        resizeObserverRef.current = ro
+      }
 
-        map.on('click', (e: any) => {
-          setIsLocationVerified(true)
-          map.panTo(e.latlng, { animate: true })
-        })
-
-        // Invalidate size once modal animation settles
-        setTimeout(() => {
-          map.invalidateSize()
-        }, 300)
-
-        setMapReady(true)
-
-        // Only reverse-geocode if caller supplied real initial coordinates (e.g. edit mode or pre-detected GPS)
-        if (hasInitialCoords) {
-          triggerReverseGeocode(coords.lat, coords.lon)
+      // Multi-stage size invalidation to fix desktop/mobile grey tile issues during transitions
+      const invalidate = () => {
+        if (leafletInstanceRef.current) {
+          leafletInstanceRef.current.invalidateSize({ pan: false })
         }
       }
 
-      if ((window as any).L) {
-        initL()
-      } else {
-        const script = document.createElement('script')
-        script.id = 'leaflet-js'
-        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
-        script.onload = () => initL()
-        document.head.appendChild(script)
+      invalidate()
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(invalidate)
+      }
+      setTimeout(invalidate, 100)
+      setTimeout(invalidate, 300)
+      setTimeout(invalidate, 600)
+      setTimeout(invalidate, 1000)
+
+      setMapReady(true)
+
+      // Only reverse-geocode if caller supplied real initial coordinates (e.g. edit mode or pre-detected GPS)
+      if (hasInitialCoords) {
+        triggerReverseGeocode(coords.lat, coords.lon)
       }
     }
 
@@ -371,6 +454,10 @@ export function LocationPickerModal({
 
     return () => {
       isMounted = false
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect()
+        resizeObserverRef.current = null
+      }
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
       if (leafletInstanceRef.current) {
         if (accuracyCircleRef.current) {
@@ -419,13 +506,66 @@ export function LocationPickerModal({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-3 sm:p-4 overscroll-contain animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-2xl h-[92vh] sm:h-[650px] bg-white flex flex-col rounded-t-[24px] sm:rounded-[24px] overflow-hidden shadow-2xl border border-neutral-300">
+      {/* Critical scoped CSS to prevent Tailwind preflight max-width distortion of Leaflet raster tiles */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .bb-map-canvas .leaflet-pane,
+        .bb-map-canvas .leaflet-tile,
+        .bb-map-canvas .leaflet-marker-icon,
+        .bb-map-canvas .leaflet-marker-shadow,
+        .bb-map-canvas .leaflet-tile-container,
+        .bb-map-canvas .leaflet-pane > svg,
+        .bb-map-canvas .leaflet-pane > canvas,
+        .bb-map-canvas .leaflet-zoom-box,
+        .bb-map-canvas .leaflet-image-layer,
+        .bb-map-canvas .leaflet-layer {
+          position: absolute !important;
+          left: 0;
+          top: 0;
+        }
+        .bb-map-canvas .leaflet-tile-pane {
+          position: absolute !important;
+          left: 0;
+          top: 0;
+          z-index: 200;
+        }
+        .bb-map-canvas .leaflet-tile-container {
+          position: absolute !important;
+          left: 0;
+          top: 0;
+        }
+        .bb-map-canvas .leaflet-tile {
+          max-width: none !important;
+          max-height: none !important;
+          width: 256px !important;
+          height: 256px !important;
+          user-select: none !important;
+          -webkit-user-select: none !important;
+          box-shadow: none !important;
+        }
+        .bb-map-canvas .leaflet-pane img {
+          max-width: none !important;
+          max-height: none !important;
+        }
+        .bb-map-canvas .leaflet-tile-container img {
+          max-width: none !important;
+          max-height: none !important;
+        }
+        .bb-map-canvas .leaflet-container {
+          width: 100% !important;
+          height: 100% !important;
+          background-color: #f4f3f0 !important;
+          outline: none !important;
+          touch-action: pan-x pan-y !important;
+        }
+      ` }} />
+
+      <div className="relative w-[calc(100vw-24px)] sm:w-full max-w-2xl max-h-[82dvh] sm:max-h-[620px] bg-white flex flex-col rounded-2xl overflow-hidden shadow-2xl border border-neutral-300">
         {/* Header */}
-        <div className="px-5 py-3.5 bg-black text-white flex items-center justify-between shrink-0">
+        <div className="px-4 py-3 bg-black text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+            <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
             <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider font-mono">
               {title}
             </h2>
@@ -434,7 +574,7 @@ export function LocationPickerModal({
             type="button"
             onClick={onClose}
             aria-label="Close location picker"
-            className="p-1.5 rounded-full hover:bg-neutral-800 text-white transition-colors cursor-pointer"
+            className="p-1 rounded-full hover:bg-neutral-800 text-white transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -442,27 +582,27 @@ export function LocationPickerModal({
 
         {/* Permission / Status Banner */}
         {permissionNote && (
-          <div className="px-4 py-2.5 bg-neutral-100 border-b border-neutral-200 text-neutral-800 text-xs font-medium flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-            <div className="flex items-center gap-2 flex-1">
-              <AlertCircle size={15} className="shrink-0 text-black" />
-              <span className="leading-snug">{permissionNote}</span>
+          <div className="px-3.5 py-2 bg-neutral-100 border-b border-neutral-200 text-neutral-800 text-[11px] sm:text-xs font-medium flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 shrink-0">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <AlertCircle size={14} className="shrink-0 text-black" />
+              <span className="leading-snug line-clamp-2">{permissionNote}</span>
             </div>
-            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
               <button
                 type="button"
                 onClick={() => requestCurrentLocation(true)}
                 disabled={isLocating}
-                className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 bg-white border border-neutral-300 rounded hover:bg-neutral-50 transition-colors flex items-center gap-1 text-black cursor-pointer"
+                className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 sm:px-2.5 sm:py-1 bg-white border border-neutral-300 rounded hover:bg-neutral-50 transition-colors flex items-center gap-1 text-black cursor-pointer"
               >
-                {isLocating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                {isLocating ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
                 <span>Retry GPS</span>
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 bg-black text-white rounded hover:bg-neutral-800 transition-colors flex items-center gap-1 cursor-pointer"
+                className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 sm:px-2.5 sm:py-1 bg-black text-white rounded hover:bg-neutral-800 transition-colors flex items-center gap-1 cursor-pointer"
               >
-                <Edit3 size={12} />
+                <Edit3 size={11} />
                 <span>Enter Manually</span>
               </button>
             </div>
@@ -470,11 +610,11 @@ export function LocationPickerModal({
         )}
 
         {/* Map Area */}
-        <div className="relative flex-1 w-full bg-[#f4f3f0] overflow-hidden">
+        <div className="relative flex-1 w-full min-h-[220px] h-[38dvh] sm:h-[360px] bg-[#f4f3f0] overflow-hidden">
           {/* Map canvas with improved contrast/brightness for clearer roads & buildings */}
           <div
             ref={mapContainerRef}
-            className="w-full h-full [&_.leaflet-tile-pane]:contrast-[1.12] [&_.leaflet-tile-pane]:brightness-[0.98] [&_.leaflet-tile-pane]:saturate-[1.15]"
+            className="bb-map-canvas w-full h-full relative z-0 [&_.leaflet-tile-pane]:contrast-[1.12] [&_.leaflet-tile-pane]:brightness-[0.98] [&_.leaflet-tile-pane]:saturate-[1.15] [&_.leaflet-tile]:!max-w-none [&_.leaflet-tile]:!max-h-none [&_.leaflet-pane_img]:!max-w-none [&_.leaflet-tile-container_img]:!max-w-none"
             tabIndex={0}
           />
 
@@ -482,11 +622,11 @@ export function LocationPickerModal({
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full pointer-events-none z-30 select-none">
             <div
               className={`flex flex-col items-center transition-transform duration-200 ease-out ${
-                isPanning ? '-translate-y-3 scale-105' : 'translate-y-0 scale-100'
+                isPanning ? '-translate-y-2.5 scale-105' : 'translate-y-0 scale-100'
               }`}
             >
               {/* Delivery Pin Badge */}
-              <div className="bg-black text-white text-[10px] font-bold tracking-wider uppercase px-3 py-1 rounded-full shadow-2xl whitespace-nowrap mb-1.5 border border-white/30 flex items-center gap-1.5">
+              <div className="bg-black text-white text-[9px] sm:text-[10px] font-bold tracking-wider uppercase px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full shadow-2xl whitespace-nowrap mb-1 border border-white/30 flex items-center gap-1.5">
                 <span className={`w-1.5 h-1.5 rounded-full ${isLocationVerified ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
                 <span>
                   {isPanning
@@ -499,19 +639,19 @@ export function LocationPickerModal({
 
               {/* Pin Head: Solid Black Teardrop with White Center */}
               <div className="relative flex flex-col items-center">
-                <div className="w-11 h-11 bg-black rounded-full shadow-2xl border-[3px] border-white flex items-center justify-center">
-                  <div className="w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-inner">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 bg-black rounded-full shadow-2xl border-[3px] border-white flex items-center justify-center">
+                  <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 bg-white rounded-full flex items-center justify-center shadow-inner">
                     <div className="w-1.5 h-1.5 bg-black rounded-full" />
                   </div>
                 </div>
                 {/* Pointer Pointing Directly at Geographic Target */}
-                <div className="w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-t-[10px] border-t-black -mt-[2px]" />
+                <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[9px] border-t-black -mt-[2px]" />
               </div>
 
               {/* Ground Shadow Point */}
               <div
-                className={`w-3.5 h-1.5 bg-black/40 rounded-full blur-[1px] transition-all duration-200 ${
-                  isPanning ? 'scale-50 opacity-20 translate-y-3' : 'scale-100 opacity-70 translate-y-0'
+                className={`w-3 h-1 bg-black/40 rounded-full blur-[1px] transition-all duration-200 ${
+                  isPanning ? 'scale-50 opacity-20 translate-y-2' : 'scale-100 opacity-70 translate-y-0'
                 }`}
               />
             </div>
@@ -521,45 +661,45 @@ export function LocationPickerModal({
           <span className="sr-only"><MapPin size={0} /></span>
 
           {/* Floating Instructions Pill */}
-          <div className="absolute top-3 left-4 pointer-events-none z-20">
-            <div className="bg-white/95 backdrop-blur-xs border border-neutral-300 text-neutral-900 text-[11px] font-semibold tracking-wide py-1.5 px-3 rounded-full shadow-md flex items-center gap-1.5">
+          <div className="absolute top-2.5 left-3 sm:top-3 sm:left-4 pointer-events-none z-20">
+            <div className="bg-white/95 backdrop-blur-xs border border-neutral-300 text-neutral-900 text-[10px] sm:text-[11px] font-semibold tracking-wide py-1 px-2.5 sm:py-1.5 sm:px-3 rounded-full shadow-md flex items-center gap-1.5">
               <span>📍 Move map to adjust exact delivery point</span>
             </div>
           </div>
 
           {/* 2. Floating "USE CURRENT LOCATION" Action Button */}
-          <div className="absolute top-3 right-4 z-20">
+          <div className="absolute top-2.5 right-3 sm:top-3 sm:right-4 z-20">
             <button
               type="button"
               onClick={() => requestCurrentLocation(true)}
               disabled={isLocating}
               aria-label="Use Current Location"
               title="Detect and use my current location"
-              className="bg-black hover:bg-neutral-800 text-white border border-neutral-700 shadow-xl px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer active:scale-95 disabled:opacity-60"
+              className="bg-black hover:bg-neutral-800 text-white border border-neutral-700 shadow-xl px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 sm:gap-2 transition-all cursor-pointer active:scale-95 disabled:opacity-60"
             >
               {isLocating ? (
-                <Loader2 size={14} className="animate-spin text-white" />
+                <Loader2 size={13} className="animate-spin text-white" />
               ) : (
-                <Crosshair size={14} className="text-white" />
+                <Crosshair size={13} className="text-white" />
               )}
               <span>{isLocating ? 'Locating...' : 'Use Current Location'}</span>
             </button>
           </div>
 
           {/* Map Controls: Floating Recenter & Desktop Zoom Buttons */}
-          <div className="absolute bottom-4 right-4 z-20 flex flex-col gap-2">
+          <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-20 flex flex-col gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => requestCurrentLocation(true)}
               disabled={isLocating}
               aria-label="Recenter to my current location"
               title="Recenter to my current location"
-              className="w-11 h-11 rounded-full bg-white hover:bg-black text-black hover:text-white border border-neutral-300 hover:border-black shadow-lg flex items-center justify-center transition-all cursor-pointer active:scale-95"
+              className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white hover:bg-black text-black hover:text-white border border-neutral-300 hover:border-black shadow-lg flex items-center justify-center transition-all cursor-pointer active:scale-95"
             >
               {isLocating ? (
-                <Loader2 size={18} className="animate-spin text-black" />
+                <Loader2 size={16} className="animate-spin text-black" />
               ) : (
-                <Navigation size={18} className="fill-current" />
+                <Navigation size={16} className="fill-current" />
               )}
             </button>
 
@@ -586,36 +726,36 @@ export function LocationPickerModal({
         </div>
 
         {/* Bottom Address Confirmation Panel */}
-        <div className="p-4 sm:p-5 bg-white border-t border-neutral-200 shrink-0 space-y-3.5 pb-[max(env(safe-area-inset-bottom),1rem)]">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-neutral-100 border border-neutral-300 flex items-center justify-center shrink-0 mt-0.5">
+        <div className="p-3.5 sm:p-5 bg-white border-t border-neutral-200 shrink-0 space-y-2.5 sm:space-y-3.5 pb-[max(env(safe-area-inset-bottom),0.875rem)]">
+          <div className="flex items-start gap-2.5 sm:gap-3">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-neutral-100 border border-neutral-300 flex items-center justify-center shrink-0 mt-0.5">
               {isResolvingAddress || isLocating ? (
-                <Loader2 size={16} className="animate-spin text-black" />
+                <Loader2 size={14} className="animate-spin text-black" />
               ) : (
-                <div className="w-4 h-4 bg-black rounded-full flex items-center justify-center">
+                <div className="w-3.5 h-3.5 bg-black rounded-full flex items-center justify-center">
                   <div className="w-1.5 h-1.5 bg-white rounded-full" />
                 </div>
               )}
             </div>
 
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase font-mono tracking-widest text-neutral-500 font-bold mb-0.5">
+              <p className="text-[9px] sm:text-[10px] uppercase font-mono tracking-widest text-neutral-500 font-bold mb-0.5">
                 SELECTED DELIVERY LOCATION
               </p>
 
               {isLocating ? (
-                <div className="space-y-1 py-1">
+                <div className="space-y-0.5 py-0.5">
                   <p className="text-xs font-semibold text-black animate-pulse">Detecting your GPS position...</p>
                   <p className="text-[11px] text-neutral-500">Please allow browser location access</p>
                 </div>
               ) : isPanning ? (
-                <div className="space-y-1 py-1">
+                <div className="space-y-0.5 py-0.5">
                   <p className="text-xs font-semibold text-black">Updating pin location...</p>
                   <p className="text-[11px] text-neutral-500">Release map to select address</p>
                 </div>
               ) : isResolvingAddress && !currentAddress ? (
                 <div className="space-y-1 py-1">
-                  <div className="h-4 bg-neutral-200 rounded-sm animate-pulse w-3/4" />
+                  <div className="h-3.5 bg-neutral-200 rounded-sm animate-pulse w-3/4" />
                   <div className="h-3 bg-neutral-100 rounded-sm animate-pulse w-1/2" />
                 </div>
               ) : isLocationVerified && currentAddress ? (
@@ -638,12 +778,12 @@ export function LocationPickerModal({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+          <div className="flex flex-col sm:flex-row gap-2 pt-0.5">
             <button
               type="button"
               onClick={handleConfirmLocation}
               disabled={!isLocationVerified || !currentAddress || isResolvingAddress || isLocating}
-              className="flex-1 bg-black text-white hover:bg-neutral-800 h-12 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center gap-2 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-md active:scale-98"
+              className="flex-1 bg-black text-white hover:bg-neutral-800 h-11 sm:h-12 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center gap-2 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-md active:scale-98"
             >
               <Check size={16} />
               <span>
@@ -659,7 +799,7 @@ export function LocationPickerModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 h-12 text-xs uppercase tracking-wider font-bold text-neutral-600 hover:text-black border border-neutral-300 hover:border-black rounded-xl transition-colors cursor-pointer"
+              className="px-4 sm:px-5 h-11 sm:h-12 text-xs uppercase tracking-wider font-bold text-neutral-600 hover:text-black border border-neutral-300 hover:border-black rounded-xl transition-colors cursor-pointer"
             >
               Cancel
             </button>
