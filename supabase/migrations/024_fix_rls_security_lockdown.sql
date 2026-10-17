@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS public.newsletter_subscribers (
 ALTER TABLE public.newsletter_subscribers ENABLE ROW LEVEL SECURITY;
 
 -- 3. SECURITY DEFINER Admin Helper Function (Prevents RLS infinite recursion)
-CREATE OR REPLACE FUNCTION public.is_admin(check_uid uuid DEFAULT auth.uid())
+CREATE OR REPLACE FUNCTION public.is_admin(check_user_id uuid DEFAULT auth.uid())
 RETURNS boolean
 LANGUAGE sql
 SECURITY DEFINER
@@ -75,11 +75,11 @@ STABLE
 AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = check_uid AND role = 'admin'
+    WHERE id = check_user_id AND role = 'admin'
   )
   OR EXISTS (
     SELECT 1 FROM public.user_roles
-    WHERE user_id = check_uid AND role IN ('admin', 'superadmin')
+    WHERE user_id = check_user_id AND role IN ('admin', 'superadmin')
   );
 $$;
 
