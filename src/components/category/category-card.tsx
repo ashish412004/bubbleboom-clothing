@@ -27,7 +27,7 @@ export function CategoryCard({
       href={`/shop?category=${encodeURIComponent(category.slug)}`}
       onClick={onClick}
       draggable={draggable}
-      className={`group relative block w-full aspect-[3/4] sm:aspect-[4/5] overflow-hidden bg-neutral-950 border border-neutral-900 focus:outline-none focus:ring-1 focus:ring-white transition-all select-none ${className}`}
+      className={`group relative block w-full aspect-[4/5] sm:aspect-[4/5] overflow-hidden bg-neutral-950 border border-neutral-900 focus:outline-none focus:ring-1 focus:ring-white transition-all select-none ${className}`}
       aria-label={`Browse ${category.name}`}
     >
       {hasCoverImage ? (
@@ -36,7 +36,7 @@ export function CategoryCard({
             src={category.cover_image!}
             alt={category.name}
             fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            sizes="(max-width: 640px) 75vw, (max-width: 1024px) 33vw, 25vw"
             priority={priority}
             className="object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
           />
@@ -66,12 +66,13 @@ export function CategoryCard({
 
 
       {/* Bottom Content Area */}
-      <div className="absolute bottom-0 inset-x-0 p-4 sm:p-5 z-20 flex flex-col justify-end">
-        <h3 className="text-base sm:text-lg md:text-xl font-extrabold uppercase tracking-tight text-white leading-tight">
+      <div className="absolute bottom-0 inset-x-0 p-3.5 sm:p-5 z-20 flex flex-col justify-end">
+        <h3 className="text-sm sm:text-lg md:text-xl font-extrabold uppercase tracking-tight text-white leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
           {category.name}
         </h3>
 
-        <div className="mt-2 flex items-center justify-between text-neutral-400 group-hover:text-white transition-colors">
+        {/* Desktop Explore Drop / Product count: simplified on mobile to keep cards minimal and avoid crowded text */}
+        <div className="hidden sm:flex mt-2 items-center justify-between text-neutral-400 group-hover:text-white transition-colors">
           <span className="text-[11px] font-mono uppercase tracking-widest font-semibold flex items-center gap-1.5">
             Explore Drop
             <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />

@@ -57,9 +57,9 @@ export function CategorySlider({ categories }: CategorySliderProps) {
     if (!el) return
 
     const firstCard = el.querySelector('[data-category-card]') as HTMLElement
-    // One card width plus gap (24px on desktop, 16px on mobile) or 80% client width fallback
+    // One card width plus gap (24px on desktop, 12px on mobile) or 80% client width fallback
     const cardStep = firstCard
-      ? firstCard.offsetWidth + (window.innerWidth >= 640 ? 24 : 16)
+      ? firstCard.offsetWidth + (window.innerWidth >= 640 ? 24 : 12)
       : el.clientWidth * 0.75
 
     const targetOffset = direction === 'next' ? cardStep : -cardStep
@@ -115,20 +115,20 @@ export function CategorySlider({ categories }: CategorySliderProps) {
   }
 
   return (
-    <section className="py-16 sm:py-24 border-b border-neutral-200 overflow-hidden">
+    <section className="py-9 sm:py-24 border-b border-neutral-200 overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header: Title + Minimal Controls + View All */}
-        <div className="flex items-end justify-between mb-8 sm:mb-12">
+        <div className="flex items-end justify-between mb-5 sm:mb-12">
           <div>
-            <p className="text-xs uppercase tracking-widest font-bold text-neutral-500 mb-1">
+            <p className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-neutral-500 mb-0.5 sm:mb-1">
               Curated Wardrobe
             </p>
-            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight uppercase">
+            <h2 className="text-xl sm:text-4xl font-extrabold tracking-tight uppercase">
               Shop By Category
             </h2>
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-4">
             {/* Minimal Monochrome Prev/Next Controls */}
             <div className="flex items-center gap-1.5 sm:gap-2">
               <button
@@ -136,9 +136,10 @@ export function CategorySlider({ categories }: CategorySliderProps) {
                 onClick={() => scroll('prev')}
                 disabled={!canScrollPrev}
                 aria-label="Previous categories"
-                className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center border border-black bg-white text-black hover:bg-black hover:text-white transition-colors disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center border border-black bg-white text-black hover:bg-black hover:text-white transition-colors disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
               >
-                <ChevronLeft size={18} strokeWidth={2.2} />
+                <ChevronLeft size={16} className="sm:hidden" strokeWidth={2.2} />
+                <ChevronLeft size={18} className="hidden sm:block" strokeWidth={2.2} />
               </button>
 
               <button
@@ -146,9 +147,10 @@ export function CategorySlider({ categories }: CategorySliderProps) {
                 onClick={() => scroll('next')}
                 disabled={!canScrollNext}
                 aria-label="Next categories"
-                className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center border border-black bg-white text-black hover:bg-black hover:text-white transition-colors disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center border border-black bg-white text-black hover:bg-black hover:text-white transition-colors disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
               >
-                <ChevronRight size={18} strokeWidth={2.2} />
+                <ChevronRight size={16} className="sm:hidden" strokeWidth={2.2} />
+                <ChevronRight size={18} className="hidden sm:block" strokeWidth={2.2} />
               </button>
             </div>
 
@@ -169,7 +171,7 @@ export function CategorySlider({ categories }: CategorySliderProps) {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
-          className="flex gap-4 sm:gap-6 overflow-x-auto scroll-smooth snap-x snap-mandatory touch-pan-x pb-4 pt-1 px-4 sm:px-6 lg:px-8 -mx-4 sm:-mx-6 lg:-mx-8 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
+          className="flex gap-3 sm:gap-6 overflow-x-auto scroll-smooth snap-x snap-mandatory touch-pan-x pb-3 pt-1 px-4 sm:px-6 lg:px-8 -mx-4 sm:-mx-6 lg:-mx-8 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
           role="region"
           aria-label="Shop by category carousel"
           tabIndex={0}
@@ -178,7 +180,7 @@ export function CategorySlider({ categories }: CategorySliderProps) {
             <div
               key={cat.id}
               data-category-card
-              className="snap-start shrink-0 flex-[0_0_72%] sm:flex-[0_0_42%] md:flex-[0_0_36%] lg:flex-[0_0_30.5%] xl:flex-[0_0_23.5%] max-w-[340px]"
+              className="snap-start shrink-0 flex-[0_0_72%] sm:flex-[0_0_42%] md:flex-[0_0_36%] lg:flex-[0_0_30.5%] xl:flex-[0_0_23.5%] max-w-[270px] sm:max-w-[340px]"
             >
               <CategoryCard
                 category={cat}
@@ -190,10 +192,10 @@ export function CategorySlider({ categories }: CategorySliderProps) {
         </div>
 
         {/* Mobile View All Categories Link (Below Carousel) */}
-        <div className="mt-8 text-center sm:hidden">
+        <div className="mt-5 text-center sm:hidden">
           <Link
             href="/categories"
-            className="inline-flex items-center justify-center w-full py-3 border border-black text-xs font-mono uppercase font-bold tracking-wider hover:bg-black hover:text-white transition-colors"
+            className="inline-flex items-center justify-center w-full py-2.5 sm:py-3 border border-black text-xs font-mono uppercase font-bold tracking-wider hover:bg-black hover:text-white transition-colors"
           >
             View All Categories
             <ArrowRight size={14} className="ml-2" />
