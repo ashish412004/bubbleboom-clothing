@@ -2,9 +2,15 @@
 
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Mail, Clock, Shield, Send, CheckCircle2 } from 'lucide-react'
+import { Mail, Clock, Shield, Send, CheckCircle2, MessageCircle, ExternalLink } from 'lucide-react'
+import { InstagramIcon as Instagram } from '@/components/icons/instagram-icon'
+import { cleanWhatsAppNumber } from '@/lib/whatsapp'
 
-export function ContactClient() {
+interface ContactClientProps {
+  initialSocial?: any
+}
+
+export function ContactClient({ initialSocial }: ContactClientProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [orderNumber, setOrderNumber] = useState('')
@@ -12,6 +18,17 @@ export function ContactClient() {
   const [message, setMessage] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  const instagramUrl = initialSocial?.instagram_url || 'https://www.instagram.com/bubbleboomstore/'
+  const instagramHandle = initialSocial?.instagram_handle || '@bubbleboomstore'
+  const isInstagramEnabled = initialSocial?.instagram_enabled ?? true
+
+  const cleanWaDigits = cleanWhatsAppNumber(initialSocial?.whatsapp_number)
+  const isWhatsAppActive = Boolean(
+    initialSocial?.whatsapp_support_enabled && cleanWaDigits.length >= 10
+  )
+  const waGreeting = initialSocial?.whatsapp_greeting || 'Hi Bubble Boom, I need help with my order or a product.'
+  const waUrl = isWhatsAppActive ? `https://wa.me/${cleanWaDigits}?text=${encodeURIComponent(waGreeting)}` : ''
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,16 +59,64 @@ export function ContactClient() {
         </div>
 
         <div className="border border-black p-6 bg-white space-y-4">
+          {/* Email Support */}
           <div className="flex items-start gap-4">
             <Mail className="w-5 h-5 text-black shrink-0 mt-0.5" />
             <div>
-              <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block">Support & Business Email</span>
+              <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block">Support &amp; Business Email</span>
               <a href="mailto:bubbleboomstore2026@gmail.com" className="text-sm font-bold text-black hover:underline">
                 bubbleboomstore2026@gmail.com
               </a>
               <p className="text-xs text-neutral-500 mt-0.5">Direct response for customer inquiries, orders, and business queries.</p>
             </div>
           </div>
+
+          {/* WhatsApp Support (Only rendered if enabled with a valid number) */}
+          {isWhatsAppActive && (
+            <div className="flex items-start gap-4 pt-4 border-t border-neutral-200">
+              <MessageCircle className="w-5 h-5 text-black shrink-0 mt-0.5" />
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block">Instant Chat Assistance</span>
+                <a
+                  href={waUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-black text-black hover:underline mt-0.5"
+                >
+                  <span>CHAT ON WHATSAPP ↗</span>
+                </a>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Direct WhatsApp messaging for fast order updates and styling advice.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Instagram Social Channel */}
+          {isInstagramEnabled && (
+            <div className="flex items-start gap-4 pt-4 border-t border-neutral-200">
+              <Instagram className="w-5 h-5 text-black shrink-0 mt-0.5" />
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block">Official Instagram</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-sm font-bold text-black">{instagramHandle}</span>
+                  <span>·</span>
+                  <a
+                    href={instagramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-mono font-bold text-black underline hover:text-neutral-600 inline-flex items-center gap-1"
+                  >
+                    <span>Visit Instagram</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Follow for official drops, previews, and community fit checks. (Note: Instagram DMs are checked periodically and not monitored 24/7).
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-start gap-4 pt-4 border-t border-neutral-200">
             <Clock className="w-5 h-5 text-black shrink-0 mt-0.5" />
@@ -65,7 +130,7 @@ export function ContactClient() {
           <div className="flex items-start gap-4 pt-4 border-t border-neutral-200">
             <Shield className="w-5 h-5 text-black shrink-0 mt-0.5" />
             <div>
-              <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block">Consumer Grievance & Desk</span>
+              <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 font-bold block">Consumer Grievance &amp; Desk</span>
               <p className="text-sm font-bold text-black">Grievance Redressal Desk</p>
               <p className="text-xs text-neutral-500 mt-0.5">
                 Designated officer under Consumer Protection (E-Commerce) Rules, 2020. Email: <a href="mailto:bubbleboomstore2026@gmail.com" className="underline font-bold text-black">bubbleboomstore2026@gmail.com</a>

@@ -17,7 +17,7 @@ import {
 import {
   StoreNotificationSettings,
   DEFAULT_NOTIFICATION_SETTINGS,
-} from '@/lib/settings'
+} from '@/types/settings'
 import { OutboxJobRecord, OrderNotificationEvent, renderNotificationHtml } from '@/lib/emails/templates'
 
 interface NotificationsManagerClientProps {

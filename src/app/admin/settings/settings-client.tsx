@@ -2,13 +2,15 @@
 
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Save, AlertTriangle, CheckCircle2, Truck, RotateCcw, ShieldCheck } from 'lucide-react'
+import { Save, AlertTriangle, CheckCircle2, Truck, RotateCcw, ShieldCheck, MessageCircle, ExternalLink } from 'lucide-react'
+import { InstagramIcon as Instagram } from '@/components/icons/instagram-icon'
 
 interface SettingsClientProps {
   initialShipping: any
   initialOrders: any
   initialGeneral: any
   initialExchange?: any
+  initialSocial?: any
 }
 
 export function SettingsClient({
@@ -16,6 +18,7 @@ export function SettingsClient({
   initialOrders,
   initialGeneral,
   initialExchange,
+  initialSocial,
 }: SettingsClientProps) {
   const [loading, setLoading] = useState(false)
 
@@ -91,8 +94,35 @@ export function SettingsClient({
   )
   const [storeName, setStoreName] = useState(initialGeneral?.store_name || 'BUBBLE BOOM')
 
+  // 5. Social Media & WhatsApp Customer Support
+  const [instagramUrl, setInstagramUrl] = useState(
+    initialSocial?.instagram_url || 'https://www.instagram.com/bubbleboomstore/'
+  )
+  const [instagramHandle, setInstagramHandle] = useState(
+    initialSocial?.instagram_handle || '@bubbleboomstore'
+  )
+  const [instagramEnabled, setInstagramEnabled] = useState(
+    initialSocial?.instagram_enabled ?? true
+  )
+  const [whatsappNumber, setWhatsappNumber] = useState(
+    initialSocial?.whatsapp_number || ''
+  )
+  const [whatsappSupportEnabled, setWhatsappSupportEnabled] = useState(
+    initialSocial?.whatsapp_support_enabled ?? false
+  )
+  const [whatsappGreeting, setWhatsappGreeting] = useState(
+    initialSocial?.whatsapp_greeting || 'Hi Bubble Boom, I need help with my order or a product.'
+  )
+
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    const cleanWaDigits = whatsappNumber.replace(/\D/g, '')
+    if (whatsappSupportEnabled && cleanWaDigits.length < 10) {
+      toast.error('Please enter a valid WhatsApp business number with country code (e.g. 919876543210) before enabling WhatsApp support.')
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -180,7 +210,24 @@ export function SettingsClient({
         }),
       })
 
-      toast.success('Store shipping, delivery rules, and exchange settings saved!')
+      // 5. Save social & WhatsApp settings
+      await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'social',
+          value: {
+            instagram_url: instagramUrl.trim() || 'https://www.instagram.com/bubbleboomstore/',
+            instagram_handle: instagramHandle.trim() || '@bubbleboomstore',
+            instagram_enabled: Boolean(instagramEnabled),
+            whatsapp_number: whatsappNumber.trim(),
+            whatsapp_support_enabled: Boolean(whatsappSupportEnabled && cleanWaDigits.length >= 10),
+            whatsapp_greeting: whatsappGreeting.trim() || 'Hi Bubble Boom, I need help with my order or a product.',
+          },
+        }),
+      })
+
+      toast.success('Store shipping, exchange, social media, and WhatsApp settings saved!')
     } catch {
       toast.error('Failed to update settings')
     } finally {
@@ -593,6 +640,176 @@ export function SettingsClient({
         >
           <span>Open Email Settings</span>
         </a>
+      </div>
+
+      {/* 6. SOCIAL MEDIA & WHATSAPP CUSTOMER SUPPORT */}
+      <div className="border border-black bg-white p-4 sm:p-6 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-neutral-200">
+          <div className="flex items-center gap-2">
+            <Instagram className="w-4 h-4 text-black" />
+            <MessageCircle className="w-4 h-4 text-black" />
+            <h2 className="text-sm font-black uppercase tracking-tight">
+              Social Media &amp; WhatsApp Customer Support
+            </h2>
+          </div>
+          <span className={`text-[10px] font-mono font-bold uppercase px-2.5 py-0.5 border ${
+            whatsappSupportEnabled && whatsappNumber.replace(/\D/g, '').length >= 10
+              ? 'bg-black text-white border-black'
+              : 'bg-neutral-100 text-neutral-600 border-neutral-300'
+          }`}>
+            WhatsApp: {whatsappSupportEnabled && whatsappNumber.replace(/\D/g, '').length >= 10 ? 'ACTIVE' : 'DISABLED (HIDDEN)'}
+          </span>
+        </div>
+
+        {/* Section A: Instagram Integration */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-2">
+              <Instagram className="w-3.5 h-3.5" />
+              <span>Official Instagram Integration</span>
+            </h3>
+            <label className="flex items-center gap-2 text-xs font-mono cursor-pointer">
+              <input
+                type="checkbox"
+                checked={instagramEnabled}
+                onChange={(e) => setInstagramEnabled(e.target.checked)}
+                className="w-4 h-4 accent-black"
+              />
+              <span className="font-bold">Instagram Active</span>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
+                Official Profile URL
+              </label>
+              <input
+                type="url"
+                required
+                value={instagramUrl}
+                onChange={(e) => setInstagramUrl(e.target.value)}
+                placeholder="https://www.instagram.com/bubbleboomstore/"
+                className="w-full border border-black p-2.5 text-xs font-mono focus:outline-none min-h-[40px]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
+                Instagram Handle
+              </label>
+              <input
+                type="text"
+                required
+                value={instagramHandle}
+                onChange={(e) => setInstagramHandle(e.target.value)}
+                placeholder="@bubbleboomstore"
+                className="w-full border border-black p-2.5 text-xs font-mono focus:outline-none min-h-[40px]"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs font-mono text-neutral-500 pt-1">
+            <span>Configured for Footer, About Us, and Contact Us pages.</span>
+            {instagramUrl && (
+              <a
+                href={instagramUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-black font-bold hover:underline"
+              >
+                <span>Preview Profile</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        </div>
+
+        {/* Section B: WhatsApp Customer Support */}
+        <div className="pt-5 border-t border-neutral-200 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <h3 className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-2">
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>WhatsApp Customer Support System (Future Ready)</span>
+            </h3>
+
+            <label className="flex items-center gap-2 text-xs font-mono cursor-pointer">
+              <input
+                type="checkbox"
+                checked={whatsappSupportEnabled}
+                onChange={(e) => {
+                  const willEnable = e.target.checked
+                  if (willEnable && whatsappNumber.replace(/\D/g, '').length < 10) {
+                    toast.error('Enter your WhatsApp business number before enabling support.')
+                  }
+                  setWhatsappSupportEnabled(willEnable)
+                }}
+                className="w-4 h-4 accent-black"
+              />
+              <span className="font-bold">Enable WhatsApp Support</span>
+            </label>
+          </div>
+
+          <div className="p-3.5 bg-[#F8F8F6] border border-neutral-300 text-xs font-mono text-neutral-600 leading-relaxed">
+            <p className="font-bold text-black uppercase mb-0.5">Integration Status Note</p>
+            When disabled, all WhatsApp floating buttons, Contact Us links, Order support actions, and Product enquiry triggers remain <strong>completely hidden and inactive</strong>. Once you enter your official business number and turn on this switch, all customer touchpoints will automatically activate.
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
+                WhatsApp Business Number (with Country Code)
+              </label>
+              <input
+                type="text"
+                value={whatsappNumber}
+                onChange={(e) => setWhatsappNumber(e.target.value)}
+                placeholder="e.g. 919876543210 (Leave empty until official)"
+                className="w-full border border-black p-2.5 text-xs font-mono focus:outline-none min-h-[40px]"
+              />
+              <p className="text-[10px] text-neutral-500 font-mono mt-1">
+                Enter international digits only (e.g. 91 for India + 10 digits). No + symbol, hyphens, or spaces.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
+                Default Customer Greeting
+              </label>
+              <input
+                type="text"
+                value={whatsappGreeting}
+                onChange={(e) => setWhatsappGreeting(e.target.value)}
+                placeholder="Hi Bubble Boom, I need help with my order or a product."
+                className="w-full border border-black p-2.5 text-xs focus:outline-none min-h-[40px]"
+              />
+              <p className="text-[10px] text-neutral-500 font-mono mt-1">
+                Prefilled in WhatsApp when a customer initiates contact from general pages.
+              </p>
+            </div>
+          </div>
+
+          {/* WhatsApp Preview */}
+          {whatsappNumber.replace(/\D/g, '').length >= 10 && (
+            <div className="p-3 border border-black bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono">
+              <div>
+                <span className="text-[10px] text-neutral-500 block uppercase font-bold">Generated Link Preview:</span>
+                <span className="text-black font-bold break-all">
+                  https://wa.me/{whatsappNumber.replace(/\D/g, '')}?text={encodeURIComponent(whatsappGreeting)}
+                </span>
+              </div>
+              <a
+                href={`https://wa.me/${whatsappNumber.replace(/\D/g, '')}?text=${encodeURIComponent(whatsappGreeting)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 bg-black text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 shrink-0"
+              >
+                <span>Test WhatsApp</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex justify-end">

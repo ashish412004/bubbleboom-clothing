@@ -25,6 +25,7 @@ import {
   Phone,
   FileText,
   Loader2,
+  MessageCircle,
 } from 'lucide-react'
 import { getSafeImageUrl, formatPrice } from '@/lib/utils'
 
@@ -83,6 +84,16 @@ export function OrdersViewWithDrawer({ orders }: OrdersViewWithDrawerProps) {
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [isCancelling, setIsCancelling] = useState(false)
+  const [socialConfig, setSocialConfig] = useState<{ whatsapp_support_enabled: boolean; whatsapp_number: string } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/social-config')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setSocialConfig(data)
+      })
+      .catch(() => {})
+  }, [])
 
   // Drawer ref for keyboard ESC handling
   const drawerRef = useRef<HTMLDivElement>(null)
@@ -731,6 +742,19 @@ export function OrdersViewWithDrawer({ orders }: OrdersViewWithDrawerProps) {
                   </button>
                 )}
               </div>
+
+              {/* WhatsApp Order Support (Strictly hidden until enabled with valid number) */}
+              {Boolean(socialConfig?.whatsapp_support_enabled && (socialConfig?.whatsapp_number?.replace(/\D/g, '').length || 0) >= 10) && (
+                <a
+                  href={`https://wa.me/${socialConfig?.whatsapp_number?.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi Bubble Boom, I need help with Order #${selectedOrder.order_number}.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl border border-black bg-[#F8F8F6] hover:bg-black hover:text-white text-xs font-mono font-bold uppercase tracking-wider text-black transition-colors text-center"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span>NEED HELP WITH THIS ORDER?</span>
+                </a>
+              )}
 
               {/* Direct Full Page Link */}
               <Link

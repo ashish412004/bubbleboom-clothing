@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Image as ImageIcon,
+  MessageCircle,
 } from 'lucide-react'
 import { formatPrice, formatDiscount, getSafeImageUrl, normalizeColor, parseProductImage, type ParsedProductImage } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
@@ -101,6 +102,16 @@ export function ProductInteractive({
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [isZoomOpen, setIsZoomOpen] = useState(false)
+  const [socialConfig, setSocialConfig] = useState<{ whatsapp_support_enabled: boolean; whatsapp_number: string } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/social-config')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setSocialConfig(data)
+      })
+      .catch(() => {})
+  }, [])
 
   // Streetwear standard sizing sort order
   const standardSizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', '28', '30', '32', '34', '36', '38']
@@ -694,6 +705,21 @@ export function ProductInteractive({
                 'Buy It Now'
               )}
             </button>
+          )}
+
+          {/* Optional Product Enquiry via WhatsApp (Strictly hidden when disabled or without number) */}
+          {Boolean(socialConfig?.whatsapp_support_enabled && (socialConfig?.whatsapp_number?.replace(/\D/g, '').length || 0) >= 10) && (
+            <div className="pt-2 text-center">
+              <a
+                href={`https://wa.me/${socialConfig?.whatsapp_number?.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi Bubble Boom, I have a question about ${product.name}.`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[11px] font-mono text-neutral-500 hover:text-black underline transition-colors"
+              >
+                <MessageCircle size={13} />
+                <span>Ask About This Product</span>
+              </a>
+            </div>
           )}
 
         </div>

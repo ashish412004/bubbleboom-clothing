@@ -10,6 +10,7 @@ import {
   Plus,
   Minus,
 } from 'lucide-react'
+import { InstagramIcon as Instagram } from '@/components/icons/instagram-icon'
 
 const SUPPORT_EMAIL = 'bubbleboomstore2026@gmail.com'
 
@@ -72,6 +73,18 @@ function CustomerCareLinksList() {
           className="font-mono text-[11px] text-neutral-400 hover:text-white transition-colors break-all block py-0.5"
         >
           {SUPPORT_EMAIL}
+        </a>
+      </li>
+      <li>
+        <a
+          href="https://www.instagram.com/bubbleboomstore/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-[11px] text-neutral-400 hover:text-white transition-colors flex items-center gap-1.5 py-0.5"
+          aria-label="Follow Bubble Boom on Instagram"
+        >
+          <Instagram size={11} className="text-neutral-400" />
+          <span>@bubbleboomstore</span>
         </a>
       </li>
     </ul>
@@ -172,13 +185,23 @@ export function Footer() {
             <p className="text-xs text-neutral-400 leading-relaxed max-w-xs">
               Premium streetwear. Made to stand out.
             </p>
-            <div className="pt-1">
+            <div className="pt-1 flex items-center gap-3">
               <Link
                 href="/track-order"
                 className="inline-flex items-center text-xs uppercase tracking-wider font-bold border border-neutral-700 px-4 py-2 hover:bg-white hover:text-black transition-colors"
               >
                 Track Your Order
               </Link>
+              <a
+                href="https://www.instagram.com/bubbleboomstore/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Follow Bubble Boom on Instagram"
+                title="Follow Bubble Boom on Instagram (@bubbleboomstore)"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-neutral-700 text-neutral-300 hover:text-white hover:border-white hover:scale-110 transition-all duration-200"
+              >
+                <Instagram size={15} />
+              </a>
             </div>
           </div>
 
@@ -226,13 +249,23 @@ export function Footer() {
             <p className="text-xs text-neutral-400 leading-relaxed">
               Premium streetwear. Made to stand out.
             </p>
-            <div className="pt-1">
+            <div className="pt-1 flex items-center gap-3">
               <Link
                 href="/track-order"
                 className="inline-flex items-center text-xs uppercase tracking-wider font-bold border border-neutral-700 px-4 py-2 hover:bg-white hover:text-black transition-colors"
               >
                 Track Your Order
               </Link>
+              <a
+                href="https://www.instagram.com/bubbleboomstore/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Follow Bubble Boom on Instagram"
+                title="Follow Bubble Boom on Instagram (@bubbleboomstore)"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-neutral-700 text-neutral-300 hover:text-white hover:border-white hover:scale-110 transition-all duration-200"
+              >
+                <Instagram size={15} />
+              </a>
             </div>
           </div>
 

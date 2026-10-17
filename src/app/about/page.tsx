@@ -3,6 +3,7 @@ import { Footer } from '@/components/footer/footer'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Compass, Scissors, ShieldCheck, Sparkles } from 'lucide-react'
+import { InstagramIcon as Instagram } from '@/components/icons/instagram-icon'
 
 export const metadata = {
   title: 'About Bubble Boom | Wear the Boom',
@@ -80,6 +81,36 @@ export default function AboutPage() {
               <p className="text-xs text-neutral-600 leading-relaxed">
                 Ethically knitted, dyed, and stitched in small batch runs across audited textile hubs in India. Limited capsules to eliminate deadstock.
               </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Social Follow Section */}
+        <section className="border-t border-black bg-[#F8F8F6] py-14 md:py-20 text-center">
+          <div className="max-w-2xl mx-auto px-4 sm:px-6 space-y-4">
+            <div className="w-12 h-12 rounded-full border-2 border-black bg-white flex items-center justify-center mx-auto shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <Instagram className="w-6 h-6 text-black" />
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-mono tracking-widest text-neutral-500 font-bold block mb-1">
+                @bubbleboomstore
+              </span>
+              <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tight text-black">
+                FOLLOW THE BOOM
+              </h2>
+            </div>
+            <p className="text-xs md:text-sm text-neutral-600 max-w-md mx-auto leading-relaxed">
+              Stay connected for new drops, fresh fits, and everything Bubble Boom.
+            </p>
+            <div className="pt-2">
+              <a
+                href="https://www.instagram.com/bubbleboomstore/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-black text-white px-7 py-3 text-xs uppercase tracking-widest font-black hover:bg-neutral-800 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none"
+              >
+                <span>FOLLOW US ON INSTAGRAM ↗</span>
+              </a>
             </div>
           </div>
         </section>

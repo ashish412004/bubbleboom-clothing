@@ -142,3 +142,21 @@ export const DEFAULT_NOTIFICATION_SETTINGS: StoreNotificationSettings = {
   smtp_user: 'bubbleboomstore2026@gmail.com',
   smtp_pass: '',
 }
+
+export interface StoreSocialSettings {
+  instagram_url: string
+  instagram_handle: string
+  instagram_enabled: boolean
+  whatsapp_number: string
+  whatsapp_support_enabled: boolean
+  whatsapp_greeting?: string
+}
+
+export const DEFAULT_SOCIAL_SETTINGS: StoreSocialSettings = {
+  instagram_url: 'https://www.instagram.com/bubbleboomstore/',
+  instagram_handle: '@bubbleboomstore',
+  instagram_enabled: true,
+  whatsapp_number: '',
+  whatsapp_support_enabled: false,
+  whatsapp_greeting: 'Hi Bubble Boom, I need help with my order or a product.',
+}

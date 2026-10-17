@@ -8,8 +8,9 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { OrderActions } from './order-actions'
-import { CheckCircle2, Package, Truck, Clock, ShieldCheck, ArrowLeft, ExternalLink, Mail, AlertTriangle, Check } from 'lucide-react'
+import { CheckCircle2, Package, Truck, Clock, ShieldCheck, ArrowLeft, ExternalLink, Mail, AlertTriangle, Check, MessageCircle } from 'lucide-react'
 import { getSafeImageUrl } from '@/lib/utils'
+import { getSocialSettings, cleanWhatsAppNumber } from '@/lib/settings'
 
 interface OrderDetailPageProps {
   params: Promise<{ id: string }>
@@ -87,6 +88,13 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
   const isCancelled = order.status === 'cancelled'
   const isException = ['delivery_exception', 'return_to_origin'].includes(order.status)
   const hasTracking = Boolean(order.tracking_number || order.tracking_url)
+
+  const social = await getSocialSettings()
+  const cleanWaDigits = cleanWhatsAppNumber(social?.whatsapp_number)
+  const isWhatsAppActive = Boolean(social?.whatsapp_support_enabled && cleanWaDigits.length >= 10)
+  const waOrderUrl = isWhatsAppActive
+    ? `https://wa.me/${cleanWaDigits}?text=${encodeURIComponent(`Hi Bubble Boom, I need help with Order #${order.order_number}.`)}`
+    : null
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-black">
@@ -355,6 +363,19 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                     }))}
                     existingReturns={existingReturns}
                   />
+                  {waOrderUrl && (
+                    <div className="pt-3">
+                      <a
+                        href={waOrderUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full inline-flex items-center justify-center gap-2 border border-black bg-[#F8F8F6] hover:bg-black hover:text-white px-4 py-2.5 text-xs font-mono font-bold uppercase tracking-wider text-black transition-colors"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>NEED HELP WITH THIS ORDER?</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
 

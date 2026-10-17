@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ToasterProvider } from "@/components/providers/toaster-provider";
 import { CartDrawer } from "@/components/cart/cart-drawer";
+import { WhatsAppFloatingButton } from "@/components/support/whatsapp-floating-button";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ToasterProvider />
         <CartDrawer />
         {children}
+        <WhatsAppFloatingButton />
       </body>
     </html>
   );
