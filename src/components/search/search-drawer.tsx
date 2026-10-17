@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
@@ -37,6 +38,7 @@ export function SearchDrawer() {
   const category = useSearchStore((state) => state.category)
   const setCategory = useSearchStore((state) => state.setCategory)
 
+  const [mounted, setMounted] = useState(false)
   const [products, setProducts] = useState<SearchProductItem[]>([])
   const [categories, setCategories] = useState<SearchCategoryItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -49,6 +51,10 @@ export function SearchDrawer() {
   const abortControllerRef = useRef<AbortController | null>(null)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Fetch search or recommendations
   const fetchData = useCallback(
@@ -183,88 +189,85 @@ export function SearchDrawer() {
     ? `/search?q=${encodeURIComponent(query.trim())}${category !== 'all' ? `&category=${encodeURIComponent(category)}` : ''}`
     : `/shop${category !== 'all' ? `?category=${encodeURIComponent(category)}` : ''}`
 
-  if (!isOpen) return null
+  if (!isOpen || !mounted) return null
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-hidden" role="dialog" aria-modal="true" aria-label="Search Store">
-      {/* Semi-transparent dark backdrop (Desktop) */}
+  const drawerModal = (
+    <div
+      className="fixed inset-0 z-[100] overflow-hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Search Store"
+    >
+      {/* Semi-transparent dark backdrop covering entire website & navbar (Desktop) */}
       <div
-        className="fixed inset-0 bg-black/60 transition-opacity duration-300 ease-out"
+        className="fixed inset-0 bg-black/60 transition-opacity duration-300 ease-out z-[100]"
         onClick={closeSearch}
         aria-hidden="true"
       />
 
-      {/* 1. DESKTOP SLIDING DRAWER (>= 768px): Slides in from the right */}
+      {/* 1. DESKTOP SLIDING DRAWER (>= 768px): Slides in from the right ABOVE the navbar */}
       <aside
-        className="hidden md:flex fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[75vw] lg:w-[70vw] max-w-[900px] bg-white text-black shadow-2xl flex-col transition-transform duration-300 ease-out animate-in slide-in-from-right"
+        className="hidden md:flex fixed top-0 right-0 bottom-0 z-[101] w-full sm:w-[75vw] lg:w-[70vw] max-w-[900px] bg-white text-black shadow-2xl flex-col transition-transform duration-300 ease-out animate-in slide-in-from-right"
         aria-label="Desktop Search Drawer"
       >
-        {/* Header: Circular Close Button + Search Input Bar */}
-        <div className="p-6 pb-4 border-b border-neutral-100 flex flex-col gap-4 shrink-0">
-          {/* Top Row: Circular Close Button on upper right */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono uppercase tracking-widest text-neutral-400">
-              BUBBLE BOOM / SEARCH
-            </span>
-            <button
-              type="button"
-              onClick={closeSearch}
-              aria-label="Close search drawer"
-              className="w-9 h-9 rounded-full border border-neutral-300 hover:border-black flex items-center justify-center text-black hover:bg-neutral-100 transition-colors focus:outline-none focus:ring-1 focus:ring-black cursor-pointer"
+        {/* Top Header Row: [ All Categories ▼ ] [ Search products... 🔍/✕ ] [ X ] */}
+        <div className="p-6 pb-5 border-b border-neutral-200 flex items-center gap-4 sm:gap-6 shrink-0 bg-white">
+          {/* Category Dropdown with minimal bottom underline */}
+          <div className="relative shrink-0 min-w-[140px] sm:min-w-[160px] max-w-[200px]">
+            <select
+              value={category}
+              onChange={(e) => handleCategoryChange(e.target.value)}
+              aria-label="Filter by Category"
+              className="w-full appearance-none bg-transparent pr-7 py-2.5 text-xs font-bold uppercase tracking-wider text-black border-b border-black focus:outline-none cursor-pointer"
             >
-              <X className="w-4 h-4" />
-            </button>
+              <option value="all">All Categories</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.slug}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-black w-3.5 h-3.5" />
           </div>
 
-          {/* Search Bar Row: [ All Categories ▼ ] [ Search products... 🔍 ] */}
-          <div className="flex items-center gap-6 pt-1">
-            {/* Category Dropdown with minimal bottom underline */}
-            <div className="relative shrink-0 min-w-[150px] max-w-[200px]">
-              <select
-                value={category}
-                onChange={(e) => handleCategoryChange(e.target.value)}
-                aria-label="Filter by Category"
-                className="w-full appearance-none bg-transparent pr-7 py-2.5 text-xs font-bold uppercase tracking-wider text-black border-b border-black focus:outline-none cursor-pointer"
-              >
-                <option value="all">All Categories</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.slug}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-black w-3.5 h-3.5" />
-            </div>
-
-            {/* Large Search Input with minimal bottom underline */}
-            <div className="relative flex-1">
-              <input
-                ref={desktopInputRef}
-                type="text"
-                value={query}
-                onChange={handleInputChange}
-                placeholder="Search products..."
-                aria-label="Search products"
-                className="w-full bg-transparent py-2.5 pr-8 text-base lg:text-lg font-medium text-black placeholder:text-neutral-400 border-b border-black focus:outline-none"
-              />
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center">
-                {loading ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
-                ) : query ? (
-                  <button
-                    type="button"
-                    onClick={handleClearQuery}
-                    aria-label="Clear search query"
-                    className="p-1 text-neutral-400 hover:text-black transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                ) : (
-                  <Search className="w-4 h-4 text-neutral-400 pointer-events-none" />
-                )}
-              </div>
+          {/* Large Search Input with minimal bottom underline */}
+          <div className="relative flex-1">
+            <input
+              ref={desktopInputRef}
+              type="text"
+              value={query}
+              onChange={handleInputChange}
+              placeholder="Search products..."
+              aria-label="Search products"
+              className="w-full bg-transparent py-2.5 pr-8 text-base lg:text-lg font-medium text-black placeholder:text-neutral-400 border-b border-black focus:outline-none"
+            />
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center">
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
+              ) : query ? (
+                <button
+                  type="button"
+                  onClick={handleClearQuery}
+                  aria-label="Clear search query"
+                  className="p-1 text-neutral-400 hover:text-black transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              ) : (
+                <Search className="w-4 h-4 text-neutral-400 pointer-events-none" />
+              )}
             </div>
           </div>
+
+          {/* Circular Close Button on upper right */}
+          <button
+            type="button"
+            onClick={closeSearch}
+            aria-label="Close search drawer"
+            className="w-9 h-9 rounded-full border border-neutral-300 hover:border-black flex items-center justify-center text-black hover:bg-neutral-100 transition-colors focus:outline-none focus:ring-1 focus:ring-black cursor-pointer shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Scrollable Results Area */}
@@ -387,7 +390,7 @@ export function SearchDrawer() {
                   <button
                     type="button"
                     onClick={handleClearQuery}
-                    className="px-4 py-2 text-xs font-bold uppercase tracking-wider border border-black text-black hover:bg-neutral-100 transition-colors"
+                    className="px-4 py-2 text-xs font-bold uppercase tracking-wider border border-black text-black hover:bg-neutral-100 transition-colors cursor-pointer"
                   >
                     Clear Search
                   </button>
@@ -417,19 +420,19 @@ export function SearchDrawer() {
         </div>
       </aside>
 
-      {/* 2. MOBILE FULL-SCREEN SEARCH (< 768px): Dedicated Full-Screen Overlay */}
+      {/* 2. MOBILE FULL-SCREEN SEARCH (< 768px): Dedicated Full-Screen Overlay ABOVE the navbar */}
       <div
-        className="md:hidden fixed inset-0 z-50 bg-white text-black flex flex-col h-[100dvh] overflow-hidden"
+        className="md:hidden fixed inset-0 z-[101] bg-white text-black flex flex-col h-[100dvh] overflow-hidden"
         aria-label="Mobile Search Interface"
       >
         {/* Sticky Mobile Search Header: [ ← ] [ Search Bubble Boom... × ] */}
-        <div className="pt-[max(env(safe-area-inset-top),0.75rem)] pb-3 px-4 border-b border-neutral-100 bg-white shrink-0">
+        <div className="pt-[max(env(safe-area-inset-top),0.75rem)] pb-3 px-4 border-b border-neutral-200 bg-white shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={closeSearch}
               aria-label="Close search"
-              className="p-2 -ml-1 text-black hover:bg-neutral-100 rounded-full transition-colors cursor-pointer"
+              className="p-2 -ml-1 text-black hover:bg-neutral-100 rounded-full transition-colors cursor-pointer shrink-0"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -451,7 +454,7 @@ export function SearchDrawer() {
                     type="button"
                     onClick={handleClearQuery}
                     aria-label="Clear query"
-                    className="p-1 text-neutral-400 hover:text-black"
+                    className="p-1 text-neutral-400 hover:text-black cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -630,4 +633,6 @@ export function SearchDrawer() {
       </div>
     </div>
   )
+
+  return createPortal(drawerModal, document.body)
 }

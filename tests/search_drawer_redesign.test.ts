@@ -97,11 +97,18 @@ describe('BUBBLE BOOM – Premium Search Drawer Redesign (Desktop & Mobile)', ()
   })
 
   describe('3. Mobile Full-Screen Search Specifications', () => {
-    it('renders a dedicated mobile full-screen search container respecting iPhone safe areas', () => {
-      expect(searchDrawerContent).toContain('md:hidden fixed inset-0 z-50 bg-white')
+    it('renders a dedicated mobile full-screen search container respecting iPhone safe areas and above navbar', () => {
+      expect(searchDrawerContent).toContain('md:hidden fixed inset-0 z-[101] bg-white')
       expect(searchDrawerContent).toContain('h-[100dvh]')
       expect(searchDrawerContent).toContain('env(safe-area-inset-top)')
       expect(searchDrawerContent).toContain('env(safe-area-inset-bottom)')
+    })
+
+    it('renders through React Portal attached to document.body with high-level z-[100] stacking context above navbar', () => {
+      expect(searchDrawerContent).toContain("import { createPortal } from 'react-dom'")
+      expect(searchDrawerContent).toContain('createPortal(drawerModal, document.body)')
+      expect(searchDrawerContent).toContain('z-[100]')
+      expect(searchDrawerContent).toContain('z-[101]')
     })
 
     it('provides sticky mobile header with back arrow [ ← ] and search input', () => {

@@ -29,8 +29,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body suppressHydrationWarning className="min-h-full flex flex-col">
         <ToasterProvider />
         <CartDrawer />
-        <SearchDrawer />
         {children}
+        <SearchDrawer />
         <WhatsAppFloatingButton />
       </body>
     </html>
