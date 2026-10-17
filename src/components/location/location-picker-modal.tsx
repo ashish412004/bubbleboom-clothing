@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { X, Navigation, MapPin, Loader2, Check, AlertCircle, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react'
+import { X, Navigation, MapPin, Loader2, Check, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Edit3 } from 'lucide-react'
 
 export interface LocationAddressResult {
   address_line1: string
@@ -25,9 +25,11 @@ export interface LocationPickerModalProps {
   title?: string
 }
 
-// Default fallback location: Mumbai, India
-const DEFAULT_LAT = 19.076
-const DEFAULT_LON = 72.8777
+// Neutral overview center of India for visual initialization only (NEVER treated as an address)
+const DEFAULT_MAP_LAT = 20.5937
+const DEFAULT_MAP_LON = 78.9629
+const DEFAULT_MAP_ZOOM = 5
+const VERIFIED_ZOOM = 16
 
 export function LocationPickerModal({
   isOpen,
@@ -42,16 +44,29 @@ export function LocationPickerModal({
   const leafletInstanceRef = useRef<any>(null)
   const isGoogleMapRef = useRef<boolean>(false)
 
+  const hasInitialCoords = Boolean(
+    typeof initialLat === 'number' &&
+    typeof initialLon === 'number' &&
+    !isNaN(initialLat) &&
+    !isNaN(initialLon) &&
+    initialLat !== 0 &&
+    initialLon !== 0
+  )
+
   // Location state
   const [coords, setCoords] = useState<{ lat: number; lon: number }>({
-    lat: initialLat || DEFAULT_LAT,
-    lon: initialLon || DEFAULT_LON,
+    lat: hasInitialCoords ? (initialLat as number) : DEFAULT_MAP_LAT,
+    lon: hasInitialCoords ? (initialLon as number) : DEFAULT_MAP_LON,
   })
+
+  // Whether the location has been explicitly confirmed via GPS or user pin movement
+  const [isLocationVerified, setIsLocationVerified] = useState<boolean>(hasInitialCoords)
   const [isLocating, setIsLocating] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
   const [isResolvingAddress, setIsResolvingAddress] = useState(false)
   const [currentAddress, setCurrentAddress] = useState<LocationAddressResult | null>(null)
   const [permissionNote, setPermissionNote] = useState<string | null>(null)
+  const [permissionDenied, setPermissionDenied] = useState<boolean>(false)
   const [mapReady, setMapReady] = useState(false)
 
   // Debounced reverse geocode ref
@@ -97,7 +112,7 @@ export function LocationPickerModal({
     [resolveAddressFromCoords]
   )
 
-  // 2. Request Geolocation Function
+  // 2. Request GPS Geolocation Function
   const requestCurrentLocation = useCallback((panToCurrent = true) => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
       setPermissionNote('Geolocation is not supported by your browser.')
@@ -106,6 +121,7 @@ export function LocationPickerModal({
 
     setIsLocating(true)
     setPermissionNote(null)
+    setPermissionDenied(false)
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -113,13 +129,16 @@ export function LocationPickerModal({
         const lat = pos.coords.latitude
         const lon = pos.coords.longitude
         setCoords({ lat, lon })
+        setIsLocationVerified(true)
+        setPermissionNote(null)
+        setPermissionDenied(false)
 
         if (panToCurrent) {
           if (isGoogleMapRef.current && mapInstanceRef.current) {
             mapInstanceRef.current.panTo({ lat, lng: lon })
-            mapInstanceRef.current.setZoom(16)
+            mapInstanceRef.current.setZoom(VERIFIED_ZOOM)
           } else if (leafletInstanceRef.current) {
-            leafletInstanceRef.current.setView([lat, lon], 16, { animate: true })
+            leafletInstanceRef.current.setView([lat, lon], VERIFIED_ZOOM, { animate: true })
           }
         }
         triggerReverseGeocode(lat, lon)
@@ -127,32 +146,38 @@ export function LocationPickerModal({
       (err) => {
         setIsLocating(false)
         if (err.code === err.PERMISSION_DENIED) {
-          setPermissionNote('Location permission was denied. You can manually pan the map to place your delivery pin.')
+          setPermissionDenied(true)
+          setPermissionNote('Location permission was denied. Please allow GPS access, or drag the map pin to select your address.')
         } else if (err.code === err.TIMEOUT) {
-          setPermissionNote('Location request timed out. You can manually drag the map to your address.')
+          setPermissionNote('GPS request timed out. Please drag the map pin to select your delivery address.')
         } else {
-          setPermissionNote('Could not detect exact GPS position. Please drag the map to place your pin.')
+          setPermissionNote('Could not detect exact GPS position. Please drag the map pin to select your address.')
         }
-        // Still reverse geocode current fallback coords
-        triggerReverseGeocode(coords.lat, coords.lon)
+        // NEVER reverse-geocode fallback default coordinates on GPS failure!
       },
       {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 30000,
+        maximumAge: 0,
       }
     )
-  }, [coords.lat, coords.lon, triggerReverseGeocode])
+  }, [triggerReverseGeocode])
 
   // 3. Initialize Interactive Map on Modal Open
   useEffect(() => {
     if (!isOpen) {
       setMapReady(false)
+      setIsLocationVerified(false)
+      setCurrentAddress(null)
+      setPermissionNote(null)
       return
     }
 
     let isMounted = true
     const googleApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    const cartoApiKey = (process.env.NEXT_PUBLIC_CARTO_BASEMAPS_API_KEY || '').trim()
+
+    const initialZoom = hasInitialCoords ? VERIFIED_ZOOM : DEFAULT_MAP_ZOOM
 
     // Function to initialize Google Map
     const initGoogleMap = () => {
@@ -163,7 +188,7 @@ export function LocationPickerModal({
         const gMaps = (window as any).google.maps
         const map = new gMaps.Map(mapContainerRef.current, {
           center: { lat: coords.lat, lng: coords.lon },
-          zoom: 16,
+          zoom: initialZoom,
           disableDefaultUI: true,
           zoomControl: false,
           gestureHandling: 'greedy',
@@ -198,29 +223,22 @@ export function LocationPickerModal({
             const newLat = center.lat()
             const newLon = center.lng()
             setCoords({ lat: newLat, lon: newLon })
-            triggerReverseGeocode(newLat, newLon)
-          }
-        })
-
-        map.addListener('idle', () => {
-          setIsPanning(false)
-          const center = map.getCenter()
-          if (center) {
-            const newLat = center.lat()
-            const newLon = center.lng()
-            setCoords({ lat: newLat, lon: newLon })
+            setIsLocationVerified(true)
             triggerReverseGeocode(newLat, newLon)
           }
         })
 
         setMapReady(true)
+        if (hasInitialCoords) {
+          triggerReverseGeocode(coords.lat, coords.lon)
+        }
       } catch (err) {
-        console.warn('[LocationPicker] Google Maps initialization error, falling back to Leaflet:', err)
+        console.warn('[LocationPicker] Google Maps initialization notice, falling back to Leaflet:', err)
         initLeafletMap()
       }
     }
 
-    // Function to initialize Leaflet (Zero-Key Reliable Fallback)
+    // Function to initialize Leaflet with CARTO Basemaps API key
     const initLeafletMap = () => {
       if (!isMounted || !mapContainerRef.current) return
 
@@ -247,15 +265,22 @@ export function LocationPickerModal({
 
         const map = L.map(mapContainerRef.current, {
           center: [coords.lat, coords.lon],
-          zoom: 16,
+          zoom: initialZoom,
           zoomControl: false,
-          attributionControl: false,
+          attributionControl: true,
         })
 
-        // Clean, fast CartoDB Voyager tiles (streetwear-friendly minimal aesthetic)
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        // Official CARTO Voyager raster URL with API key parameter
+        // If NEXT_PUBLIC_CARTO_BASEMAPS_API_KEY is present, it passes ?key=... to remove watermarks
+        const tileUrl = cartoApiKey
+          ? `https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${encodeURIComponent(cartoApiKey)}`
+          : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+
+        L.tileLayer(tileUrl, {
           maxZoom: 19,
           subdomains: 'abcd',
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>',
         }).addTo(map)
 
         leafletInstanceRef.current = map
@@ -269,10 +294,13 @@ export function LocationPickerModal({
           setIsPanning(false)
           const center = map.getCenter()
           setCoords({ lat: center.lat, lon: center.lng })
+          // Moving the map signifies intentional user pin placement
+          setIsLocationVerified(true)
           triggerReverseGeocode(center.lat, center.lng)
         })
 
         map.on('click', (e: any) => {
+          setIsLocationVerified(true)
           map.panTo(e.latlng, { animate: true })
         })
 
@@ -282,7 +310,11 @@ export function LocationPickerModal({
         }, 300)
 
         setMapReady(true)
-        triggerReverseGeocode(coords.lat, coords.lon)
+
+        // Only reverse-geocode if caller supplied real initial coordinates (e.g. edit mode or pre-detected GPS)
+        if (hasInitialCoords) {
+          triggerReverseGeocode(coords.lat, coords.lon)
+        }
       }
 
       if ((window as any).L) {
@@ -296,7 +328,7 @@ export function LocationPickerModal({
       }
     }
 
-    // Try Google Maps if key configured, otherwise use Leaflet
+    // Try Google Maps if key configured, otherwise use Leaflet with CARTO
     if (googleApiKey && googleApiKey.trim().length > 0) {
       if ((window as any).google?.maps) {
         initGoogleMap()
@@ -312,8 +344,10 @@ export function LocationPickerModal({
       initLeafletMap()
     }
 
-    // Request GPS location upon opening
-    requestCurrentLocation(true)
+    // If caller didn't supply initial verified coordinates, attempt automatic GPS detection
+    if (!hasInitialCoords) {
+      requestCurrentLocation(true)
+    }
 
     return () => {
       isMounted = false
@@ -347,7 +381,7 @@ export function LocationPickerModal({
 
   // Handle confirmation
   const handleConfirmLocation = () => {
-    if (!currentAddress) return
+    if (!isLocationVerified || !currentAddress) return
     onConfirm(currentAddress)
     onClose()
   }
@@ -382,9 +416,30 @@ export function LocationPickerModal({
 
         {/* Permission / Status Banner */}
         {permissionNote && (
-          <div className="px-4 py-2 bg-neutral-100 border-b border-neutral-200 text-neutral-800 text-[11px] font-medium flex items-center gap-2">
-            <AlertCircle size={14} className="shrink-0 text-black" />
-            <span className="flex-1">{permissionNote}</span>
+          <div className="px-4 py-2.5 bg-neutral-100 border-b border-neutral-200 text-neutral-800 text-xs font-medium flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-1">
+              <AlertCircle size={15} className="shrink-0 text-black" />
+              <span className="leading-snug">{permissionNote}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() => requestCurrentLocation(true)}
+                disabled={isLocating}
+                className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 bg-white border border-neutral-300 rounded hover:bg-neutral-50 transition-colors flex items-center gap-1 text-black cursor-pointer"
+              >
+                {isLocating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                <span>Retry GPS</span>
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 bg-black text-white rounded hover:bg-neutral-800 transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                <Edit3 size={12} />
+                <span>Enter Manually</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -402,7 +457,7 @@ export function LocationPickerModal({
             >
               {/* Delivery Pin Badge */}
               <div className="bg-black text-white text-[10px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full shadow-lg whitespace-nowrap mb-1 border border-white/20 select-none">
-                Order will be delivered here
+                {isLocationVerified ? 'Order will be delivered here' : 'Move map to place pin'}
               </div>
 
               {/* Delivery Pin Head */}
@@ -470,7 +525,7 @@ export function LocationPickerModal({
         <div className="p-4 sm:p-5 bg-white border-t border-neutral-200 shrink-0 space-y-3.5">
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full bg-neutral-100 border border-neutral-300 flex items-center justify-center shrink-0 mt-0.5">
-              {isResolvingAddress ? (
+              {isResolvingAddress || isLocating ? (
                 <Loader2 size={16} className="animate-spin text-black" />
               ) : (
                 <MapPin size={16} className="text-black" />
@@ -482,12 +537,17 @@ export function LocationPickerModal({
                 SELECTED DELIVERY LOCATION
               </p>
 
-              {isResolvingAddress && !currentAddress ? (
+              {isLocating ? (
+                <div className="space-y-1 py-1">
+                  <p className="text-xs font-semibold text-black animate-pulse">Detecting your GPS position...</p>
+                  <p className="text-[11px] text-neutral-500">Please allow browser location access</p>
+                </div>
+              ) : isResolvingAddress && !currentAddress ? (
                 <div className="space-y-1 py-1">
                   <div className="h-4 bg-neutral-200 rounded-sm animate-pulse w-3/4" />
                   <div className="h-3 bg-neutral-100 rounded-sm animate-pulse w-1/2" />
                 </div>
-              ) : currentAddress ? (
+              ) : isLocationVerified && currentAddress ? (
                 <div>
                   <h3 className="text-xs sm:text-sm font-black text-black uppercase tracking-tight line-clamp-1">
                     {currentAddress.address_line1 || currentAddress.city || 'Location Pin Dropped'}
@@ -500,22 +560,30 @@ export function LocationPickerModal({
                 </div>
               ) : (
                 <p className="text-xs text-neutral-500 italic">
-                  Move map to detect address details...
+                  Move map pin or click &quot;Recenter&quot; to detect your address...
                 </p>
               )}
             </div>
           </div>
 
-          {/* Action Button: Confirm Delivery Location */}
+          {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
             <button
               type="button"
               onClick={handleConfirmLocation}
-              disabled={isResolvingAddress && !currentAddress}
-              className="flex-1 bg-black text-white hover:bg-neutral-800 h-12 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center gap-2 rounded-xl transition-colors disabled:opacity-50 cursor-pointer shadow-md active:scale-98"
+              disabled={!isLocationVerified || !currentAddress || isResolvingAddress || isLocating}
+              className="flex-1 bg-black text-white hover:bg-neutral-800 h-12 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center gap-2 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-md active:scale-98"
             >
               <Check size={16} />
-              <span>CONFIRM DELIVERY LOCATION</span>
+              <span>
+                {isLocating
+                  ? 'DETECTING LOCATION...'
+                  : isResolvingAddress
+                  ? 'RESOLVING ADDRESS...'
+                  : !isLocationVerified
+                  ? 'SELECT LOCATION ON MAP TO CONFIRM'
+                  : 'CONFIRM DELIVERY LOCATION'}
+              </span>
             </button>
             <button
               type="button"

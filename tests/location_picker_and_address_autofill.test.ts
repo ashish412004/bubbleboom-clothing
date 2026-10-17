@@ -109,4 +109,35 @@ describe('Bubble Boom – Google Maps Style Location Picker & Address Autofill S
     expect(addressContent).toContain('setEditPinCode(loc.pin_code)')
     expect(addressContent).toContain('setPinCode(loc.pin_code)')
   })
+
+  it('7. Integrates official NEXT_PUBLIC_CARTO_BASEMAPS_API_KEY with key param and attribution', () => {
+    expect(modalContent).toContain('NEXT_PUBLIC_CARTO_BASEMAPS_API_KEY')
+    expect(modalContent).toContain('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=')
+    expect(modalContent).toContain('CARTO')
+    expect(modalContent).toContain('OpenStreetMap')
+  })
+
+  it('8. Eliminates arbitrary Mumbai/Hallow Pul fallback selection and locks confirmation until verified', () => {
+    // Default coordinates are neutral India overview rather than Mumbai
+    expect(modalContent).not.toContain('const DEFAULT_LAT = 19.076')
+    expect(modalContent).not.toContain('const DEFAULT_LON = 72.8777')
+    // Confirmation disabled when location is not verified
+    expect(modalContent).toContain('isLocationVerified')
+    expect(modalContent).toContain('disabled={!isLocationVerified || !currentAddress || isResolvingAddress || isLocating}')
+  })
+
+  it('9. Provides actionable recovery options (Retry GPS & Enter Manually) on GPS failure', () => {
+    expect(modalContent).toContain('Retry GPS')
+    expect(modalContent).toContain('Enter Manually')
+    expect(modalContent).toContain('permissionNote')
+  })
+
+  it('10. Uses modern GPS accuracy parameters: enableHighAccuracy, timeout 10000ms, and maximumAge 0', () => {
+    expect(modalContent).toContain('enableHighAccuracy: true')
+    expect(modalContent).toContain('maximumAge: 0')
+    expect(modalContent).toContain('timeout: 10000')
+    expect(checkoutContent).toContain('maximumAge: 0')
+    expect(addressContent).toContain('maximumAge: 0')
+  })
 })
+
