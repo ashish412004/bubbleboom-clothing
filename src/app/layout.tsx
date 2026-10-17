@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ToasterProvider } from "@/components/providers/toaster-provider";
@@ -11,6 +11,15 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#000000",
+};
+
 export const metadata: Metadata = {
   title: {
     default: "BUBBLE BOOM | Wear The Boom",
@@ -22,6 +31,7 @@ export const metadata: Metadata = {
     icon: "/favicon.ico",
   },
 };
+
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

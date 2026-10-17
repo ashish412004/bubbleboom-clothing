@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { SlidersHorizontal, X } from 'lucide-react'
 
 interface Category {
@@ -19,6 +19,17 @@ export function ShopFilters({ categories, isMobile = false }: ShopFiltersProps) 
   const router = useRouter()
   const searchParams = useSearchParams()
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+
+  // Lock body scroll when mobile filter drawer is open
+  useEffect(() => {
+    if (!mobileDrawerOpen) return
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
+    }
+  }, [mobileDrawerOpen])
+
 
   const currentCategory = searchParams.get('category') || ''
   const currentSize = searchParams.get('size') || ''
