@@ -140,6 +140,136 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PUT(req: NextRequest) {
+  try {
+    const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const { id, full_name, phone, address_line1, address_line2, city, state, pin_code, is_default, set_default_only } = body
+
+    if (!id) {
+      return NextResponse.json({ error: 'Address ID is required' }, { status: 400 })
+    }
+
+    // Quick action: Set as Default only
+    if (set_default_only || (is_default && !full_name && !phone)) {
+      if (!isSupabaseConfigured()) {
+        const cookieStore = await cookies()
+        let list = getDevAddresses(cookieStore)
+        list = list.map((a) => ({ ...a, is_default: a.id === id }))
+        const updated = list.find((a) => a.id === id)
+        const res = NextResponse.json({ success: true, address: updated })
+        res.cookies.set('bb_dev_addresses', JSON.stringify(list), {
+          path: '/',
+          httpOnly: true,
+          maxAge: 60 * 60 * 24 * 30,
+        })
+        return res
+      }
+
+      const supabase = await createServerClient()
+      // 1. Clear default from all user's addresses
+      await supabase
+        .from('addresses')
+        .update({ is_default: false })
+        .eq('user_id', user.id)
+
+      // 2. Set default on the selected address
+      const { data, error } = await supabase
+        .from('addresses')
+        .update({ is_default: true })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+
+      if (error) throw error
+      return NextResponse.json({ success: true, address: data })
+    }
+
+    // Full Address Edit
+    if (!full_name || !phone || !address_line1 || !city || !state || !pin_code) {
+      return NextResponse.json({ error: 'Please fill in all required address fields.' }, { status: 400 })
+    }
+
+    if (!validateIndianPhone(phone)) {
+      return NextResponse.json({ error: 'Please enter a valid 10-digit Indian phone number.' }, { status: 400 })
+    }
+
+    if (!validateIndianPinCode(pin_code)) {
+      return NextResponse.json({ error: 'Please enter a valid 6-digit Indian PIN code.' }, { status: 400 })
+    }
+
+    if (!isSupabaseConfigured()) {
+      const cookieStore = await cookies()
+      let list = getDevAddresses(cookieStore)
+      if (is_default) {
+        list = list.map((a) => ({ ...a, is_default: false }))
+      }
+      list = list.map((a) => {
+        if (a.id === id) {
+          return {
+            ...a,
+            full_name,
+            phone,
+            address_line1,
+            address_line2: address_line2 || null,
+            city,
+            state,
+            pin_code,
+            is_default: Boolean(is_default),
+            updated_at: new Date().toISOString(),
+          }
+        }
+        return a
+      })
+      const updated = list.find((a) => a.id === id)
+      const res = NextResponse.json({ success: true, address: updated })
+      res.cookies.set('bb_dev_addresses', JSON.stringify(list), {
+        path: '/',
+        httpOnly: true,
+        maxAge: 60 * 60 * 24 * 30,
+      })
+      return res
+    }
+
+    const supabase = await createServerClient()
+    if (is_default) {
+      await supabase
+        .from('addresses')
+        .update({ is_default: false })
+        .eq('user_id', user.id)
+    }
+
+    const { data, error } = await supabase
+      .from('addresses')
+      .update({
+        full_name,
+        phone,
+        address_line1,
+        address_line2: address_line2 || null,
+        city,
+        state,
+        pin_code,
+        is_default: Boolean(is_default),
+      })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return NextResponse.json({ success: true, address: data })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+export const PATCH = PUT
+
 export async function DELETE(req: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -157,7 +287,15 @@ export async function DELETE(req: NextRequest) {
     if (!isSupabaseConfigured()) {
       const cookieStore = await cookies()
       let list = getDevAddresses(cookieStore)
+      const target = list.find((a) => a.id === id)
+      const wasDefault = target?.is_default
       list = list.filter((a) => a.id !== id)
+
+      // If deleted address was default, promote first remaining address to default
+      if (wasDefault && list.length > 0) {
+        list[0].is_default = true
+      }
+
       const res = NextResponse.json({ success: true, message: 'Address removed' })
       res.cookies.set('bb_dev_addresses', JSON.stringify(list), {
         path: '/',
@@ -168,6 +306,17 @@ export async function DELETE(req: NextRequest) {
     }
 
     const supabase = await createServerClient()
+
+    // Check if the address being deleted is default
+    const { data: targetAddr } = await supabase
+      .from('addresses')
+      .select('is_default')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+
+    const wasDefault = targetAddr?.is_default
+
     const { error } = await supabase
       .from('addresses')
       .delete()
@@ -175,6 +324,24 @@ export async function DELETE(req: NextRequest) {
       .eq('user_id', user.id)
 
     if (error) throw error
+
+    // If was default and remaining addresses exist, promote newest remaining address to default
+    if (wasDefault) {
+      const { data: remaining } = await supabase
+        .from('addresses')
+        .select('id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (remaining && remaining.length > 0) {
+        await supabase
+          .from('addresses')
+          .update({ is_default: true })
+          .eq('id', remaining[0].id)
+          .eq('user_id', user.id)
+      }
+    }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

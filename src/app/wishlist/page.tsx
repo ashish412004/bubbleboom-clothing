@@ -6,6 +6,8 @@ import { cookies } from 'next/headers'
 import { WishlistView } from './wishlist-view'
 import Link from 'next/link'
 
+import { redirect } from 'next/navigation'
+
 export const dynamic = 'force-dynamic'
 
 export const metadata = {
@@ -14,12 +16,16 @@ export const metadata = {
 }
 
 export default async function WishlistPage() {
+  const user = await getCurrentUser()
+  if (user) {
+    redirect('/account/saved-drops')
+  }
+
   const cookieStore = await cookies()
   const sessionId =
     cookieStore.get('bb_session_id')?.value ||
     cookieStore.get('bubbleboom_guest_session')?.value
   
-  const user = await getCurrentUser()
   const items = await getWishlist(user?.id, sessionId)
 
   return (

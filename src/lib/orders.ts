@@ -930,7 +930,7 @@ export async function getOrderById(orderId: string) {
   }
 }
 
-export async function getOrdersByUserId(userId: string): Promise<Order[]> {
+export async function getOrdersByUserId(userId: string, limit?: number): Promise<Order[]> {
   if (!isSupabaseConfigured()) {
     const orders = getDevOrders()
     const userOrders = orders.filter((o) => o.user_id === userId)
@@ -939,8 +939,9 @@ export async function getOrdersByUserId(userId: string): Promise<Order[]> {
     const validOrders = candidates.filter(
       (o) => o.payment_status === 'paid' || o.payment_method === 'cod'
     )
+    const sliced = typeof limit === 'number' && limit > 0 ? validOrders.slice(0, limit) : validOrders
     return Promise.all(
-      validOrders.map(async (o) => ({
+      sliced.map(async (o) => ({
         ...o,
         order_items: await hydrateOrderItemsWithImages(o.order_items || []),
       }))
@@ -949,12 +950,18 @@ export async function getOrdersByUserId(userId: string): Promise<Order[]> {
 
   const supabase = await createServerClient()
   // Only fetch orders that are either paid or COD
-  const { data, error } = await supabase
+  let query = supabase
     .from('orders')
     .select('*')
     .eq('user_id', userId)
     .or('payment_status.eq.paid,payment_method.eq.cod')
     .order('created_at', { ascending: false })
+
+  if (typeof limit === 'number' && limit > 0) {
+    query = query.limit(limit)
+  }
+
+  const { data, error } = await query
 
   if (error || !data) {
     if (error) console.warn('[getOrdersByUserId] Supabase error:', error)
