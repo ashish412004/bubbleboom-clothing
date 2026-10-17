@@ -213,7 +213,7 @@ export function HeroCarousel({
   return (
     <section
       suppressHydrationWarning
-      className="relative min-h-[75vh] sm:min-h-[85vh] h-[80vh] sm:h-[88vh] md:min-h-[75vh] md:h-[78vh] lg:h-[80vh] max-h-[960px] md:max-h-[820px] bg-black text-white flex flex-col md:flex-row md:items-center md:justify-center overflow-hidden"
+      className="relative h-[calc(100svh-155px)] min-h-[480px] max-h-[720px] md:min-h-[75vh] md:h-[78vh] lg:h-[80vh] md:max-h-[820px] bg-black text-white flex flex-col md:flex-row md:items-center md:justify-center overflow-hidden"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onTouchStart={handleTouchStart}
@@ -300,7 +300,7 @@ export function HeroCarousel({
       </div>
 
       {/* 3A. Mobile 3-Zone Layout (< 768px): Top Text, Middle Fashion Models, Bottom CTAs & Minimal Controls */}
-      <div className="md:hidden relative z-10 w-full h-full flex-1 flex flex-col justify-between items-center px-5 sm:px-8 pt-[clamp(48px,7vh,68px)] pb-4 text-center">
+      <div className="md:hidden relative z-10 w-full h-full flex-1 flex flex-col justify-between items-center px-5 sm:px-8 pt-[clamp(40px,5.5vh,60px)] pb-3 min-[380px]:pb-4 text-center">
         {/* TOP ZONE – HEADING AND SUBTITLE */}
         <div className="flex flex-col items-center">
           <h1 className="text-3xl min-[380px]:text-4xl min-[440px]:text-5xl font-extrabold tracking-tighter uppercase leading-[0.92] text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)]">
@@ -312,12 +312,12 @@ export function HeroCarousel({
         </div>
 
         {/* MIDDLE ZONE – UNOBSTRUCTED FASHION IMAGE AREA (Streetwear Models & Blue Lighting) */}
-        <div className="flex-1 w-full min-h-[160px] pointer-events-none" aria-hidden="true" />
+        <div className="flex-1 w-full min-h-[80px] pointer-events-none" aria-hidden="true" />
 
         {/* BOTTOM ZONE – STACKED CTAS & COMPACT SLIDER INDICATORS */}
         <div className="w-full flex flex-col items-center">
           {/* CTA Buttons: Vertically stacked, centered, identical 240px width (max-w-[78vw]), 10px gap, 44px height */}
-          <div className="flex flex-col gap-2.5 w-[240px] max-w-[78vw] mx-auto mb-5 min-[380px]:mb-6">
+          <div className="flex flex-col gap-2.5 w-[240px] max-w-[78vw] mx-auto mb-4 min-[380px]:mb-5">
             <Link
               href={primaryCtaLink || '/shop'}
               className="w-full h-11 bg-white text-black hover:bg-neutral-200 px-4 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all active:scale-98 shadow-2xl"
