@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
         is_published: Boolean(product.is_published),
         is_active: true,
         tags: product.tags || [],
+        department: product.department || 'unisex',
         variants: newVariants,
         images: newImages,
         created_at: new Date().toISOString(),
@@ -68,24 +69,34 @@ export async function POST(req: NextRequest) {
     const supabase = await createServiceClient()
 
     // 1. Insert product
-    const { data: createdProduct, error: prodErr } = await supabase
+    const insertPayload: any = {
+      name: product.name,
+      slug: product.slug,
+      description: product.description || '',
+      category_id: product.category_id || null,
+      material: product.material || null,
+      fit: product.fit || null,
+      wash_care: product.wash_care || null,
+      mrp: product.mrp || product.selling_price,
+      selling_price: product.selling_price,
+      is_published: Boolean(product.is_published),
+      is_active: true,
+      tags: product.tags || [],
+      department: product.department || 'unisex',
+    }
+
+    let { data: createdProduct, error: prodErr } = await supabase
       .from('products')
-      .insert({
-        name: product.name,
-        slug: product.slug,
-        description: product.description || '',
-        category_id: product.category_id || null,
-        material: product.material || null,
-        fit: product.fit || null,
-        wash_care: product.wash_care || null,
-        mrp: product.mrp || product.selling_price,
-        selling_price: product.selling_price,
-        is_published: Boolean(product.is_published),
-        is_active: true,
-        tags: product.tags || [],
-      })
+      .insert(insertPayload)
       .select()
       .single()
+
+    if (prodErr && prodErr.message?.includes('department')) {
+      delete insertPayload.department
+      const retry = await supabase.from('products').insert(insertPayload).select().single()
+      createdProduct = retry.data
+      prodErr = retry.error
+    }
 
     if (prodErr || !createdProduct) {
       throw new Error(prodErr?.message || 'Failed to create product record')
@@ -219,24 +230,40 @@ export async function PUT(req: NextRequest) {
     const supabase = await createServiceClient()
 
     // 1. Update core product fields
-    const { data: updatedProduct, error: prodErr } = await supabase
+    const updatePayload: any = {
+      name: product.name,
+      slug: product.slug,
+      description: product.description || '',
+      category_id: product.category_id || null,
+      material: product.material || null,
+      fit: product.fit || null,
+      wash_care: product.wash_care || null,
+      mrp: Number(product.mrp) || Number(product.selling_price),
+      selling_price: Number(product.selling_price),
+      is_published: Boolean(product.is_published),
+      tags: product.tags || [],
+      department: product.department || 'unisex',
+      updated_at: new Date().toISOString(),
+    }
+
+    let { data: updatedProduct, error: prodErr } = await supabase
       .from('products')
-      .update({
-        name: product.name,
-        slug: product.slug,
-        description: product.description || '',
-        category_id: product.category_id || null,
-        material: product.material || null,
-        fit: product.fit || null,
-        wash_care: product.wash_care || null,
-        mrp: Number(product.mrp) || Number(product.selling_price),
-        selling_price: Number(product.selling_price),
-        is_published: Boolean(product.is_published),
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', product.id)
       .select()
       .single()
+
+    if (prodErr && prodErr.message?.includes('department')) {
+      delete updatePayload.department
+      const retry = await supabase
+        .from('products')
+        .update(updatePayload)
+        .eq('id', product.id)
+        .select()
+        .single()
+      updatedProduct = retry.data
+      prodErr = retry.error
+    }
 
     if (prodErr) throw prodErr
 

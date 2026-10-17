@@ -20,6 +20,7 @@ import {
   Bell,
   Menu,
   X,
+  Compass,
 } from 'lucide-react'
 
 const ADMIN_LINKS = [
@@ -34,6 +35,7 @@ const ADMIN_LINKS = [
   { href: '/admin/returns', label: 'Returns Inspection', icon: RotateCcw },
   { href: '/admin/banners', label: 'Announcement Bars', icon: Megaphone },
   { href: '/admin/settings', label: 'Store Settings', icon: Settings },
+  { href: '/admin/settings/navigation', label: 'Navigation & Menus', icon: Compass },
   { href: '/admin/audit-logs', label: 'Audit Trail', icon: History },
 ]
 

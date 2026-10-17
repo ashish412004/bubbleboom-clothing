@@ -2,23 +2,29 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { Search, User, Heart, ShoppingBag, Menu, X } from 'lucide-react'
+import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useCartStore } from '@/lib/cart-store'
 import { useAuthStore } from '@/lib/auth-store'
 import { useSearchStore } from '@/lib/search-store'
+import { NavigationItem, DEFAULT_NAVIGATION_ITEMS } from '@/types/navigation'
 
 interface HeaderProps {
   announcementText?: string
   announcementLink?: string
+  initialNavItems?: NavigationItem[]
 }
 
 export function Header({
   announcementText = 'FREE SHIPPING ON ALL ORDERS ABOVE ₹1,499 | WEAR THE BOOM',
   announcementLink = '/shop',
+  initialNavItems,
 }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [navItems, setNavItems] = useState<NavigationItem[]>(initialNavItems || DEFAULT_NAVIGATION_ITEMS)
+  const [mobileExpandedDropdown, setMobileExpandedDropdown] = useState<string | null>(null)
+  const [desktopActiveDropdown, setDesktopActiveDropdown] = useState<string | null>(null)
   const itemCount = useCartStore((state) => state.itemCount)
   const wishlistCount = useCartStore((state) => state.wishlistCount)
   const openCartDrawer = useCartStore((state) => state.openCartDrawer)
@@ -27,6 +33,19 @@ export function Header({
   const refreshUser = useAuthStore((state) => state.refreshUser)
   const refreshWishlist = useCartStore((state) => state.refreshWishlist)
   const refreshCart = useCartStore((state) => state.refreshCart)
+
+  useEffect(() => {
+    async function syncNav() {
+      try {
+        const res = await fetch('/api/navigation')
+        const data = await res.json()
+        if (data.success && Array.isArray(data.items)) {
+          setNavItems(data.items)
+        }
+      } catch {}
+    }
+    syncNav()
+  }, [])
 
   useEffect(() => {
     setMounted(true)
@@ -184,50 +203,58 @@ export function Header({
             </Link>
           </div>
 
-          {/* Desktop Navigation */}
+          {/* Desktop Navigation: Shop All, New Arrivals, Men, Women, Footwear, Collections, Sale */}
           <nav className="hidden lg:flex items-center space-x-7" aria-label="Main Navigation">
-            <Link
-              href="/shop"
-              className="text-xs uppercase tracking-widest font-semibold text-black hover:text-neutral-500 transition-colors py-2 border-b-2 border-transparent hover:border-black"
-            >
-              Shop All
-            </Link>
-            <Link
-              href="/shop?sort=newest"
-              className="text-xs uppercase tracking-widest font-semibold text-black hover:text-neutral-500 transition-colors py-2 border-b-2 border-transparent hover:border-black"
-            >
-              New Arrivals
-            </Link>
-            <Link
-              href="/shop?category=men"
-              className="text-xs uppercase tracking-widest font-semibold text-black hover:text-neutral-500 transition-colors py-2 border-b-2 border-transparent hover:border-black"
-            >
-              Men
-            </Link>
-            <Link
-              href="/shop?category=women"
-              className="text-xs uppercase tracking-widest font-semibold text-black hover:text-neutral-500 transition-colors py-2 border-b-2 border-transparent hover:border-black"
-            >
-              Women
-            </Link>
-            <Link
-              href="/shop?category=footwear"
-              className="text-xs uppercase tracking-widest font-semibold text-black hover:text-neutral-500 transition-colors py-2 border-b-2 border-transparent hover:border-black"
-            >
-              Footwear
-            </Link>
-            <Link
-              href="/collections"
-              className="text-xs uppercase tracking-widest font-semibold text-black hover:text-neutral-500 transition-colors py-2 border-b-2 border-transparent hover:border-black"
-            >
-              Collections
-            </Link>
-            <Link
-              href="/shop?sale=true"
-              className="text-xs uppercase tracking-widest font-bold text-black hover:text-neutral-500 transition-colors py-2 border-b-2 border-transparent hover:border-black"
-            >
-              Sale
-            </Link>
+            {navItems
+              .filter((item) => item.is_visible && item.show_on_desktop !== false)
+              .map((item) => {
+                const hasDropdown = item.dropdown_items && item.dropdown_items.length > 0
+
+                return (
+                  <div
+                    key={item.id}
+                    className="relative group py-2"
+                    onMouseEnter={() => hasDropdown && setDesktopActiveDropdown(item.id)}
+                    onMouseLeave={() => hasDropdown && setDesktopActiveDropdown(null)}
+                  >
+                    <Link
+                      href={item.url}
+                      target={item.target || '_self'}
+                      className={`text-xs uppercase tracking-widest font-semibold text-black hover:text-neutral-500 transition-colors py-2 border-b-2 border-transparent hover:border-black inline-flex items-center gap-1.5 ${
+                        item.type === 'sale' ? 'font-bold' : ''
+                      }`}
+                    >
+                      <span>{item.name}</span>
+                      {item.badge && (
+                        <span className="bg-black text-white text-[8px] font-mono px-1 py-0.2 tracking-wider font-bold rounded-2xs">
+                          {item.badge}
+                        </span>
+                      )}
+                      {hasDropdown && (
+                        <ChevronDown className="w-3 h-3 text-neutral-400 group-hover:text-black group-hover:rotate-180 transition-transform duration-150" />
+                      )}
+                    </Link>
+
+                    {/* Desktop Dropdown Popover */}
+                    {hasDropdown && (
+                      <div className="absolute top-full left-0 min-w-[200px] bg-white border border-black shadow-xl py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50">
+                        {item.dropdown_items!
+                          .filter((sub) => sub.is_visible && sub.show_on_desktop !== false)
+                          .map((sub) => (
+                            <Link
+                              key={sub.id}
+                              href={sub.url}
+                              target={sub.target || '_self'}
+                              className="block px-4 py-2 text-xs uppercase tracking-wider font-semibold text-neutral-800 hover:text-black hover:bg-neutral-100 transition-colors"
+                            >
+                              {sub.label}
+                            </Link>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
           </nav>
 
           {/* Right Action Icons */}
@@ -326,63 +353,72 @@ export function Header({
               </div>
 
               {/* Navigation Links */}
-              <nav className="py-6 space-y-4">
-                <Link
-                  href="/shop"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block text-sm uppercase tracking-widest font-bold text-black hover:text-neutral-500 py-1"
-                >
-                  Shop All
-                </Link>
-                <Link
-                  href="/shop?sort=newest"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block text-sm uppercase tracking-widest font-bold text-black hover:text-neutral-500 py-1"
-                >
-                  New Arrivals
-                </Link>
-                <Link
-                  href="/shop?category=men"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block text-sm uppercase tracking-widest font-bold text-black hover:text-neutral-500 py-1"
-                >
-                  Men
-                </Link>
-                <Link
-                  href="/shop?category=women"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block text-sm uppercase tracking-widest font-bold text-black hover:text-neutral-500 py-1"
-                >
-                  Women
-                </Link>
-                <Link
-                  href="/shop?category=footwear"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block text-sm uppercase tracking-widest font-bold text-black hover:text-neutral-500 py-1"
-                >
-                  Footwear
-                </Link>
-                <Link
-                  href="/collections"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block text-sm uppercase tracking-widest font-bold text-black hover:text-neutral-500 py-1"
-                >
-                  Collections
-                </Link>
-                <Link
-                  href="/categories"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block text-sm uppercase tracking-widest font-bold text-black hover:text-neutral-500 py-1"
-                >
-                  Categories
-                </Link>
-                <Link
-                  href="/shop?sale=true"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block text-sm uppercase tracking-widest font-extrabold text-black hover:text-neutral-500 py-1"
-                >
-                  Sale
-                </Link>
+              <nav className="py-6 space-y-2 overflow-y-auto max-h-[calc(100vh-220px)]">
+                {navItems
+                  .filter((item) => item.is_visible && item.show_on_mobile !== false)
+                  .map((item) => {
+                    const hasDropdown = item.dropdown_items && item.dropdown_items.length > 0
+                    const isExpanded = mobileExpandedDropdown === item.id
+
+                    return (
+                      <div key={item.id} className="border-b border-neutral-100 pb-1.5">
+                        <div className="flex items-center justify-between">
+                          <Link
+                            href={item.url}
+                            target={item.target || '_self'}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={`block text-sm uppercase tracking-widest font-bold text-black hover:text-neutral-500 py-1 ${
+                              item.type === 'sale' ? 'font-extrabold' : ''
+                            }`}
+                          >
+                            <span>{item.name}</span>
+                            {item.badge && (
+                              <span className="ml-2 bg-black text-white text-[9px] font-mono px-1.5 py-0.5 rounded-xs tracking-wider">
+                                {item.badge}
+                              </span>
+                            )}
+                          </Link>
+
+                          {hasDropdown && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setMobileExpandedDropdown(isExpanded ? null : item.id)
+                              }
+                              className="p-1.5 text-neutral-500 hover:text-black cursor-pointer"
+                              aria-label={`Toggle ${item.name} submenu`}
+                              aria-expanded={isExpanded}
+                            >
+                              <ChevronDown
+                                className={`w-4 h-4 transition-transform duration-200 ${
+                                  isExpanded ? 'rotate-180' : ''
+                                }`}
+                              />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Mobile Accordion Submenu */}
+                        {hasDropdown && isExpanded && (
+                          <div className="pl-3.5 py-1.5 space-y-2 mt-1 border-l-2 border-black animate-in slide-in-from-top-1 duration-150">
+                            {item.dropdown_items!
+                              .filter((sub) => sub.is_visible && sub.show_on_mobile !== false)
+                              .map((sub) => (
+                                <Link
+                                  key={sub.id}
+                                  href={sub.url}
+                                  target={sub.target || '_self'}
+                                  onClick={() => setMobileMenuOpen(false)}
+                                  className="block text-xs uppercase tracking-wider font-semibold text-neutral-600 hover:text-black py-1"
+                                >
+                                  {sub.label}
+                                </Link>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
               </nav>
             </div>
 

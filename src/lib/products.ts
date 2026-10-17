@@ -101,6 +101,7 @@ export type ProductImage = Database['public']['Tables']['product_images']['Row']
 
 export interface ProductFilterOptions {
   category?: string
+  department?: string
   collection?: string
   search?: string
   size?: string
@@ -129,14 +130,43 @@ function filterMockProducts(filters?: ProductFilterOptions) {
       variants: (p as any).variants || [],
     }))
 
+  if (filters?.department) {
+    const dept = filters.department.toLowerCase()
+    result = result.filter((p) => {
+      const pDept = (p.department || '').toLowerCase()
+      const pTags = Array.isArray(p.tags) ? p.tags.map((t: string) => t.toLowerCase()) : []
+      if (dept === 'men') {
+        return pDept === 'men' || pDept === 'unisex' || pTags.includes('men') || pTags.includes('unisex')
+      }
+      if (dept === 'women') {
+        return pDept === 'women' || pDept === 'unisex' || pTags.includes('women') || pTags.includes('unisex')
+      }
+      return pDept === dept || pTags.includes(dept)
+    })
+  }
+
   if (filters?.category) {
     const cat = filters.category.toLowerCase()
-    result = result.filter(
-      (p) =>
-        p.category_id === filters.category ||
-        p.category?.slug === cat ||
-        p.tags?.some((t: string) => t.toLowerCase() === cat)
-    )
+    if (cat === 'men') {
+      result = result.filter((p) => {
+        const pDept = (p.department || '').toLowerCase()
+        const pTags = Array.isArray(p.tags) ? p.tags.map((t: string) => t.toLowerCase()) : []
+        return pDept === 'men' || pDept === 'unisex' || pTags.includes('men') || pTags.includes('unisex')
+      })
+    } else if (cat === 'women') {
+      result = result.filter((p) => {
+        const pDept = (p.department || '').toLowerCase()
+        const pTags = Array.isArray(p.tags) ? p.tags.map((t: string) => t.toLowerCase()) : []
+        return pDept === 'women' || pDept === 'unisex' || pTags.includes('women') || pTags.includes('unisex')
+      })
+    } else {
+      result = result.filter(
+        (p) =>
+          p.category_id === filters.category ||
+          p.category?.slug === cat ||
+          p.tags?.some((t: string) => t.toLowerCase() === cat)
+      )
+    }
   }
 
   if (filters?.collection) {
@@ -245,6 +275,18 @@ export async function getProducts(filters?: ProductFilterOptions) {
       .eq('is_published', true)
       .eq('is_active', true)
 
+    // 0. Department filter (explicit department or unisex)
+    if (filters?.department) {
+      const deptTarget = filters.department.toLowerCase().trim()
+      if (deptTarget === 'men') {
+        query = query.or('tags.cs.{men},tags.cs.{unisex}')
+      } else if (deptTarget === 'women') {
+        query = query.or('tags.cs.{women},tags.cs.{unisex}')
+      } else {
+        query = query.contains('tags', [deptTarget])
+      }
+    }
+
     // 1. Category filter (handles both slug and UUID, case-insensitive, with in-memory lookup cache)
     if (filters?.category) {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -259,7 +301,13 @@ export async function getProducts(filters?: ProductFilterOptions) {
           if (cachedLookup.id) {
             query = query.eq('category_id', cachedLookup.id)
           } else if (cachedLookup.isTagFallback) {
-            query = query.contains('tags', [catTarget])
+            if (catTarget === 'men') {
+              query = query.or('tags.cs.{men},tags.cs.{unisex}')
+            } else if (catTarget === 'women') {
+              query = query.or('tags.cs.{women},tags.cs.{unisex}')
+            } else {
+              query = query.contains('tags', [catTarget])
+            }
           }
         } else {
           // Find category by slug (case-insensitive) or name
@@ -283,9 +331,15 @@ export async function getProducts(filters?: ProductFilterOptions) {
               categoryLookupCache.set(catTarget, { id: catByName.id, timestamp: Date.now() })
               query = query.eq('category_id', catByName.id)
             } else {
-              // Tag based fallback (e.g. 'men', 'women')
+              // Tag based fallback (e.g. 'men', 'women' with unisex inclusion)
               categoryLookupCache.set(catTarget, { id: null, isTagFallback: true, timestamp: Date.now() })
-              query = query.contains('tags', [catTarget])
+              if (catTarget === 'men') {
+                query = query.or('tags.cs.{men},tags.cs.{unisex}')
+              } else if (catTarget === 'women') {
+                query = query.or('tags.cs.{women},tags.cs.{unisex}')
+              } else {
+                query = query.contains('tags', [catTarget])
+              }
             }
           }
         }

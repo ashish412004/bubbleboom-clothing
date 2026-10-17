@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Save, AlertTriangle, CheckCircle2, Truck, RotateCcw, ShieldCheck, MessageCircle, ExternalLink } from 'lucide-react'
+import { Save, AlertTriangle, CheckCircle2, Truck, RotateCcw, ShieldCheck, MessageCircle, ExternalLink, Compass, Sliders } from 'lucide-react'
 import { InstagramIcon as Instagram } from '@/components/icons/instagram-icon'
+import { NavigationManager } from '@/components/admin/navigation-manager'
+import { NavigationItem } from '@/types/navigation'
 
 interface SettingsClientProps {
   initialShipping: any
@@ -11,6 +13,9 @@ interface SettingsClientProps {
   initialGeneral: any
   initialExchange?: any
   initialSocial?: any
+  initialNavigation?: NavigationItem[]
+  categories?: Array<{ id: string; name: string; slug: string }>
+  collections?: Array<{ id: string; name: string; slug: string }>
 }
 
 export function SettingsClient({
@@ -19,7 +24,11 @@ export function SettingsClient({
   initialGeneral,
   initialExchange,
   initialSocial,
+  initialNavigation,
+  categories,
+  collections,
 }: SettingsClientProps) {
+  const [activeTab, setActiveTab] = useState<'boundaries' | 'navigation'>('boundaries')
   const [loading, setLoading] = useState(false)
 
   // 1. Shipping & Logistics Financials
@@ -236,9 +245,46 @@ export function SettingsClient({
   }
 
   return (
-    <form onSubmit={handleSaveSettings} className="space-y-8 max-w-4xl">
-      {/* 1. SHIPPING & LOGISTICS FINANCIALS */}
-      <div className="border border-black bg-white p-4 sm:p-6 space-y-4">
+    <div className="space-y-6">
+      {/* Top Navigation Tabs */}
+      <div className="flex border-b border-black gap-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('boundaries')}
+          className={`px-5 py-3 text-xs uppercase font-mono font-bold tracking-wider transition-colors cursor-pointer border-b-2 -mb-[1px] flex items-center gap-2 ${
+            activeTab === 'boundaries'
+              ? 'border-black text-black bg-white shadow-xs'
+              : 'border-transparent text-neutral-500 hover:text-black bg-neutral-100/60'
+          }`}
+        >
+          <Sliders className="w-4 h-4" />
+          <span>Logistics &amp; Store Boundaries</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('navigation')}
+          className={`px-5 py-3 text-xs uppercase font-mono font-bold tracking-wider transition-colors cursor-pointer border-b-2 -mb-[1px] flex items-center gap-2 ${
+            activeTab === 'navigation'
+              ? 'border-black text-black bg-white shadow-xs'
+              : 'border-transparent text-neutral-500 hover:text-black bg-neutral-100/60'
+          }`}
+        >
+          <Compass className="w-4 h-4" />
+          <span>Navigation &amp; Menus</span>
+        </button>
+      </div>
+
+      {activeTab === 'navigation' ? (
+        <NavigationManager
+          initialItems={initialNavigation}
+          categories={categories}
+          collections={collections}
+        />
+      ) : (
+        <form onSubmit={handleSaveSettings} className="space-y-8 max-w-4xl">
+          {/* 1. SHIPPING & LOGISTICS FINANCIALS */}
+          <div className="border border-black bg-white p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-2 pb-2 border-b border-neutral-200">
           <Truck className="w-4 h-4 text-black" />
           <h2 className="text-sm font-black uppercase tracking-tight">
@@ -823,5 +869,7 @@ export function SettingsClient({
         </button>
       </div>
     </form>
+      )}
+    </div>
   )
 }

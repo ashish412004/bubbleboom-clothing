@@ -20,6 +20,7 @@ interface ShopPageProps {
     inStock?: string
     sale?: string
     sort?: string
+    department?: string
   }>
 }
 
@@ -48,6 +49,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   const [products, categories] = await Promise.all([
     getProducts({
       category: params.category,
+      department: params.department,
       collection: params.collection,
       search: params.search,
       size: params.size,
@@ -65,7 +67,10 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   const currentCategory = categories.find(
     (c) => c.slug.toLowerCase() === params.category?.toLowerCase() || c.id === params.category
   )
-  const categoryDisplayName = currentCategory?.name || (params.category ? params.category.replace(/-/g, ' ') : null)
+  const categoryDisplayName =
+    currentCategory?.name ||
+    (params.department ? `${params.department.charAt(0).toUpperCase() + params.department.slice(1)}` : null) ||
+    (params.category ? params.category.replace(/-/g, ' ') : null)
 
   const hasAttributeFilters = Boolean(
     params.size ||

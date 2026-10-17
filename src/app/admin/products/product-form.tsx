@@ -46,6 +46,16 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
   const [mrp, setMrp] = useState<number | ''>(initialProduct?.mrp ?? '')
   const [sellingPrice, setSellingPrice] = useState<number | ''>(initialProduct?.selling_price ?? '')
   const [isPublished, setIsPublished] = useState(initialProduct?.is_published ?? true)
+  const [department, setDepartment] = useState<'men' | 'women' | 'unisex'>(() => {
+    if (initialProduct?.department) {
+      const d = initialProduct.department.toLowerCase().trim()
+      if (d === 'men' || d === 'women' || d === 'unisex') return d
+    }
+    const tags = Array.isArray(initialProduct?.tags) ? initialProduct.tags.map((t: string) => t.toLowerCase()) : []
+    if (tags.includes('men') && !tags.includes('women')) return 'men'
+    if (tags.includes('women') && !tags.includes('men')) return 'women'
+    return 'unisex'
+  })
 
   // Variants matrix
   const [variants, setVariants] = useState<
@@ -419,6 +429,13 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
             mrp: Number(mrp) || Number(sellingPrice),
             selling_price: Number(sellingPrice),
             is_published: isPublished,
+            department,
+            tags: (() => {
+              const existingTags: string[] = Array.isArray(initialProduct?.tags)
+                ? initialProduct.tags.filter((t: string) => !['men', 'women', 'unisex'].includes(t.toLowerCase()))
+                : []
+              return [...existingTags, department]
+            })(),
           },
           variants,
           images: validImages.map((img, idx) => {
@@ -518,7 +535,7 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
               Category *
@@ -536,6 +553,22 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
 
           <div>
             <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
+              Department / Audience *
+            </label>
+            <select
+              value={department}
+              onChange={(e) => setDepartment(e.target.value as 'men' | 'women' | 'unisex')}
+              className="w-full border border-black p-2.5 text-xs bg-white font-bold focus:outline-none"
+            >
+              <option value="unisex">Unisex (Men &amp; Women)</option>
+              <option value="men">Men</option>
+              <option value="women">Women</option>
+            </select>
+            <p className="text-[10px] text-neutral-500 font-mono mt-0.5">Controls Men &amp; Women storefront catalog routing</p>
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
               Capsule Drop / Collection
             </label>
             <select
@@ -549,7 +582,9 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
               ))}
             </select>
           </div>
+        </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
               MRP (₹)

@@ -6,34 +6,36 @@ import {
   StoreExchangeSettings,
   StoreSocialSettings,
 } from '@/lib/settings'
+import { getNavigationItems } from '@/lib/navigation'
+import { getCategories } from '@/lib/categories'
+import { getCollections } from '@/lib/collections'
 import { SettingsClient } from './settings-client'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminSettingsPage() {
-  const [shipping, orders, general, exchange, social] = await Promise.all([
+  const [shipping, orders, general, exchange, social, navigation, categories, collections] = await Promise.all([
     getStoreSettings<StoreShippingSettings>('shipping'),
     getStoreSettings<StoreOrderSettings>('orders'),
     getStoreSettings<StoreGeneralSettings>('general'),
     getStoreSettings<StoreExchangeSettings>('exchange'),
     getStoreSettings<StoreSocialSettings>('social'),
+    getNavigationItems({ forAdmin: true }),
+    getCategories(),
+    getCollections(),
   ])
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-black uppercase tracking-tight">Store Settings &amp; Financial Boundaries</h1>
-        <p className="text-xs text-neutral-600 font-mono mt-1">
-          Configure authoritative shipping rates, delivery processing schedules, social media links, and WhatsApp customer support.
-        </p>
-      </div>
-
       <SettingsClient
         initialShipping={shipping}
         initialOrders={orders}
         initialGeneral={general}
         initialExchange={exchange}
         initialSocial={social}
+        initialNavigation={navigation}
+        categories={categories}
+        collections={collections}
       />
     </div>
   )

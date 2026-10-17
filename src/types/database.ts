@@ -231,6 +231,60 @@ export interface Database {
         }
         Relationships: []
       }
+      navigation_items: {
+        Row: {
+          id: string
+          name: string
+          type: string
+          url: string
+          is_visible: boolean
+          show_on_desktop: boolean
+          show_on_mobile: boolean
+          auto_hide_empty: boolean
+          sort_order: number
+          is_default: boolean
+          badge: string | null
+          target: string | null
+          dropdown_items: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          name: string
+          type?: string
+          url: string
+          is_visible?: boolean
+          show_on_desktop?: boolean
+          show_on_mobile?: boolean
+          auto_hide_empty?: boolean
+          sort_order?: number
+          is_default?: boolean
+          badge?: string | null
+          target?: string | null
+          dropdown_items?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          type?: string
+          url?: string
+          is_visible?: boolean
+          show_on_desktop?: boolean
+          show_on_mobile?: boolean
+          auto_hide_empty?: boolean
+          sort_order?: number
+          is_default?: boolean
+          badge?: string | null
+          target?: string | null
+          dropdown_items?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           id: string
@@ -248,6 +302,7 @@ export interface Database {
           seo_title: string | null
           seo_description: string | null
           tags: string[]
+          department?: string | null
           created_at: string
           updated_at: string
         }
@@ -267,6 +322,7 @@ export interface Database {
           seo_title?: string | null
           seo_description?: string | null
           tags?: string[]
+          department?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -286,6 +342,7 @@ export interface Database {
           seo_title?: string | null
           seo_description?: string | null
           tags?: string[]
+          department?: string | null
           created_at?: string
           updated_at?: string
         }
