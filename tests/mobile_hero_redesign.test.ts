@@ -6,13 +6,16 @@ describe('Bubble Boom – Mobile Homepage Hero Redesign Suite', () => {
   const heroPath = path.join(process.cwd(), 'src', 'components', 'home', 'hero-carousel.tsx')
   const content = fs.readFileSync(heroPath, 'utf-8')
 
-  it('1. Mobile layout divides hero into 3 distinct zones (top text, middle models spacer, bottom CTAs)', () => {
+  it('1. Mobile layout restores full original height and divides hero into 3 distinct zones', () => {
+    // Restored full-height mobile hero
+    expect(content).toContain('min-h-[75vh]')
+    expect(content).toContain('h-[80vh]')
     // Mobile container
     expect(content).toContain('md:hidden relative z-10 w-full h-full flex-1 flex flex-col justify-between items-center')
     // Top zone with top padding
     expect(content).toContain('pt-[clamp(48px,7vh,68px)]')
     // Middle zone: unobstructed visual spacer
-    expect(content).toContain('flex-1 w-full min-h-[140px] pointer-events-none')
+    expect(content).toContain('flex-1 w-full min-h-[160px] pointer-events-none')
     // Bottom zone
     expect(content).toContain('w-full flex flex-col items-center')
   })
@@ -30,11 +33,11 @@ describe('Bubble Boom – Mobile Homepage Hero Redesign Suite', () => {
     expect(content).toContain('mb-5 min-[380px]:mb-6')
   })
 
-  it('4. Mobile slider capsule is small, light, transparent, and removes visible Pause/Play button', () => {
-    expect(content).toContain('bg-black/25 backdrop-blur-md px-3 py-1.5 rounded-full')
+  it('4. Mobile slider capsule is extra compact, light, transparent, and removes visible Pause/Play button', () => {
+    expect(content).toContain('bg-black/25 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10')
     expect(content).toContain('h-[3px]')
-    expect(content).toContain('w-[30px]')
-    expect(content).toContain('w-[24px]')
+    expect(content).toContain('w-[26px]')
+    expect(content).toContain('w-[18px]')
     // The mobile capsule does not include the togglePlayPause button
     const mobileSection = content.slice(content.indexOf('Mobile 3-Zone Layout'), content.indexOf('Desktop Headline'))
     expect(mobileSection).not.toContain('togglePlayPause')

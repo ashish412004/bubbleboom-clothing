@@ -12,9 +12,9 @@ describe('Bubble Boom – Homepage Premium Layout & Mobile Optimization Suite', 
     expect(content).toContain('md:min-h-[75vh]')
     expect(content).toContain('md:h-[78vh]')
     expect(content).toContain('lg:h-[80vh]')
-    expect(content).toContain('max-h-[820px]')
-    // Mobile does not force rigid 75vh
-    expect(content).toContain('h-auto')
+    // Restored original full-height mobile hero
+    expect(content).toContain('min-h-[75vh]')
+    expect(content).toContain('h-[80vh]')
   })
 
   it('2. Hero section preserves headline, subtitle, buttons, images, and progress bars', () => {

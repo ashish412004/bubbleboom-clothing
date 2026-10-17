@@ -213,7 +213,7 @@ export function HeroCarousel({
   return (
     <section
       suppressHydrationWarning
-      className="relative min-h-[580px] h-auto min-[360px]:h-[88svh] sm:min-h-[620px] md:min-h-[75vh] md:h-[78vh] lg:h-[80vh] max-h-[820px] bg-black text-white flex flex-col md:flex-row md:items-center md:justify-center overflow-hidden"
+      className="relative min-h-[75vh] sm:min-h-[85vh] h-[80vh] sm:h-[88vh] md:min-h-[75vh] md:h-[78vh] lg:h-[80vh] max-h-[960px] md:max-h-[820px] bg-black text-white flex flex-col md:flex-row md:items-center md:justify-center overflow-hidden"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onTouchStart={handleTouchStart}
@@ -312,7 +312,7 @@ export function HeroCarousel({
         </div>
 
         {/* MIDDLE ZONE – UNOBSTRUCTED FASHION IMAGE AREA (Streetwear Models & Blue Lighting) */}
-        <div className="flex-1 w-full min-h-[140px] pointer-events-none" aria-hidden="true" />
+        <div className="flex-1 w-full min-h-[160px] pointer-events-none" aria-hidden="true" />
 
         {/* BOTTOM ZONE – STACKED CTAS & COMPACT SLIDER INDICATORS */}
         <div className="w-full flex flex-col items-center">
@@ -336,7 +336,7 @@ export function HeroCarousel({
           {/* Small Transparent Slider Progress Indicators Capsule (No Pause/Play button on mobile) */}
           {slides.length > 1 && (
             <div
-              className="inline-flex items-center gap-2 bg-black/25 backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg"
+              className="inline-flex items-center gap-1.5 sm:gap-2 bg-black/25 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 shadow-sm"
               role="tablist"
               aria-label="Mobile hero carousel slide navigation"
             >
@@ -350,14 +350,14 @@ export function HeroCarousel({
                     aria-selected={isActive}
                     aria-label={`Go to slide ${idx + 1}: ${slide.title || slide.alt}`}
                     onClick={() => goToSlide(idx)}
-                    className="group relative flex items-center justify-center h-8 min-w-[26px] px-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full"
+                    className="group relative flex items-center justify-center h-[30px] min-w-[22px] px-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full"
                   >
                     <span className="sr-only">{`Go to slide ${idx + 1}`}</span>
                     <div
                       className={`h-[3px] rounded-full overflow-hidden transition-all duration-300 ease-out ${
                         isActive
-                          ? 'w-[30px] bg-white/30 relative'
-                          : 'w-[24px] bg-white/30 group-hover:bg-white/60'
+                          ? 'w-[26px] bg-white/25 relative'
+                          : 'w-[18px] bg-white/25 group-hover:bg-white/60'
                       }`}
                     >
                       {isActive && (
