@@ -51,22 +51,39 @@ export function CategorySlider({ categories }: CategorySliderProps) {
     }
   }, [updateScrollState, categories.length])
 
-  // Scroll by one card step
+  // Scroll by one card step with smooth alignment
   const scroll = (direction: 'prev' | 'next') => {
     const el = sliderRef.current
     if (!el) return
 
-    const firstCard = el.querySelector('[data-category-card]') as HTMLElement
-    // One card width plus gap (24px on desktop, 12px on mobile) or 78vw fallback
-    const cardStep = firstCard
-      ? firstCard.offsetWidth + (window.innerWidth >= 640 ? 24 : 12)
-      : el.clientWidth * 0.78
+    const cards = Array.from(el.querySelectorAll('[data-category-card]')) as HTMLElement[]
+    if (cards.length === 0) return
 
-    const targetOffset = direction === 'next' ? cardStep : -cardStep
-    el.scrollBy({ left: targetOffset, behavior: 'smooth' })
+    const currentScroll = el.scrollLeft
+    const gap = window.innerWidth >= 640 ? 24 : 12
+
+    let targetScroll = currentScroll
+    if (direction === 'next') {
+      const nextCard = cards.find((card) => card.offsetLeft > currentScroll + 15)
+      if (nextCard) {
+        targetScroll = nextCard.offsetLeft - el.offsetLeft
+      } else {
+        targetScroll = currentScroll + (cards[0].offsetWidth + gap)
+      }
+    } else {
+      const prevCards = cards.filter((card) => card.offsetLeft < currentScroll - 15)
+      if (prevCards.length > 0) {
+        const prevCard = prevCards[prevCards.length - 1]
+        targetScroll = prevCard.offsetLeft - el.offsetLeft
+      } else {
+        targetScroll = Math.max(0, currentScroll - (cards[0].offsetWidth + gap))
+      }
+    }
+
+    el.scrollTo({ left: Math.max(0, targetScroll), behavior: 'smooth' })
   }
 
-  // Mouse Drag Handlers for Desktop
+  // Mouse Drag Handlers for Desktop (ultra-smooth 60/120fps motion)
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     const el = sliderRef.current
@@ -76,6 +93,10 @@ export function CategorySlider({ categories }: CategorySliderProps) {
     hasMovedRef.current = false
     startXRef.current = e.pageX - el.offsetLeft
     scrollLeftRef.current = el.scrollLeft
+
+    // Temporarily turn off CSS smooth scrolling & snapping during mouse drag to eliminate jitter
+    el.style.scrollBehavior = 'auto'
+    el.style.scrollSnapType = 'none'
   }
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -86,7 +107,7 @@ export function CategorySlider({ categories }: CategorySliderProps) {
     const currentX = e.pageX - el.offsetLeft
     const walk = (currentX - startXRef.current) * 1.25
 
-    if (Math.abs(walk) > 5) {
+    if (Math.abs(walk) > 4) {
       hasMovedRef.current = true
     }
 
@@ -94,11 +115,41 @@ export function CategorySlider({ categories }: CategorySliderProps) {
   }
 
   const handleMouseUp = () => {
+    if (!isDraggingRef.current) return
     isDraggingRef.current = false
+    const el = sliderRef.current
+    if (!el) return
+
+    // Restore smooth scroll & snap behavior
+    el.style.scrollBehavior = ''
+    el.style.scrollSnapType = ''
+
+    // Smoothly snap to closest card
+    if (hasMovedRef.current) {
+      const cards = Array.from(el.querySelectorAll('[data-category-card]')) as HTMLElement[]
+      if (cards.length > 0) {
+        const currentScroll = el.scrollLeft
+        let closestCard = cards[0]
+        let minDiff = Infinity
+        for (const card of cards) {
+          const diff = Math.abs(card.offsetLeft - el.offsetLeft - currentScroll)
+          if (diff < minDiff) {
+            minDiff = diff
+            closestCard = card
+          }
+        }
+        el.scrollTo({ left: closestCard.offsetLeft - el.offsetLeft, behavior: 'smooth' })
+      }
+    }
   }
 
   const handleMouseLeave = () => {
+    if (!isDraggingRef.current) return
     isDraggingRef.current = false
+    const el = sliderRef.current
+    if (!el) return
+    el.style.scrollBehavior = ''
+    el.style.scrollSnapType = ''
   }
 
   // Suppress link navigation when a real drag occurred
@@ -143,7 +194,7 @@ export function CategorySlider({ categories }: CategorySliderProps) {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
-          className="flex gap-3 sm:gap-6 overflow-x-auto scroll-smooth snap-x snap-mandatory touch-pan-x pb-2 pt-1 px-4 sm:px-6 lg:px-8 -mx-4 sm:-mx-6 lg:-mx-8 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
+          className="flex gap-3 sm:gap-6 overflow-x-auto scroll-smooth snap-x snap-mandatory touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] will-change-scroll pb-2 pt-1 px-4 sm:px-6 lg:px-8 -mx-4 sm:-mx-6 lg:-mx-8 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
           role="region"
           aria-label="Shop by category carousel"
           tabIndex={0}

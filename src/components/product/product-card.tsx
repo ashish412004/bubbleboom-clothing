@@ -71,8 +71,8 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
   return (
     <>
       <div className="group flex flex-col bg-white">
-        {/* Product Image Area */}
-        <div className="relative aspect-[3/4] bg-neutral-100 overflow-hidden mb-3">
+        {/* Product Image Area: Rounded [20px] to match Shop By Category cards */}
+        <div className="relative aspect-[3/4] bg-neutral-100 overflow-hidden rounded-[20px] mb-3 shadow-2xs group-hover:shadow-md transition-all duration-300">
           <Link href={`/products/${product.slug}`} className="absolute inset-0">
             {firstImage && !imageError ? (
               <>
@@ -82,7 +82,7 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
                   fill
                   priority={priority}
                   onError={() => setImageError(true)}
-                  className="object-cover object-center group-hover:scale-105 transition-transform duration-300 ease-out"
+                  className="object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                 />
                 {secondImage && (
@@ -92,7 +92,7 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
                       alt={secondImage.alt_text || product.name}
                       fill
                       loading="lazy"
-                      className="object-cover object-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-out"
+                      className="object-cover object-center opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out"
                       sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                     />
                   </div>
@@ -105,10 +105,10 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
             )}
           </Link>
 
-          {/* Discount Badge */}
+          {/* Discount Badge: Rounded pill inside rounded-[20px] container */}
           {hasDiscount && (
-            <div className="absolute top-2 left-2 z-10 pointer-events-none">
-              <span className="bg-black text-white text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 shadow-sm">
+            <div className="absolute top-3 left-3 z-10 pointer-events-none">
+              <span className="bg-black text-white text-[10px] uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-md shadow-sm">
                 {discount}% OFF
               </span>
             </div>
@@ -119,7 +119,7 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
             type="button"
             aria-label={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
             onClick={handleWishlistToggle}
-            className={`absolute top-2 right-2 z-10 p-2 rounded-full transition-all duration-150 shadow-sm active:scale-90 focus:outline-none ${
+            className={`absolute top-3 right-3 z-10 p-2 rounded-full transition-all duration-200 shadow-sm active:scale-90 focus:outline-none ${
               isWishlisted
                 ? 'bg-red-50 text-[#DC2626] border border-[#DC2626]/30'
                 : 'bg-white/90 hover:bg-white text-black hover:scale-110'
@@ -127,14 +127,14 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
           >
             <Heart
               size={16}
-              className={`transition-all duration-150 ${
+              className={`transition-all duration-200 ${
                 isWishlisted ? 'fill-[#DC2626] text-[#DC2626] scale-110' : 'text-black'
               }`}
             />
           </button>
 
           {/* Desktop Quick View Overlay Button */}
-          <div className="hidden sm:block absolute inset-x-2.5 bottom-2.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="hidden sm:block absolute inset-x-3 bottom-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-250">
             <button
               type="button"
               onClick={(e) => {
@@ -142,7 +142,7 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
                 e.stopPropagation()
                 setQuickViewOpen(true)
               }}
-              className="w-full py-2 bg-white/95 hover:bg-black text-black hover:text-white border border-black text-[10px] uppercase font-mono tracking-widest font-black transition-colors flex items-center justify-center gap-1.5 shadow-md cursor-pointer active:scale-98"
+              className="w-full py-2.5 bg-white/95 hover:bg-black text-black hover:text-white border border-black text-[10px] uppercase font-mono tracking-widest font-black rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-md cursor-pointer active:scale-98"
             >
               <Eye size={13} />
               <span>Quick View</span>

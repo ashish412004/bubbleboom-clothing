@@ -191,7 +191,7 @@ export function QuickViewModal({ product, isOpen, onClose }: QuickViewModalProps
         role="dialog"
         aria-modal="true"
         aria-label={`Quick View: ${product.name}`}
-        className="relative bg-white text-black w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl z-10 border border-neutral-300 transition-all duration-200 animate-in fade-in zoom-in-95"
+        className="relative bg-white text-black w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl z-10 border border-neutral-300 rounded-[20px] transition-all duration-200 animate-in fade-in zoom-in-95"
       >
         {/* Close Button */}
         <button
@@ -206,7 +206,7 @@ export function QuickViewModal({ product, isOpen, onClose }: QuickViewModalProps
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 sm:p-8">
           {/* Left: Gallery */}
           <div className="space-y-3">
-            <div className="relative aspect-[3/4] bg-neutral-100 border border-neutral-200 overflow-hidden">
+            <div className="relative aspect-[3/4] bg-neutral-100 border border-neutral-200 overflow-hidden rounded-[20px]">
               {currentImage?.image_url ? (
                 <Image
                   src={getSafeImageUrl(currentImage.image_url)}

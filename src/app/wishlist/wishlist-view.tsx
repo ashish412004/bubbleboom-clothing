@@ -113,7 +113,7 @@ export function WishlistView({ initialItems }: WishlistViewProps) {
         return (
           <div
             key={item.id}
-            className="group flex flex-col border border-black bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+            className="group flex flex-col border border-black bg-white overflow-hidden rounded-[20px] shadow-sm hover:shadow-md transition-shadow"
           >
             {/* Image Box */}
             <div className="relative aspect-[3/4] bg-neutral-100 overflow-hidden">
