@@ -14,23 +14,35 @@
  */
 export function isProductTest(product: any): boolean {
   if (!product) return false
-  // 1. Explicit database field
-  if (product.product_mode === 'live' || product.is_test === false) return false
-  if (product.product_mode === 'test' || product.is_test === true) return true
 
-  // 2. Tag markers (fail-safe for schema migration compatibility)
-  const tags = Array.isArray(product.tags) ? product.tags.map((t: string) => String(t).toLowerCase()) : []
-  if (tags.includes('mode:live') || tags.includes('live')) return false
-  if (tags.includes('mode:test') || tags.includes('test') || tags.includes('demo') || tags.includes('test-product')) return true
+  // 1. Authoritative database field (Single source of truth)
+  // When an explicit mode exists in the database, tags and slug heuristics must NEVER override it.
+  if (product.is_test === false || product.product_mode === 'live') {
+    return false
+  }
+  if (product.is_test === true || product.product_mode === 'test') {
+    return true
+  }
 
-  // 3. Name or slug fallback detection
+  // 2. Tag markers (legacy fail-safe ONLY when explicit database fields are null or undefined)
+  const tags = Array.isArray(product.tags)
+    ? product.tags.map((t: string) => String(t).toLowerCase().trim())
+    : []
+  if (tags.includes('mode:live') || tags.includes('live-product')) {
+    return false
+  }
+  if (tags.includes('mode:test') || tags.includes('test-product') || tags.includes('demo')) {
+    return true
+  }
+
+  // 3. Name or slug fallback detection for unclassified legacy demo items
   const name = String(product.name || '').toLowerCase()
   const slug = String(product.slug || '').toLowerCase()
   if (name.includes('demo') || slug.includes('demo') || name.includes('test') || slug.includes('test')) {
     return true
   }
 
-  // 4. Default: existing inventory during pre-launch testing defaults to test unless marked live
+  // 4. Default: unclassified inventory during pre-launch testing defaults to test (safe)
   return true
 }
 

@@ -482,8 +482,8 @@ export async function PATCH(req: NextRequest) {
       .single()
 
     if (error && (error.message?.includes('product_mode') || error.message?.includes('is_test'))) {
-      delete updateData.product_mode
-      delete updateData.is_test
+      if (error.message?.includes('product_mode')) delete updateData.product_mode
+      if (error.message?.includes('is_test')) delete updateData.is_test
       const retry = await supabase.from('products').update(updateData).eq('id', id).select().single()
       data = retry.data
       error = retry.error

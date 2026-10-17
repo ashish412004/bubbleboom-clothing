@@ -5,6 +5,7 @@ import {
   isValidOrderStatusTransition,
   OrderStatus,
 } from '@/lib/orders'
+import { isProductTest } from '@/lib/product-mode'
 
 describe('Order Rules, Indian Address Verification & State Machine', () => {
   describe('Indian Phone Number Validation', () => {
@@ -211,6 +212,47 @@ describe('Order Rules, Indian Address Verification & State Machine', () => {
       const isOnlineCod = onlineOrder.payment_method === 'cod'
       const onlinePaymentLabel = isOnlineCod ? 'PENDING COLLECTION (COD)' : 'PAID & VERIFIED'
       expect(onlinePaymentLabel).toBe('PAID & VERIFIED')
+    })
+  })
+
+  describe('Checkout Test / Live Product Classification (Req 4, 10, 13)', () => {
+    it('correctly classifies LIVE products using database is_test = false without blocking', () => {
+      const liveProduct = {
+        id: 'prod-live-1',
+        name: 'Monochrome Chunky Sneakers',
+        slug: 'bubble-boom-monochrome-chunky-sneakers',
+        is_published: true,
+        is_active: true,
+        is_test: false,
+        tags: ['shoes'],
+      }
+      expect(isProductTest(liveProduct)).toBe(false)
+    })
+
+    it('correctly classifies TEST products using database is_test = true and blocks real purchase', () => {
+      const testProduct = {
+        id: 'prod-test-1',
+        name: 'Sample Acid Wash Hoodie',
+        slug: 'sample-acid-wash-hoodie',
+        is_published: true,
+        is_active: true,
+        is_test: true,
+        tags: ['hoodie'],
+      }
+      expect(isProductTest(testProduct)).toBe(true)
+    })
+
+    it('unclassified products safely default to TEST mode (Req 7)', () => {
+      const unclassifiedProduct = {
+        id: 'prod-legacy-1',
+        name: 'Cargo Pants',
+        slug: 'cargo-pants',
+        is_published: true,
+        is_active: true,
+        is_test: null,
+        tags: ['pants'],
+      }
+      expect(isProductTest(unclassifiedProduct)).toBe(true)
     })
   })
 })

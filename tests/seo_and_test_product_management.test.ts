@@ -31,9 +31,20 @@ describe('Bubble Boom – SEO Setup & Test Product Management Suite', () => {
       expect(isProductTest({ name: 'Test Boxy Tee', slug: 'test-boxy' })).toBe(true)
     })
 
-    it('defaults safely to test mode if product is ambiguous / unclassified', () => {
+    it('explicit is_test = false or product_mode = "live" overrides conflicting legacy tags or demo names (Req 6)', () => {
+      // Explicit LIVE product with residual "demo" name or "mode:test" tag must remain LIVE
+      expect(isProductTest({ is_test: false, product_mode: 'live', name: 'Demo Tee', tags: ['mode:test'] })).toBe(false)
+      expect(getProductMode({ is_test: false, product_mode: 'live', name: 'Demo Tee', tags: ['mode:test'] })).toBe('live')
+
+      // Explicit TEST product with residual "mode:live" tag must remain TEST
+      expect(isProductTest({ is_test: true, product_mode: 'test', tags: ['mode:live', 'live-product'] })).toBe(true)
+      expect(getProductMode({ is_test: true, product_mode: 'test', tags: ['mode:live', 'live-product'] })).toBe('test')
+    })
+
+    it('defaults safely to test mode if product is ambiguous / unclassified (Req 7 & 8)', () => {
       expect(isProductTest({})).toBe(true)
       expect(getProductMode({})).toBe('test')
+      expect(isProductTest({ is_test: null, product_mode: null })).toBe(true)
     })
   })
 

@@ -439,6 +439,8 @@ export async function createOrder(input: CreateOrderInput) {
         selling_price,
         is_published,
         is_active,
+        is_test,
+        tags,
         images:product_images (
           id,
           image_url,
