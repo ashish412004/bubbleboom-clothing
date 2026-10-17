@@ -539,7 +539,10 @@ export async function createOrder(input: CreateOrderInput) {
       input.coupon_code,
       input.user_id,
       subtotalPaise,
-      productIds
+      productIds,
+      [],
+      input.guest_email || (input.shipping_address as any)?.email,
+      phone
     )
     if (!couponRes.valid) {
       return { error: couponRes.error }
@@ -636,9 +639,11 @@ export async function createOrder(input: CreateOrderInput) {
       try {
         await recordCouponUsage(
           appliedCouponId,
-          input.user_id || 'guest',
+          input.user_id || null,
           order.id,
-          couponDiscountPaise
+          couponDiscountPaise,
+          input.guest_email || (input.shipping_address as any)?.email,
+          phone
         )
       } catch (couponErr) {
         console.warn('[createOrder] COD coupon tracking error:', couponErr)

@@ -447,6 +447,8 @@ export function CheckoutForm({
           code,
           subtotal_paise: subtotalPaise,
           product_ids: items.map((i: any) => i.product_id),
+          email: email.trim() || undefined,
+          phone: normalizeIndianMobile(phone) || undefined,
         }),
       })
 

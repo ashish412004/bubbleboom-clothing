@@ -5,7 +5,7 @@ import { getCurrentUser } from '@/lib/auth'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { code, subtotal_paise, product_ids, collection_ids } = body
+    const { code, subtotal_paise, product_ids, collection_ids, email, phone } = body
 
     if (!code || typeof code !== 'string' || !code.trim()) {
       return NextResponse.json(
@@ -23,7 +23,9 @@ export async function POST(req: NextRequest) {
       userId,
       typeof subtotal_paise === 'number' ? subtotal_paise : undefined,
       Array.isArray(product_ids) ? product_ids : [],
-      Array.isArray(collection_ids) ? collection_ids : []
+      Array.isArray(collection_ids) ? collection_ids : [],
+      email || user?.email || undefined,
+      phone || undefined
     )
 
     if (!result.valid || !result.coupon) {

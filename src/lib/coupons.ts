@@ -57,7 +57,9 @@ export async function validateCoupon(
   userId?: string,
   subtotalPaise?: number,
   productIds: string[] = [],
-  collectionIds: string[] = []
+  collectionIds: string[] = [],
+  customerEmail?: string,
+  customerPhone?: string
 ): Promise<CouponValidationResult> {
   const supabase = await createServerClient()
 
@@ -98,8 +100,7 @@ export async function validateCoupon(
   }
 
   // 5. Minimum order spend in paise
-  // Note: in DB, minimum_amount can be stored in rupees (e.g. 999) or paise.
-  const minPaise = coupon.minimum_amount * 100
+  const minPaise = (coupon.minimum_amount || 0) * 100
   if (subtotalPaise !== undefined && subtotalPaise < minPaise) {
     return {
       valid: false,
@@ -108,14 +109,42 @@ export async function validateCoupon(
   }
 
   // 6. Per-customer limit
-  if (coupon.per_customer_limit !== null && userId) {
-    const { count, error: usageErr } = await supabase
-      .from('coupon_usage')
-      .select('*', { count: 'exact', head: true })
-      .eq('coupon_id', coupon.id)
-      .eq('user_id', userId)
+  if (coupon.per_customer_limit !== null && coupon.per_customer_limit !== undefined) {
+    let userCount = 0
+    if (userId) {
+      const { count, error: usageErr } = await supabase
+        .from('coupon_usage')
+        .select('*', { count: 'exact', head: true })
+        .eq('coupon_id', coupon.id)
+        .eq('user_id', userId)
 
-    if (!usageErr && count !== null && count >= coupon.per_customer_limit) {
+      if (!usageErr && typeof count === 'number') {
+        userCount = count
+      }
+    } else if (customerEmail || customerPhone) {
+      if (customerEmail) {
+        const { count: emailCount, error: emailErr } = await supabase
+          .from('coupon_usage')
+          .select('*', { count: 'exact', head: true })
+          .eq('coupon_id', coupon.id)
+          .eq('customer_email', customerEmail.toLowerCase().trim())
+        if (!emailErr && typeof emailCount === 'number') {
+          userCount = Math.max(userCount, emailCount)
+        }
+      }
+      if (customerPhone) {
+        const { count: phoneCount, error: phoneErr } = await supabase
+          .from('coupon_usage')
+          .select('*', { count: 'exact', head: true })
+          .eq('coupon_id', coupon.id)
+          .eq('customer_phone', customerPhone.trim())
+        if (!phoneErr && typeof phoneCount === 'number') {
+          userCount = Math.max(userCount, phoneCount)
+        }
+      }
+    }
+
+    if (userCount >= coupon.per_customer_limit) {
       return {
         valid: false,
         error: `You have reached the maximum allowed uses (${coupon.per_customer_limit}) for this coupon`,
@@ -137,12 +166,16 @@ export async function validateCoupon(
 
   if (coupon.discount_type === 'percentage') {
     discount_paise = Math.round(currentSubtotal * (coupon.discount_value / 100))
-    if (coupon.maximum_discount !== null) {
+    if (coupon.maximum_discount !== null && coupon.maximum_discount !== undefined) {
       const maxPaise = coupon.maximum_discount * 100
       discount_paise = Math.min(discount_paise, maxPaise)
     }
   } else if (coupon.discount_type === 'fixed') {
     discount_paise = coupon.discount_value * 100 // Convert ₹ fixed value to paise
+    if (coupon.maximum_discount !== null && coupon.maximum_discount !== undefined) {
+      const maxPaise = coupon.maximum_discount * 100
+      discount_paise = Math.min(discount_paise, maxPaise)
+    }
     discount_paise = Math.min(discount_paise, currentSubtotal)
   }
 
@@ -161,7 +194,9 @@ export async function recordCouponUsage(
   couponId: string,
   userId: string | null | undefined,
   orderId: string,
-  discountPaise: number
+  discountPaise: number,
+  customerEmail?: string | null,
+  customerPhone?: string | null
 ) {
   if (!isSupabaseConfigured()) return
   const supabase = await createServiceClient()
@@ -179,7 +214,7 @@ export async function recordCouponUsage(
       return // Already recorded for this order!
     }
 
-    // Increment usage count
+    // Increment usage count atomically
     try {
       await supabase.rpc('increment_coupon_usage', { p_coupon_id: couponId })
     } catch {
@@ -189,13 +224,31 @@ export async function recordCouponUsage(
       }
     }
 
-    // Insert redemption record
-    await supabase.from('coupon_usage').insert({
+    // Insert redemption record safely
+    const isValidUuid = userId && userId !== 'guest' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)
+    const usagePayload: Record<string, any> = {
       coupon_id: couponId,
-      user_id: userId || 'guest',
       order_id: orderId,
       discount_amount: Math.round(discountPaise / 100),
-    })
+    }
+    if (isValidUuid) {
+      usagePayload.user_id = userId
+    }
+    if (customerEmail) {
+      usagePayload.customer_email = customerEmail.toLowerCase().trim()
+    }
+    if (customerPhone) {
+      usagePayload.customer_phone = customerPhone.trim()
+    }
+
+    const { error: insErr } = await supabase.from('coupon_usage').insert(usagePayload)
+    if (insErr) {
+      if (!isValidUuid) {
+        console.warn('[recordCouponUsage] Guest redemption notice:', insErr.message)
+      } else {
+        console.warn('[recordCouponUsage] Redemption record warning:', insErr.message)
+      }
+    }
   } catch (err) {
     console.warn('[recordCouponUsage] Warning recording coupon usage:', err)
   }
@@ -213,16 +266,25 @@ export async function rollbackCouponUsage(orderId: string) {
       .select('id, coupon_id')
       .eq('order_id', orderId)
 
-    if (!usages || usages.length === 0) return
-
-    for (const u of usages) {
-      // Decrement usage count
-      const { data: c } = await supabase.from('coupons').select('usage_count').eq('id', u.coupon_id).single()
-      if (c && c.usage_count > 0) {
-        await supabase.from('coupons').update({ usage_count: Math.max(0, c.usage_count - 1) }).eq('id', u.coupon_id)
+    if (usages && usages.length > 0) {
+      for (const u of usages) {
+        // Decrement usage count
+        const { data: c } = await supabase.from('coupons').select('usage_count').eq('id', u.coupon_id).single()
+        if (c && c.usage_count > 0) {
+          await supabase.from('coupons').update({ usage_count: Math.max(0, c.usage_count - 1) }).eq('id', u.coupon_id)
+        }
+        // Delete redemption record
+        await supabase.from('coupon_usage').delete().eq('id', u.id)
       }
-      // Delete redemption record
-      await supabase.from('coupon_usage').delete().eq('id', u.id)
+    } else {
+      // Fallback if coupon_usage didn't store a row but order has coupon_id
+      const { data: ord } = await supabase.from('orders').select('coupon_id').eq('id', orderId).maybeSingle()
+      if (ord && ord.coupon_id) {
+        const { data: c } = await supabase.from('coupons').select('usage_count').eq('id', ord.coupon_id).single()
+        if (c && c.usage_count > 0) {
+          await supabase.from('coupons').update({ usage_count: Math.max(0, c.usage_count - 1) }).eq('id', ord.coupon_id)
+        }
+      }
     }
   } catch (err) {
     console.warn('[rollbackCouponUsage] Error rolling back coupon usage:', err)

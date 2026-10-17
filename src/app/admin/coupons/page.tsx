@@ -15,7 +15,7 @@ export default async function AdminCouponsPage() {
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (data && data.length > 0) {
+      if (Array.isArray(data)) {
         couponsList = data
       }
     } catch {

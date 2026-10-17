@@ -814,7 +814,9 @@ export interface Database {
         Row: {
           id: string
           coupon_id: string
-          user_id: string
+          user_id: string | null
+          customer_email: string | null
+          customer_phone: string | null
           order_id: string
           discount_amount: number
           created_at: string
@@ -822,7 +824,9 @@ export interface Database {
         Insert: {
           id?: string
           coupon_id: string
-          user_id: string
+          user_id?: string | null
+          customer_email?: string | null
+          customer_phone?: string | null
           order_id: string
           discount_amount: number
           created_at?: string
@@ -830,7 +834,9 @@ export interface Database {
         Update: {
           id?: string
           coupon_id?: string
-          user_id?: string
+          user_id?: string | null
+          customer_email?: string | null
+          customer_phone?: string | null
           order_id?: string
           discount_amount?: number
           created_at?: string

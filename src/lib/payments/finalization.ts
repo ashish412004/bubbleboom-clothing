@@ -280,13 +280,15 @@ export async function finalizeOrderPayment(
     }
 
     // D. Record coupon usage if coupon was applied
-    if (order.coupon_id && order.user_id) {
+    if (order.coupon_id) {
       try {
         await recordCouponUsage(
           order.coupon_id,
-          order.user_id,
+          order.user_id || null,
           order.id,
-          (order.coupon_discount || 0) * 100
+          (order.coupon_discount || 0) * 100,
+          order.guest_email || (order.shipping_address as any)?.email,
+          order.guest_phone || (order.shipping_address as any)?.phone
         )
       } catch (couponErr) {
         console.warn('[finalizeOrderPayment] Coupon usage tracking error:', couponErr)

@@ -87,6 +87,28 @@ export function CouponManager({ initialCoupons }: { initialCoupons: Coupon[] }) 
 
   const handleCreateCoupon = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Frontend validations
+    const numDiscount = Number(discountValue)
+    if (isNaN(numDiscount) || numDiscount <= 0) {
+      toast.error('Discount value must be a positive number')
+      return
+    }
+
+    if (discountType === 'percentage' && numDiscount > 100) {
+      toast.error('Percentage discount cannot exceed 100%')
+      return
+    }
+
+    const numUsageLimit = usageLimit ? Number(usageLimit) : null
+    const numPerCustomerLimit = perCustomerLimit ? Number(perCustomerLimit) : null
+
+    // Enforce Requirement 4: per-user usage must not exceed total usage limit
+    if (numUsageLimit !== null && numPerCustomerLimit !== null && numPerCustomerLimit > numUsageLimit) {
+      toast.error(`Per-user limit (${numPerCustomerLimit}) cannot exceed total usage limit (${numUsageLimit}).`)
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -97,11 +119,11 @@ export function CouponManager({ initialCoupons }: { initialCoupons: Coupon[] }) 
           code: code.trim().toUpperCase(),
           description: description.trim() || null,
           discount_type: discountType,
-          discount_value: discountValue,
-          minimum_amount: minAmount,
-          maximum_discount: maxDiscount || null,
-          usage_limit: usageLimit || null,
-          per_customer_limit: perCustomerLimit || null,
+          discount_value: numDiscount,
+          minimum_amount: Number(minAmount) || 0,
+          maximum_discount: maxDiscount ? Number(maxDiscount) : null,
+          usage_limit: numUsageLimit,
+          per_customer_limit: numPerCustomerLimit,
           expiry_date: expiryDate ? new Date(expiryDate).toISOString() : null,
         }),
       })
@@ -116,6 +138,7 @@ export function CouponManager({ initialCoupons }: { initialCoupons: Coupon[] }) 
       setDescription('')
       setMaxDiscount('')
       setUsageLimit('')
+      setPerCustomerLimit(1)
       setExpiryDate('')
       router.refresh()
     } catch (err: any) {
@@ -128,6 +151,28 @@ export function CouponManager({ initialCoupons }: { initialCoupons: Coupon[] }) 
   const handleUpdateCoupon = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingCoupon) return
+
+    // Frontend validations
+    const numDiscount = Number(editDiscountValue)
+    if (isNaN(numDiscount) || numDiscount <= 0) {
+      toast.error('Discount value must be a positive number')
+      return
+    }
+
+    if (editDiscountType === 'percentage' && numDiscount > 100) {
+      toast.error('Percentage discount cannot exceed 100%')
+      return
+    }
+
+    const numUsageLimit = editUsageLimit ? Number(editUsageLimit) : null
+    const numPerCustomerLimit = editPerCustomerLimit ? Number(editPerCustomerLimit) : null
+
+    // Enforce Requirement 4: per-user usage must not exceed total usage limit
+    if (numUsageLimit !== null && numPerCustomerLimit !== null && numPerCustomerLimit > numUsageLimit) {
+      toast.error(`Per-user limit (${numPerCustomerLimit}) cannot exceed total usage limit (${numUsageLimit}).`)
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -139,11 +184,11 @@ export function CouponManager({ initialCoupons }: { initialCoupons: Coupon[] }) 
           code: editCode.trim().toUpperCase(),
           description: editDescription.trim() || null,
           discount_type: editDiscountType,
-          discount_value: editDiscountValue,
-          minimum_amount: editMinAmount,
-          maximum_discount: editMaxDiscount || null,
-          usage_limit: editUsageLimit || null,
-          per_customer_limit: editPerCustomerLimit || null,
+          discount_value: numDiscount,
+          minimum_amount: Number(editMinAmount) || 0,
+          maximum_discount: editMaxDiscount ? Number(editMaxDiscount) : null,
+          usage_limit: numUsageLimit,
+          per_customer_limit: numPerCustomerLimit,
           expiry_date: editExpiryDate ? new Date(editExpiryDate).toISOString() : editingCoupon.expiry_date,
         }),
       })
@@ -555,7 +600,14 @@ export function CouponManager({ initialCoupons }: { initialCoupons: Coupon[] }) 
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-200">
-              {coupons.map((c) => {
+              {coupons.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-neutral-400 font-mono">
+                    No promotional coupons found in database. Click &quot;Create Coupon&quot; above to add one.
+                  </td>
+                </tr>
+              ) : (
+                coupons.map((c) => {
                 const isExpired = c.expiry_date && new Date(c.expiry_date) < new Date()
 
                 return (
@@ -627,7 +679,7 @@ export function CouponManager({ initialCoupons }: { initialCoupons: Coupon[] }) 
                     </td>
                   </tr>
                 )
-              })}
+              }))}
             </tbody>
           </table>
         </div>
