@@ -669,26 +669,45 @@ export function OrdersViewWithDrawer({ orders }: OrdersViewWithDrawerProps) {
 
               {/* Cancellation Form if in progress */}
               {cancellingOrderId === selectedOrder.id && (
-                <div className="bg-red-50 rounded-xl p-4 border border-red-200 space-y-3 animate-in fade-in">
-                  <div className="flex items-center gap-2 text-red-900 font-bold text-xs uppercase">
-                    <AlertCircle className="w-4 h-4 text-red-600" />
-                    <span>Confirm Order Cancellation</span>
+                <div className="bg-neutral-50 rounded-xl p-4 border-2 border-black space-y-3 animate-in fade-in">
+                  <div className="flex items-center gap-2 text-black font-black text-xs uppercase tracking-tight">
+                    <AlertCircle className="w-4 h-4 text-black shrink-0" />
+                    <span>Are you sure you want to cancel this order?</span>
                   </div>
-                  <p className="text-xs text-red-700">
-                    Are you sure you want to cancel order #{selectedOrder.order_number}? This action cannot be undone.
-                  </p>
-                  <textarea
-                    rows={2}
-                    value={cancelReason}
-                    onChange={(e) => setCancelReason(e.target.value)}
-                    placeholder="Reason for cancellation (required)..."
-                    className="w-full text-xs p-2.5 rounded-lg border border-red-300 bg-white text-black focus:outline-none focus:ring-1 focus:ring-red-500"
-                  />
+                  <div className="text-xs text-neutral-600 space-y-1">
+                    <p>
+                      Order <span className="font-mono font-bold text-black">#{selectedOrder.order_number}</span>
+                    </p>
+                    <p className="text-[11px] text-neutral-500 font-mono">
+                      {selectedOrder.payment_method === 'cod'
+                        ? 'Cash on Delivery: No payment was collected. Your order will be halted and stock released back to inventory.'
+                        : 'Prepaid Order: An automated refund will be initiated to your original payment method (3–5 business days).'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] uppercase font-mono tracking-wider font-bold mb-1">
+                      Reason for Cancellation
+                    </label>
+                    <select
+                      value={cancelReason}
+                      onChange={(e) => setCancelReason(e.target.value)}
+                      className="w-full text-xs p-2 rounded-lg border border-neutral-300 bg-white text-black font-mono focus:outline-none focus:border-black"
+                    >
+                      <option value="">Select a reason...</option>
+                      <option value="Ordered by mistake">Ordered by mistake</option>
+                      <option value="Wrong size">Wrong size</option>
+                      <option value="Delivery taking too long">Delivery taking too long</option>
+                      <option value="Found another product">Found another product</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
                   <div className="flex items-center justify-end gap-2 pt-1">
                     <button
                       type="button"
                       onClick={() => setCancellingOrderId(null)}
-                      className="px-3 py-1.5 rounded-lg bg-white border border-neutral-300 text-xs font-bold text-neutral-700 hover:bg-neutral-100"
+                      className="px-3.5 py-2 rounded-lg bg-white border border-neutral-300 text-xs font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
                     >
                       Keep Order
                     </button>
@@ -696,9 +715,9 @@ export function OrdersViewWithDrawer({ orders }: OrdersViewWithDrawerProps) {
                       type="button"
                       disabled={isCancelling || !cancelReason.trim()}
                       onClick={() => handleCancelOrder(selectedOrder.id)}
-                      className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 disabled:opacity-50"
+                      className="px-4 py-2 rounded-lg bg-black text-white text-xs font-bold hover:bg-neutral-800 disabled:opacity-50 cursor-pointer"
                     >
-                      {isCancelling ? 'Cancelling...' : 'Confirm Cancel'}
+                      {isCancelling ? 'Cancelling...' : 'Confirm Cancellation'}
                     </button>
                   </div>
                 </div>

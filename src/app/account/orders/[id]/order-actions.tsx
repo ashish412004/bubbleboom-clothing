@@ -420,10 +420,16 @@ export function OrderActions({
       {cancelling && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white border-2 border-black max-w-md w-full p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-            <h3 className="text-lg font-black uppercase tracking-tight mb-2">Cancel Order</h3>
-            <p className="text-xs text-neutral-600 mb-4">
-              Order <span className="font-mono font-bold text-black">{orderNumber}</span> will be halted and any reserved stock released back to inventory.
-            </p>
+            <h3 className="text-lg font-black uppercase tracking-tight mb-2">Are you sure you want to cancel this order?</h3>
+            <div className="text-xs text-neutral-600 mb-4 space-y-1 font-mono">
+              <p>
+                Order <span className="font-bold text-black">#{orderNumber}</span>
+              </p>
+              <p className="text-[11px] text-neutral-500">
+                Cancellation is permitted prior to parcel dispatch. Any reserved inventory will be safely released.
+                Prepaid orders will receive an automated refund back to the original payment source.
+              </p>
+            </div>
 
             <form onSubmit={handleCancelOrder} className="space-y-4">
               <div>
@@ -434,14 +440,14 @@ export function OrderActions({
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
                   required
-                  className="w-full border border-black p-2 text-xs focus:outline-none"
+                  className="w-full border border-black p-2 text-xs focus:outline-none font-mono"
                 >
                   <option value="">Select a reason...</option>
-                  <option value="Changed my mind">Changed my mind</option>
-                  <option value="Ordered incorrect size / item">Ordered incorrect size / item</option>
-                  <option value="Delivery timeframe too long">Delivery timeframe too long</option>
-                  <option value="Found alternative product">Found alternative product</option>
-                  <option value="Payment / checkout mistake">Payment / checkout mistake</option>
+                  <option value="Ordered by mistake">Ordered by mistake</option>
+                  <option value="Wrong size">Wrong size</option>
+                  <option value="Delivery taking too long">Delivery taking too long</option>
+                  <option value="Found another product">Found another product</option>
+                  <option value="Other">Other</option>
                 </select>
               </div>
 
@@ -450,16 +456,16 @@ export function OrderActions({
                   type="button"
                   onClick={() => setCancelling(false)}
                   disabled={loading}
-                  className="flex-1 border border-neutral-300 py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-100"
+                  className="flex-1 border border-neutral-300 py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-100 cursor-pointer"
                 >
                   Keep Order
                 </button>
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-black text-white py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-400"
+                  disabled={loading || !cancelReason}
+                  className="flex-1 bg-black text-white py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-400 cursor-pointer"
                 >
-                  {loading ? 'Cancelling...' : 'Confirm Cancel'}
+                  {loading ? 'Cancelling...' : 'Confirm Cancellation'}
                 </button>
               </div>
             </form>

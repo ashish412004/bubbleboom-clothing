@@ -1,4 +1,4 @@
-import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 
 export type InventoryMovement = Database['public']['Tables']['inventory_movements']['Row']
@@ -376,6 +376,92 @@ export async function adjustInventory(
   })
 
   return { success: true, newStock: updatedStock }
+}
+
+/**
+ * Restores stock for a cancelled order exactly once with full audit logging.
+ */
+export async function restoreStockForCancelledOrder(
+  orderId: string
+): Promise<{ success: boolean; restoredItemsCount?: number; error?: string }> {
+  if (!isSupabaseConfigured()) {
+    return { success: true, restoredItemsCount: 0 }
+  }
+
+  const supabase = await createServiceClient()
+
+  try {
+    // 1. Idempotency check: verify stock hasn't already been restored for this order
+    const { data: existingRestoration } = await supabase
+      .from('inventory_movements')
+      .select('id')
+      .eq('reference_id', orderId)
+      .eq('movement_type', 'restock')
+      .eq('reference_type', 'order_cancellation')
+      .limit(1)
+
+    if (existingRestoration && existingRestoration.length > 0) {
+      // Stock was already restored; do not restore twice
+      return { success: true, restoredItemsCount: 0 }
+    }
+
+    // 2. Fetch order items to restore
+    const { data: items, error: itemsErr } = await supabase
+      .from('order_items')
+      .select('variant_id, quantity')
+      .eq('order_id', orderId)
+
+    if (itemsErr || !items || items.length === 0) {
+      // No items found or already released
+      await releaseStockReservation(orderId)
+      return { success: true, restoredItemsCount: 0 }
+    }
+
+    let restoredCount = 0
+
+    // 3. Atomically restore stock for each variant and record movement
+    for (const item of items) {
+      if (!item.variant_id || !item.quantity || item.quantity <= 0) continue
+
+      const { data: v } = await supabase
+        .from('product_variants')
+        .select('stock')
+        .eq('id', item.variant_id)
+        .single()
+
+      if (v) {
+        const newStock = v.stock + item.quantity
+        await supabase
+          .from('product_variants')
+          .update({ stock: newStock, updated_at: new Date().toISOString() })
+          .eq('id', item.variant_id)
+
+        try {
+          await supabase.from('inventory_movements').insert({
+            variant_id: item.variant_id,
+            movement_type: 'restock',
+            quantity: item.quantity,
+            reference_id: orderId,
+            reference_type: 'order_cancellation',
+            notes: 'Stock restored due to order cancellation prior to dispatch',
+            created_at: new Date().toISOString(),
+          })
+        } catch (movErr) {
+          console.warn('[restoreStockForCancelledOrder] Movement logging warning:', movErr)
+        }
+
+        restoredCount++
+      }
+    }
+
+    // 4. Release any remaining reservations
+    await releaseStockReservation(orderId)
+
+    return { success: true, restoredItemsCount: restoredCount }
+  } catch (err: any) {
+    console.error('[restoreStockForCancelledOrder] Error:', err)
+    return { success: false, error: err.message }
+  }
 }
 
 export async function getInventoryMovements(

@@ -8,37 +8,32 @@ export default async function AdminInventoryPage() {
   const mockVariants = MOCK_PRODUCTS.flatMap((p) =>
     p.variants.map((v: any) => ({
       id: v.id,
+      product_id: p.id,
       sku: v.sku,
       color: v.color,
       size: v.size,
       stock: v.stock,
-      product: { name: p.name },
+      is_active: true,
+      product: {
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        is_active: p.is_active,
+        is_published: p.is_published,
+        product_images: p.images || [],
+      },
     }))
   )
 
   let variantsList = mockVariants
   const reservedMap: Record<string, number> = {}
-  let movements: any[] = [
-    {
-      id: 'mov_1',
-      variant: {
-        sku: 'BB-TEE-BLK-M',
-        color: 'Black',
-        size: 'M',
-        product: { name: 'Bubble Boom Heavyweight Boxy Tee' },
-      },
-      movement_type: 'audit_adjustment',
-      quantity_change: 10,
-      reason: 'Physical warehouse count reconciliation',
-      created_at: '2026-10-04T11:00:00Z',
-    },
-  ]
+  let movements: any[] = []
 
   if (isSupabaseConfigured()) {
     try {
       const supabase = await createServiceClient()
 
-      // 1. Fetch variants with products
+      // 1. Fetch variants with products and product images
       const { data: variants } = await supabase
         .from('product_variants')
         .select(`
@@ -47,12 +42,21 @@ export default async function AdminInventoryPage() {
           color,
           size,
           stock,
-          product:products(name)
+          is_active,
+          product_id,
+          product:products(
+            id,
+            name,
+            slug,
+            is_active,
+            is_published,
+            product_images(image_url, sort_order)
+          )
         `)
         .order('stock', { ascending: true })
 
       if (variants && variants.length > 0) {
-        variantsList = variants
+        variantsList = variants as any[]
       }
 
       // 2. Fetch active reservations to compute reserved counts
@@ -72,7 +76,7 @@ export default async function AdminInventoryPage() {
         .from('inventory_movements')
         .select('*, variant:product_variants(sku, color, size, product:products(name))')
         .order('created_at', { ascending: false })
-        .limit(10)
+        .limit(15)
 
       if (movs && movs.length > 0) {
         movements = movs
@@ -84,8 +88,16 @@ export default async function AdminInventoryPage() {
 
   const inventoryItems = variantsList.map((v: any) => {
     const reserved = reservedMap[v.id] || 0
+    const images = Array.isArray(v.product?.product_images)
+      ? [...v.product.product_images].sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      : []
+    const thumbnail = images[0]?.image_url || null
+    const isProductActive = v.product ? Boolean(v.product.is_active && v.product.is_published) : true
+    const isVariantActive = v.is_active !== false
+
     return {
       id: v.id,
+      product_id: v.product_id || v.product?.id,
       sku: v.sku,
       color: v.color,
       size: v.size,
@@ -93,6 +105,10 @@ export default async function AdminInventoryPage() {
       reserved,
       available: Math.max(0, v.stock - reserved),
       product_name: v.product?.name || 'Unknown Product',
+      product_slug: v.product?.slug || '',
+      thumbnail,
+      is_published: isProductActive && isVariantActive,
+      is_product_active: isProductActive,
     }
   })
 
@@ -101,7 +117,7 @@ export default async function AdminInventoryPage() {
       <div>
         <h1 className="text-2xl font-black uppercase tracking-tight">Inventory &amp; Stock Levels</h1>
         <p className="text-xs text-neutral-600 font-mono mt-1">
-          Atomic reservation monitoring, physical stock-on-hand, and audited manual adjustments.
+          Real-time physical stock management, variant availability, and store catalog visibility controls.
         </p>
       </div>
 
@@ -115,7 +131,7 @@ export default async function AdminInventoryPage() {
 
         {movements && movements.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-mono">
+            <table className="w-full text-left text-xs font-mono min-w-[650px]">
               <thead>
                 <tr className="border-b border-neutral-200 text-neutral-500 uppercase">
                   <th className="py-2">Timestamp</th>
@@ -132,7 +148,7 @@ export default async function AdminInventoryPage() {
                       {new Date(m.created_at).toLocaleString('en-IN')}
                     </td>
                     <td className="py-2.5 font-bold">
-                      {m.variant?.product?.name} ({m.variant?.color}/{m.variant?.size})
+                      {m.variant?.product?.name || 'Item'} ({m.variant?.color || '—'}/{m.variant?.size || '—'})
                     </td>
                     <td className="py-2.5 uppercase font-bold text-neutral-700">{m.movement_type}</td>
                     <td className="py-2.5 font-bold font-mono">

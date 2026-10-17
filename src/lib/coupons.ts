@@ -1,4 +1,4 @@
-import { createClient as createServerClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 
 export type Coupon = Database['public']['Tables']['coupons']['Row']
@@ -154,26 +154,79 @@ export async function validateCoupon(
 }
 
 /**
- * Record coupon usage when order is paid/placed
+ * Record coupon usage when order is paid/placed.
+ * Protected against duplicate execution (idempotent).
  */
 export async function recordCouponUsage(
   couponId: string,
-  userId: string,
+  userId: string | null | undefined,
   orderId: string,
   discountPaise: number
 ) {
+  if (!isSupabaseConfigured()) return
   const supabase = await createServiceClient()
 
-  // Increment usage count
-  await supabase.rpc('increment_coupon_usage', { p_coupon_id: couponId })
+  try {
+    // Idempotency check: don't double count if this order has already recorded coupon usage!
+    const { data: existing } = await supabase
+      .from('coupon_usage')
+      .select('id')
+      .eq('order_id', orderId)
+      .eq('coupon_id', couponId)
+      .maybeSingle()
 
-  // Insert redemption record
-  await supabase.from('coupon_usage').insert({
-    coupon_id: couponId,
-    user_id: userId,
-    order_id: orderId,
-    discount_amount: Math.round(discountPaise / 100),
-  })
+    if (existing) {
+      return // Already recorded for this order!
+    }
+
+    // Increment usage count
+    try {
+      await supabase.rpc('increment_coupon_usage', { p_coupon_id: couponId })
+    } catch {
+      const { data: c } = await supabase.from('coupons').select('usage_count').eq('id', couponId).single()
+      if (c) {
+        await supabase.from('coupons').update({ usage_count: (c.usage_count || 0) + 1 }).eq('id', couponId)
+      }
+    }
+
+    // Insert redemption record
+    await supabase.from('coupon_usage').insert({
+      coupon_id: couponId,
+      user_id: userId || 'guest',
+      order_id: orderId,
+      discount_amount: Math.round(discountPaise / 100),
+    })
+  } catch (err) {
+    console.warn('[recordCouponUsage] Warning recording coupon usage:', err)
+  }
+}
+
+/**
+ * Rollback coupon usage when an order is cancelled before dispatch.
+ */
+export async function rollbackCouponUsage(orderId: string) {
+  if (!isSupabaseConfigured()) return
+  try {
+    const supabase = await createServiceClient()
+    const { data: usages } = await supabase
+      .from('coupon_usage')
+      .select('id, coupon_id')
+      .eq('order_id', orderId)
+
+    if (!usages || usages.length === 0) return
+
+    for (const u of usages) {
+      // Decrement usage count
+      const { data: c } = await supabase.from('coupons').select('usage_count').eq('id', u.coupon_id).single()
+      if (c && c.usage_count > 0) {
+        await supabase.from('coupons').update({ usage_count: Math.max(0, c.usage_count - 1) }).eq('id', u.coupon_id)
+      }
+      // Delete redemption record
+      await supabase.from('coupon_usage').delete().eq('id', u.id)
+    }
+  } catch (err) {
+    console.warn('[rollbackCouponUsage] Error rolling back coupon usage:', err)
+  }
 }
 
 // Admin coupon management

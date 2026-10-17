@@ -174,6 +174,7 @@ export function CheckoutForm({
   const [couponCode, setCouponCode] = useState(summary.coupon_code || '')
   const [couponDiscountPaise, setCouponDiscountPaise] = useState(summary.coupon_discount_paise || 0)
   const [couponMessage, setCouponMessage] = useState('')
+  const [couponLoading, setCouponLoading] = useState(false)
 
   const [pinLoading, setPinLoading] = useState(false)
   const [pinSuccessMsg, setPinSuccessMsg] = useState('')
@@ -406,26 +407,50 @@ export function CheckoutForm({
   const codFeePaise = paymentMethod === 'cod' ? summary.cod_fee_paise : 0
   const totalPaise = Math.max(0, subtotalPaise - couponDiscountPaise + shippingPaise + codFeePaise)
 
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault()
     setCouponMessage('')
     const code = couponCode.trim().toUpperCase()
-    if (!code) return
-
-    if (code === 'BOOM10') {
-      const disc = Math.round(subtotalPaise * 0.1)
-      setCouponDiscountPaise(disc)
-      setCouponMessage('BOOM10 applied: 10% discount!')
-    } else if (code === 'FIRSTBOOM') {
-      if (subtotalPaise < 149900) {
-        setCouponMessage('FIRSTBOOM requires a minimum spend of ₹1,499')
-        return
-      }
-      setCouponDiscountPaise(20000)
-      setCouponMessage('FIRSTBOOM applied: ₹200 discount!')
-    } else {
-      setCouponMessage('Invalid coupon code')
+    if (!code) {
+      setCouponMessage('Please enter a coupon code')
+      return
     }
+
+    setCouponLoading(true)
+    try {
+      const res = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          subtotal_paise: subtotalPaise,
+          product_ids: items.map((i: any) => i.product_id),
+        }),
+      })
+
+      const data = await res.json()
+      if (data.valid) {
+        setCouponDiscountPaise(data.discount_paise)
+        setCouponMessage(data.message)
+        toast.success(data.message || 'Coupon applied successfully!')
+      } else {
+        setCouponDiscountPaise(0)
+        setCouponMessage(data.error || 'Invalid coupon code')
+        toast.error(data.error || 'Invalid coupon code')
+      }
+    } catch {
+      setCouponDiscountPaise(0)
+      setCouponMessage('Unable to validate coupon code. Please try again.')
+    } finally {
+      setCouponLoading(false)
+    }
+  }
+
+  const handleRemoveCoupon = () => {
+    setCouponDiscountPaise(0)
+    setCouponCode('')
+    setCouponMessage('')
+    toast.success('Coupon removed')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1158,36 +1183,43 @@ export function CheckoutForm({
 
           {/* Coupon Code */}
           <div className="pt-2 border-t border-neutral-200">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={couponCode}
-                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                placeholder="Discount Code"
-                className="bg-white border border-neutral-300 px-3 py-2 text-xs flex-grow uppercase font-semibold focus:outline-none focus:border-black"
-              />
-              <button
-                type="button"
-                onClick={handleApplyCoupon}
-                className="bg-black text-white px-3.5 py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 cursor-pointer"
-              >
-                Apply
-              </button>
-            </div>
-            {couponMessage && (
-              <p
-                className={`text-[11px] font-bold mt-1.5 flex items-center gap-1.5 ${
-                  couponDiscountPaise > 0 ? 'text-black' : 'text-[#DC2626]'
-                }`}
-              >
-                <span
-                  className={`inline-block w-3.5 h-3.5 rounded-full text-[10px] text-center leading-3.5 font-black ${
-                    couponDiscountPaise > 0
-                      ? 'bg-black text-white'
-                      : 'bg-red-100 text-[#DC2626]'
-                  }`}
+            {couponDiscountPaise > 0 ? (
+              <div className="flex items-center justify-between p-2.5 bg-neutral-100 border border-black text-xs font-mono">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-black uppercase tracking-wider">{couponCode}</span>
+                  <span className="text-[10px] bg-black text-white px-1.5 py-0.5 font-bold uppercase">APPLIED</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveCoupon}
+                  className="text-[11px] font-bold text-neutral-600 hover:text-black uppercase underline hover:no-underline cursor-pointer"
                 >
-                  {couponDiscountPaise > 0 ? '✓' : '✕'}
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  placeholder="Discount Code"
+                  className="bg-white border border-neutral-300 px-3 py-2 text-xs flex-grow uppercase font-semibold focus:outline-none focus:border-black font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyCoupon}
+                  disabled={couponLoading}
+                  className="bg-black text-white px-3.5 py-2 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 cursor-pointer disabled:opacity-50"
+                >
+                  {couponLoading ? 'Checking...' : 'Apply'}
+                </button>
+              </div>
+            )}
+            {couponMessage && couponDiscountPaise === 0 && (
+              <p className="text-[11px] font-bold mt-1.5 flex items-center gap-1.5 text-[#DC2626]">
+                <span className="inline-block w-3.5 h-3.5 rounded-full text-[10px] text-center leading-3.5 font-black bg-red-100 text-[#DC2626]">
+                  ✕
                 </span>
                 <span>{couponMessage}</span>
               </p>

@@ -1,8 +1,8 @@
 import { createClient as createServerClient, createServiceClient, isSupabaseConfigured } from '@/lib/supabase/server'
 import { Database } from '@/types/database'
 import { getStoreSettings, StoreShippingSettings } from '@/lib/settings'
-import { validateCoupon } from '@/lib/coupons'
-import { reserveStockForCheckout, confirmStockReservation, releaseStockReservation } from '@/lib/inventory'
+import { validateCoupon, recordCouponUsage, rollbackCouponUsage } from '@/lib/coupons'
+import { reserveStockForCheckout, confirmStockReservation, releaseStockReservation, restoreStockForCancelledOrder } from '@/lib/inventory'
 import { createCashfreeOrder, getCashfreeConfig, getPaymentStatus } from '@/lib/payments/cashfree'
 import { sendOrderShippedEmail, sendOrderDeliveredEmail } from '@/lib/emails/resend'
 import { queueOrderNotification, OrderNotificationEvent } from '@/lib/emails/notifications'
@@ -629,9 +629,21 @@ export async function createOrder(input: CreateOrderInput) {
     }
   }
 
-  // If COD, confirm reservation immediately as sale
+  // If COD, confirm reservation immediately as sale and record coupon usage
   if (input.payment_method === 'cod') {
     await confirmStockReservation(order.id)
+    if (appliedCouponId) {
+      try {
+        await recordCouponUsage(
+          appliedCouponId,
+          input.user_id || 'guest',
+          order.id,
+          couponDiscountPaise
+        )
+      } catch (couponErr) {
+        console.warn('[createOrder] COD coupon tracking error:', couponErr)
+      }
+    }
   }
 
   return { data: { ...order, order_items: itemsToInsert } }
@@ -1735,6 +1747,11 @@ export async function cancelOrder(orderId: string, reason: string, cancelledByUs
 
   if (fetchErr || !order) return { error: 'Order not found' }
 
+  // Prevent duplicate cancellation
+  if (order.status === 'cancelled') {
+    return { error: 'This order has already been cancelled.' }
+  }
+
   // Check ownership if cancelled by a customer
   if (cancelledByUserId && order.user_id && order.user_id !== cancelledByUserId) {
     const adminCheck = await isAdmin(cancelledByUserId)
@@ -1743,19 +1760,80 @@ export async function cancelOrder(orderId: string, reason: string, cancelledByUs
     }
   }
 
+  // Pre-dispatch status check
   if (!['pending', 'confirmed', 'unfulfilled', 'packed', 'processing'].includes(order.status)) {
     return {
       error: `Orders with status "${order.status}" cannot be cancelled. Cancellation is only allowed before parcel dispatch.`,
     }
   }
 
-  // Release inventory
-  await releaseStockReservation(order.id)
+  // Check shipments table to prevent cancelling parcels already handed to courier
+  const { data: activeShipments } = await supabase
+    .from('shipments')
+    .select('id, status')
+    .eq('order_id', orderId)
 
+  if (activeShipments && activeShipments.length > 0) {
+    const isDispatched = activeShipments.some((s) =>
+      ['in_transit', 'out_for_delivery', 'delivered'].includes((s.status || '').toLowerCase())
+    )
+    if (isDispatched) {
+      return {
+        error: 'Parcel has already been handed to the logistics courier. Cancellation is no longer possible prior to dispatch. Please request an exchange or return upon delivery.',
+      }
+    }
+  }
+
+  // 1. Transaction-safe stock restoration and reservation release (idempotent)
+  await restoreStockForCancelledOrder(order.id)
+
+  // 2. Roll back coupon usage if coupon was applied to this order
+  await rollbackCouponUsage(order.id)
+
+  // 3. Initiate authorized server-side Cashfree refund for captured prepaid payments
+  let updatedPaymentStatus: Database['public']['Tables']['orders']['Update']['payment_status'] = order.payment_status
+
+  if (order.payment_method === 'cashfree' && order.payment_status === 'paid') {
+    try {
+      // Check if refund was already recorded
+      const { data: existingRefunds } = await supabase
+        .from('refunds')
+        .select('id, status')
+        .eq('order_id', orderId)
+
+      const alreadyRefunded = existingRefunds?.some(
+        (r: any) => r.status === 'successful' || r.status === 'processing'
+      )
+
+      if (!alreadyRefunded) {
+        const { executeRefund } = await import('@/lib/returns')
+        const refRes = await executeRefund(
+          orderId,
+          null,
+          Math.round(order.total_amount * 100),
+          `Customer pre-dispatch order cancellation: ${reason}`,
+          cancelledByUserId
+        )
+
+        if (refRes.success) {
+          updatedPaymentStatus = 'refunded'
+        } else {
+          console.warn('[cancelOrder] Cashfree refund initiation note:', refRes.error)
+        }
+      } else {
+        updatedPaymentStatus = 'refunded'
+      }
+    } catch (refundErr) {
+      console.warn('[cancelOrder] Non-fatal refund initiation warning:', refundErr)
+    }
+  }
+
+  // 4. Update order state in database
   const { data, error } = await supabase
     .from('orders')
     .update({
       status: 'cancelled',
+      payment_status: updatedPaymentStatus,
       cancellation_reason: reason,
       cancelled_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1766,7 +1844,7 @@ export async function cancelOrder(orderId: string, reason: string, cancelledByUs
 
   if (error) return { error: error.message }
 
-  // Send cancellation notification immediately
+  // 5. Send cancellation notification immediately
   try {
     const { data: orderItems } = await supabase
       .from('order_items')
