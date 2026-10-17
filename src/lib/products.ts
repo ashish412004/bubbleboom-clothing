@@ -141,14 +141,8 @@ function filterMockProducts(filters?: ProductFilterOptions) {
 
   if (filters?.collection) {
     const col = filters.collection.toLowerCase()
-    if (col === 'monochrome-originals') {
-      result = result.filter((p) =>
-        ['p1000000-0000-0000-0000-000000000001', 'p1000000-0000-0000-0000-000000000002', 'p1000000-0000-0000-0000-000000000006'].includes(p.id)
-      )
-    } else if (col === 'urban-essentials') {
-      result = result.filter((p) =>
-        ['p1000000-0000-0000-0000-000000000003', 'p1000000-0000-0000-0000-000000000004', 'p1000000-0000-0000-0000-000000000005'].includes(p.id)
-      )
+    if (col === 'bubble-boom-monochrome-kicks') {
+      result = result.filter((p) => p.slug?.includes('sneaker') || p.slug?.includes('kicks'))
     }
   }
 

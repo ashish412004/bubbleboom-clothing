@@ -117,7 +117,9 @@ export default async function HomePage() {
         {/* 4. Featured Collection Editorial Banner (Compact 45/55 Split Layout) */}
         {(() => {
           const featuredCollection =
-            collections.find((c) => c.slug === 'bubble-boom-monochrome-kicks') || collections[0]
+            collections.find((c) => c.is_featured && c.is_visible) ||
+            collections.find((c) => c.slug === 'bubble-boom-monochrome-kicks' && c.is_featured && c.is_visible) ||
+            null
           if (!featuredCollection) return null
 
           const coverImage = featuredCollection.banner_image_url

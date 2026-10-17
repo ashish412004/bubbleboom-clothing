@@ -139,11 +139,11 @@ describe('Performance & Optimistic Cart Optimization Suite', () => {
     })
 
     it('filters products by collection with fast in-memory collection lookup', async () => {
-      const prods = await getProducts({ collection: 'monochrome-originals' })
+      const prods = await getProducts({ collection: 'bubble-boom-monochrome-kicks' })
       expect(Array.isArray(prods)).toBe(true)
 
       const start = performance.now()
-      const prodsCached = await getProducts({ collection: 'monochrome-originals' })
+      const prodsCached = await getProducts({ collection: 'bubble-boom-monochrome-kicks' })
       const duration = performance.now() - start
 
       expect(prodsCached.length).toBe(prods.length)
