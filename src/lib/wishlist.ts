@@ -95,7 +95,7 @@ const MOCK_VARIANT_CATALOG: Array<{
       images: [
         {
           id: 'img-1',
-          image_url: 'https://bubbleboom.in/images/hoodie.jpg',
+          image_url: 'https://bubbleboomstore.com/images/hoodie.jpg',
           alt_text: 'Bubble Boom Hoodie',
           sort_order: 1,
         },

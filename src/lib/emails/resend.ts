@@ -5,7 +5,7 @@ import {
   ShippingAddressData,
 } from '@/lib/emails/notifications'
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://bubbleboom-clothing.vercel.app'
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://bubbleboomstore.com'
 const fromEmail = process.env.SMTP_FROM || process.env.RESEND_FROM_EMAIL || 'BUBBLE BOOM <bubbleboomstore2026@gmail.com>'
 
 export interface OrderConfirmationEmailProps {

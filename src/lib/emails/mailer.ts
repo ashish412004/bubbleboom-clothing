@@ -226,7 +226,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
       const resendFrom =
         process.env.RESEND_FROM_EMAIL ||
         process.env.EMAIL_FROM ||
-        'Bubble Boom <orders@bubbleboom.in>'
+        'Bubble Boom <bubbleboomstore2026@gmail.com>'
 
       const { data, error } = await (resend.emails.send as any)({
         from: resendFrom,

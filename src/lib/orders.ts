@@ -739,7 +739,7 @@ export async function createCashfreeSessionForOrder(order: Order) {
     customer_details: {
       customer_id: order.user_id || `guest_${order.order_number}`,
       customer_name: (order.shipping_address as any)?.full_name || 'Customer',
-      customer_email: order.guest_email || 'customer@bubbleboom.in',
+      customer_email: order.guest_email || 'customer@bubbleboomstore.com',
       customer_phone: customerPhone,
     },
     order_meta: {
@@ -864,7 +864,7 @@ export async function getOrRenewCashfreeSessionForOrder(order: any) {
     customer_details: {
       customer_id: order.user_id || `guest_${order.order_number}`,
       customer_name: (order.shipping_address as any)?.full_name || 'Customer',
-      customer_email: order.guest_email || 'customer@bubbleboom.in',
+      customer_email: order.guest_email || 'customer@bubbleboomstore.com',
       customer_phone: customerPhone,
     },
     order_meta: {

@@ -29,7 +29,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-lg font-black uppercase tracking-tight text-black mb-2">1. Agreement to Terms</h2>
               <p>
-                By accessing or placing an order through BUBBLE BOOM (&ldquo;bubbleboom.in&rdquo;), you confirm that you are at least 18 years of age or accessing under the supervision of a parent/guardian, and agree to be bound by these Terms of Service and our{' '}
+                By accessing or placing an order through BUBBLE BOOM (&ldquo;bubbleboomstore.com&rdquo;), you confirm that you are at least 18 years of age or accessing under the supervision of a parent/guardian, and agree to be bound by these Terms of Service and our{' '}
                 <Link href="/privacy-policy" className="underline font-bold text-black">
                   Privacy Policy
                 </Link>

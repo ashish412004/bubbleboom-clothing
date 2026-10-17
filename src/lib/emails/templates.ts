@@ -89,7 +89,7 @@ export interface OutboxJobRecord {
 }
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || 'https://bubbleboom-clothing.vercel.app'
+  process.env.NEXT_PUBLIC_SITE_URL || 'https://bubbleboomstore.com'
 const SUPPORT_EMAIL = 'bubbleboomstore2026@gmail.com'
 
 /**

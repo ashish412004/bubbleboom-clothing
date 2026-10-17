@@ -136,7 +136,7 @@ CASHFREE_WEBHOOK_SECRET=your_webhook_secret_key
 NEXT_PUBLIC_CASHFREE_APP_ID=TEST_your_app_id
 
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-ADMIN_EMAIL=admin@bubbleboom.in
+ADMIN_EMAIL=hhshukla241099@gmail.com
 ```
 
 ### 3. Run Database Migrations & Seeds
@@ -177,7 +177,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 3. Generate **App ID** and **Secret Key**. Add them to `.env.local`.
 4. Navigate to **Developers -> Webhooks**. Set your webhook endpoint URL:
    * Local testing: Use ngrok (`https://your-ngrok.ngrok-free.app/api/webhooks/cashfree`)
-   * Production: `https://bubbleboom.in/api/webhooks/cashfree`
+   * Production: `https://bubbleboomstore.com/api/webhooks/cashfree`
 5. Copy the **Webhook Secret** into `CASHFREE_WEBHOOK_SECRET`.
 
 ### Webhook Verification Workflow

@@ -724,7 +724,7 @@ export async function scheduleReversePickup(
     } else if (lower.includes('bluedart')) {
       trackingUrl = `https://www.bluedart.com/tracking?handler=tnt&action=custtrack&awb=awb&numbers=${cleanAwb}`
     } else {
-      trackingUrl = `https://track.bubbleboom.in/${cleanAwb}`
+      trackingUrl = `https://bubbleboomstore.com/track-order?awb=${cleanAwb}`
     }
   }
 

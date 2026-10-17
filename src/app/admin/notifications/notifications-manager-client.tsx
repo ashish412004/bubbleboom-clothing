@@ -340,7 +340,7 @@ export function NotificationsManagerClient({
     order_id: 'ord_sample_9841',
     order_number: 'BB-20261011-8842',
     event: previewEvent,
-    recipient_email: 'customer@bubbleboom.in',
+    recipient_email: 'customer@bubbleboomstore.com',
     customer_name: 'Alex Mercer',
     customer_email: 'alex.mercer@example.com',
     customer_phone: '+91 98765 43210',

@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
         const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
         const res = await fetch(nominatimUrl, {
           headers: {
-            'User-Agent': 'BubbleBoomClothing/1.0 (contact@bubbleboom.in)',
+            'User-Agent': 'BubbleBoomClothing/1.0 (bubbleboomstore2026@gmail.com)',
             'Accept-Language': 'en',
           },
           next: { revalidate: 3600 },
