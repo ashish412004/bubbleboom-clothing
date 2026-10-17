@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Download, CreditCard, Package } from 'lucide-react'
 import { AdminOrderManager } from './admin-order-manager'
+import { getSafeImageUrl } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,7 +86,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
                             {img ? (
                               /* eslint-disable-next-line @next/next/no-img-element */
                               <img
-                                src={img}
+                                src={getSafeImageUrl(img)}
                                 alt={item.product_name}
                                 className="w-full h-full object-contain"
                               />
