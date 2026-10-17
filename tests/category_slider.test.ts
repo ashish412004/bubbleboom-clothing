@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 
-describe('Horizontal Category Carousel (Option 3) Suite', () => {
+describe('Bubble Boom – Reference-Matched Shop By Category Carousel Suite', () => {
   const sliderFilePath = path.join(process.cwd(), 'src', 'components', 'category', 'category-slider.tsx')
   const pageFilePath = path.join(process.cwd(), 'src', 'app', 'page.tsx')
   const cardFilePath = path.join(process.cwd(), 'src', 'components', 'category', 'category-card.tsx')
@@ -14,12 +14,12 @@ describe('Horizontal Category Carousel (Option 3) Suite', () => {
     expect(content).toContain('export function CategorySlider')
   })
 
-  it('2. Prev and Next minimal monochrome controls are present with aria-labels', () => {
+  it('2. Prev and Next minimal monochrome square controls are present with aria-labels and centered below cards', () => {
     const content = fs.readFileSync(sliderFilePath, 'utf-8')
     expect(content).toContain('aria-label="Previous categories"')
     expect(content).toContain('aria-label="Next categories"')
-    expect(content).toContain('border border-black bg-white text-black')
-    // Must NOT have circular button classes (rounded-full)
+    expect(content).toContain('border border-neutral-300 hover:border-black bg-white text-black')
+    expect(content).toContain('w-10 h-10 sm:w-11 sm:h-11')
     expect(content).not.toContain('rounded-full')
   })
 
@@ -39,10 +39,10 @@ describe('Horizontal Category Carousel (Option 3) Suite', () => {
     expect(content).toContain('touch-pan-x')
   })
 
-  it('5. Responsive card width classes provide expected visible card ratios', () => {
+  it('5. Responsive card width classes provide expected visible card ratios with next card peek', () => {
     const content = fs.readFileSync(sliderFilePath, 'utf-8')
-    // Mobile: ~72% so next card peeks in as a swipe hint
-    expect(content).toContain('flex-[0_0_72%]')
+    // Mobile: 78vw card width so next card peeks in from the right edge
+    expect(content).toContain('flex-[0_0_78vw]')
     // Tablet: 42% / 36%
     expect(content).toContain('sm:flex-[0_0_42%]')
     expect(content).toContain('md:flex-[0_0_36%]')
@@ -69,11 +69,10 @@ describe('Horizontal Category Carousel (Option 3) Suite', () => {
     expect(content).toContain('e.preventDefault()')
   })
 
-  it('8. Homepage page.tsx uses CategorySlider instead of the previous static 4x2 / 2x4 grid', () => {
+  it('8. Homepage page.tsx uses CategorySlider instead of static grid', () => {
     const pageContent = fs.readFileSync(pageFilePath, 'utf-8')
     expect(pageContent).toContain("import { CategorySlider } from '@/components/category/category-slider'")
     expect(pageContent).toContain('<CategorySlider categories={featuredCategories} />')
-    // Ensure the old 4x2 grid container is removed from page.tsx categories section
     expect(pageContent).not.toContain('grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6')
   })
 
