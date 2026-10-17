@@ -1,7 +1,7 @@
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { ProductCard } from '@/components/product/product-card'
-import { CategoryCard } from '@/components/category/category-card'
+import { CategorySlider } from '@/components/category/category-slider'
 import { HeroCarousel } from '@/components/home/hero-carousel'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -16,7 +16,7 @@ export const revalidate = 60 // Revalidate every 60 seconds
 export default async function HomePage() {
   const [products, featuredCategories, collections, generalSettings] = await Promise.all([
     getProducts({ sortBy: 'created_at', sortOrder: 'desc' }),
-    getCategoriesWithCovers({ onlyFeatured: true, limit: 8 }),
+    getCategoriesWithCovers({ onlyFeatured: true, limit: 12 }),
     getCollections(),
     getStoreSettings<StoreGeneralSettings>('general'),
   ])
@@ -43,46 +43,9 @@ export default async function HomePage() {
           secondaryCtaLink="/collections"
         />
 
-        {/* 2. Shop By Category (Max 8 Featured Categories in 4x2 Desktop / 2x4 Mobile Grid) */}
+        {/* 2. Shop By Category Horizontal Carousel */}
         {featuredCategories.length > 0 && (
-          <section className="py-16 sm:py-24 border-b border-neutral-200">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex items-end justify-between mb-8 sm:mb-12">
-                <div>
-                  <p className="text-xs uppercase tracking-widest font-bold text-neutral-500 mb-1">
-                    Curated Wardrobe
-                  </p>
-                  <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight uppercase">
-                    Shop By Category
-                  </h2>
-                </div>
-                <Link
-                  href="/categories"
-                  className="text-xs uppercase tracking-widest font-bold hover:underline hidden sm:inline-flex items-center"
-                >
-                  View All Categories <ArrowRight size={14} className="ml-1" />
-                </Link>
-              </div>
-
-              {/* Responsive Grid: Desktop 4 cols x 2 rows, Tablet 3 cols, Mobile 2 cols x 4 rows */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-                {featuredCategories.map((cat, idx) => (
-                  <CategoryCard key={cat.id} category={cat} priority={idx < 4} />
-                ))}
-              </div>
-
-              {/* Mobile View All Categories Link */}
-              <div className="mt-8 text-center sm:hidden">
-                <Link
-                  href="/categories"
-                  className="inline-flex items-center justify-center w-full py-3 border border-black text-xs font-mono uppercase font-bold tracking-wider hover:bg-black hover:text-white transition-colors"
-                >
-                  View All Categories
-                  <ArrowRight size={14} className="ml-2" />
-                </Link>
-              </div>
-            </div>
-          </section>
+          <CategorySlider categories={featuredCategories} />
         )}
 
         {/* 3. New Arrivals (Only visible when products exist) */}

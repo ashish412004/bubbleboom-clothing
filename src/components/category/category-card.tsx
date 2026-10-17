@@ -9,14 +9,24 @@ interface CategoryCardProps {
   category: CategoryWithCover
   priority?: boolean
   className?: string
+  onClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void
+  draggable?: boolean
 }
 
-export function CategoryCard({ category, priority = false, className = '' }: CategoryCardProps) {
+export function CategoryCard({
+  category,
+  priority = false,
+  className = '',
+  onClick,
+  draggable = false,
+}: CategoryCardProps) {
   const hasCoverImage = Boolean(category.cover_image && category.cover_image.trim().length > 0)
 
   return (
     <Link
       href={`/shop?category=${encodeURIComponent(category.slug)}`}
+      onClick={onClick}
+      draggable={draggable}
       className={`group relative block w-full aspect-[3/4] sm:aspect-[4/5] overflow-hidden bg-neutral-950 border border-neutral-900 focus:outline-none focus:ring-1 focus:ring-white transition-all select-none ${className}`}
       aria-label={`Browse ${category.name}`}
     >
