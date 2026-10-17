@@ -24,6 +24,7 @@ import { formatPrice, getSafeImageUrl, findImageForVariantColor } from '@/lib/ut
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
 import { load as loadCashfree } from '@cashfreepayments/cashfree-js'
+import { LocationPickerModal, LocationAddressResult } from '@/components/location/location-picker-modal'
 
 export function normalizeIndianMobile(input: string): string {
   let clean = (input || '').replace(/\D/g, '')
@@ -98,6 +99,11 @@ export function CheckoutForm({
   // Double click lock ref
   const isSubmittingRef = useRef(false)
   const addressSectionRef = useRef<HTMLDivElement>(null)
+  const addressLine1Ref = useRef<HTMLInputElement>(null)
+
+  // Map Location Picker State
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false)
+  const [modalCoords, setModalCoords] = useState<{ lat?: number; lon?: number }>({})
 
   const defaultAddr = initialAddresses.find((a: any) => a.is_default) || initialAddresses[0]
 
@@ -324,81 +330,97 @@ export function CheckoutForm({
   const handleDetectLocation = () => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
       toast.error('Geolocation is not supported by your browser.')
+      setIsLocationModalOpen(true)
       return
     }
 
     setLocating(true)
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords
-          const res = await fetch(`/api/location/reverse?lat=${latitude}&lon=${longitude}`)
-          const data = await res.json()
-          if (!res.ok || !data.success) {
-            throw new Error(data.error || 'Failed to resolve location address.')
-          }
-
-          const addr = data.address
-          if (addr.address_line1) {
-            setAddressLine1(addr.address_line1)
-            setErrors((prev) => {
-              const next = { ...prev }
-              delete next.addressLine1
-              return next
-            })
-          }
-          if (addr.city) {
-            setCity(addr.city)
-            setErrors((prev) => {
-              const next = { ...prev }
-              delete next.city
-              return next
-            })
-          }
-          if (addr.state) {
-            const matchedState = indianStates.find(
-              (s) =>
-                s.toLowerCase() === addr.state.toLowerCase() ||
-                s.toLowerCase().includes(addr.state.toLowerCase()) ||
-                addr.state.toLowerCase().includes(s.toLowerCase())
-            )
-            setState(matchedState || addr.state)
-            setErrors((prev) => {
-              const next = { ...prev }
-              delete next.state
-              return next
-            })
-          }
-          if (addr.pin_code && addr.pin_code.length === 6) {
-            setPinCode(addr.pin_code)
-            setPinSuccessMsg(`✓ ${addr.city || ''}, ${addr.state || ''}`)
-            setErrors((prev) => {
-              const next = { ...prev }
-              delete next.pinCode
-              return next
-            })
-          }
-          toast.success(`📍 Location detected: ${addr.city || addr.state || 'Address filled'}`)
-        } catch (err: any) {
-          toast.error(err.message || 'Could not fetch address for this location.')
-        } finally {
-          setLocating(false)
-        }
+      (position) => {
+        setLocating(false)
+        const { latitude, longitude } = position.coords
+        setModalCoords({ lat: latitude, lon: longitude })
+        setIsLocationModalOpen(true)
       },
       (geoErr) => {
         setLocating(false)
-        let msg = 'Could not access location.'
+        let msg = 'Could not access exact GPS position.'
         if (geoErr.code === 1) {
-          msg = 'Location permission denied. Please allow location access in your browser settings.'
-        } else if (geoErr.code === 2) {
-          msg = 'Location position unavailable.'
-        } else if (geoErr.code === 3) {
-          msg = 'Location request timed out.'
+          msg = 'Location permission was denied. You can select your address on the map or enter it manually.'
         }
-        toast.error(msg)
+        toast(msg, { icon: '📍' })
+        setModalCoords({})
+        setIsLocationModalOpen(true)
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
     )
+  }
+
+  const handleConfirmLocation = (loc: LocationAddressResult) => {
+    setIsLocationModalOpen(false)
+
+    // 1. Street / Locality
+    if (loc.address_line1) {
+      setAddressLine1(loc.address_line1)
+      setErrors((prev) => {
+        const next = { ...prev }
+        delete next.addressLine1
+        return next
+      })
+    }
+
+    // 2. Additional area details if not already typed
+    if (loc.address_line2 && !addressLine2) {
+      setAddressLine2(loc.address_line2)
+    }
+    if (loc.landmark && !landmark) {
+      setLandmark(loc.landmark)
+    }
+
+    // 3. City
+    if (loc.city) {
+      setCity(loc.city)
+      setErrors((prev) => {
+        const next = { ...prev }
+        delete next.city
+        return next
+      })
+    }
+
+    // 4. State
+    if (loc.state) {
+      const matchedState = indianStates.find(
+        (s) =>
+          s.toLowerCase() === loc.state.toLowerCase() ||
+          s.toLowerCase().includes(loc.state.toLowerCase()) ||
+          loc.state.toLowerCase().includes(s.toLowerCase()) ||
+          (loc.state.toLowerCase().includes('delhi') && s.includes('Delhi'))
+      )
+      setState(matchedState || loc.state)
+      setErrors((prev) => {
+        const next = { ...prev }
+        delete next.state
+        return next
+      })
+    }
+
+    // 5. PIN Code & Delivery check
+    if (loc.pin_code && /^[1-9][0-9]{5}$/.test(loc.pin_code)) {
+      setPinCode(loc.pin_code)
+      setPinSuccessMsg(`✓ ${loc.city || ''}, ${loc.state || ''}`)
+      setErrors((prev) => {
+        const next = { ...prev }
+        delete next.pinCode
+        return next
+      })
+      handlePinChange(loc.pin_code)
+    }
+
+    // 6. User prompt & guidance
+    toast.success('Location selected! Please complete your flat/building details.')
+    setTimeout(() => {
+      addressLine1Ref.current?.focus()
+    }, 150)
   }
 
   // Dynamically compute totals
@@ -574,7 +596,8 @@ export function CheckoutForm({
   ]
 
   return (
-    <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+    <>
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-10">
       {/* Left Column: Delivery & Payment Details */}
       <div className="lg:col-span-7 space-y-8" ref={addressSectionRef}>
         {/* Mobile Collapsible Order Summary Banner (< lg viewports) */}
@@ -828,6 +851,7 @@ export function CheckoutForm({
             </label>
             <input
               type="text"
+              ref={addressLine1Ref}
               value={addressLine1}
               onChange={(e) => handleFieldChange('addressLine1', e.target.value, setAddressLine1)}
               onBlur={(e) => handleBlur('addressLine1', e.target.value)}
@@ -1312,5 +1336,16 @@ export function CheckoutForm({
         </div>
       </div>
     </form>
+
+    {/* Interactive Google Maps Style Location Picker */}
+    <LocationPickerModal
+      isOpen={isLocationModalOpen}
+      onClose={() => setIsLocationModalOpen(false)}
+      onConfirm={handleConfirmLocation}
+      initialLat={modalCoords.lat}
+      initialLon={modalCoords.lon}
+      title="SELECT DELIVERY LOCATION"
+    />
+  </>
   )
 }

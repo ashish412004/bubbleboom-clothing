@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, MapPin, Check, AlertCircle, Navigation, Edit2, X, Phone, Home, Briefcase, Tag, Loader2 } from 'lucide-react'
+import { LocationPickerModal, LocationAddressResult } from '@/components/location/location-picker-modal'
 
 const indianStates = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
@@ -68,61 +69,75 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
   const [editPinLoading, setEditPinLoading] = useState(false)
   const [editPinSuccessMsg, setEditPinSuccessMsg] = useState('')
 
+  // Map Location Picker State
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false)
+  const [isEditModeModal, setIsEditModeModal] = useState(false)
+  const [modalCoords, setModalCoords] = useState<{ lat?: number; lon?: number }>({})
+
   const handleDetectLocation = (isEdit = false) => {
+    setIsEditModeModal(isEdit)
     if (typeof window === 'undefined' || !navigator.geolocation) {
       toast.error('Geolocation is not supported by your browser.')
+      setIsLocationModalOpen(true)
       return
     }
 
     setLocating(true)
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords
-          const res = await fetch(`/api/location/reverse?lat=${latitude}&lon=${longitude}`)
-          const data = await res.json()
-          if (!res.ok || !data.success) {
-            throw new Error(data.error || 'Failed to resolve location address.')
-          }
-
-          const addr = data.address
-          const matchedState = indianStates.find(
-            (s) =>
-              s.toLowerCase() === addr.state?.toLowerCase() ||
-              s.toLowerCase().includes(addr.state?.toLowerCase()) ||
-              addr.state?.toLowerCase().includes(s.toLowerCase())
-          ) || addr.state || ''
-
-          if (isEdit) {
-            if (addr.address_line1) setEditLine1(addr.address_line1)
-            if (addr.city) setEditCity(addr.city)
-            if (matchedState) setEditState(matchedState)
-            if (addr.pin_code && addr.pin_code.length === 6) {
-              setEditPinCode(addr.pin_code)
-              setEditPinSuccessMsg(`✓ ${addr.city || ''}, ${matchedState}`)
-            }
-          } else {
-            if (addr.address_line1) setLine1(addr.address_line1)
-            if (addr.city) setCity(addr.city)
-            if (matchedState) setState(matchedState)
-            if (addr.pin_code && addr.pin_code.length === 6) {
-              setPinCode(addr.pin_code)
-              setPinSuccessMsg(`✓ ${addr.city || ''}, ${matchedState}`)
-            }
-          }
-          toast.success('Location detected successfully!')
-        } catch (err: any) {
-          toast.error(err.message || 'Could not auto-detect location.')
-        } finally {
-          setLocating(false)
-        }
-      },
-      () => {
-        toast.error('Location permission was denied or timed out.')
+      (position) => {
         setLocating(false)
+        const { latitude, longitude } = position.coords
+        setModalCoords({ lat: latitude, lon: longitude })
+        setIsLocationModalOpen(true)
       },
-      { timeout: 10000 }
+      (geoErr) => {
+        setLocating(false)
+        let msg = 'Could not access exact GPS position.'
+        if (geoErr.code === 1) {
+          msg = 'Location permission was denied. You can select your address on the map or enter it manually.'
+        }
+        toast(msg, { icon: '📍' })
+        setModalCoords({})
+        setIsLocationModalOpen(true)
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
     )
+  }
+
+  const handleConfirmLocation = (loc: LocationAddressResult) => {
+    setIsLocationModalOpen(false)
+
+    const matchedState = indianStates.find(
+      (s) =>
+        s.toLowerCase() === loc.state.toLowerCase() ||
+        s.toLowerCase().includes(loc.state.toLowerCase()) ||
+        loc.state.toLowerCase().includes(s.toLowerCase()) ||
+        (loc.state.toLowerCase().includes('delhi') && s.includes('Delhi'))
+    ) || loc.state || ''
+
+    if (isEditModeModal) {
+      if (loc.address_line1) setEditLine1(loc.address_line1)
+      if (loc.address_line2 && !editLine2) setEditLine2(loc.address_line2)
+      if (loc.city) setEditCity(loc.city)
+      if (matchedState) setEditState(matchedState)
+      if (loc.pin_code && /^[1-9][0-9]{5}$/.test(loc.pin_code)) {
+        setEditPinCode(loc.pin_code)
+        setEditPinSuccessMsg(`✓ ${loc.city || ''}, ${matchedState}`)
+        handlePinChange(loc.pin_code, true)
+      }
+    } else {
+      if (loc.address_line1) setLine1(loc.address_line1)
+      if (loc.address_line2 && !line2) setLine2(loc.address_line2)
+      if (loc.city) setCity(loc.city)
+      if (matchedState) setState(matchedState)
+      if (loc.pin_code && /^[1-9][0-9]{5}$/.test(loc.pin_code)) {
+        setPinCode(loc.pin_code)
+        setPinSuccessMsg(`✓ ${loc.city || ''}, ${matchedState}`)
+        handlePinChange(loc.pin_code, false)
+      }
+    }
+
+    toast.success('Location selected! Please complete your flat/building details.')
   }
 
   const handlePinChange = async (val: string, isEdit = false) => {
@@ -924,6 +939,16 @@ export function AddressManager({ initialAddresses }: { initialAddresses: Address
           </form>
         </div>
       )}
+
+      {/* Interactive Google Maps Style Location Picker */}
+      <LocationPickerModal
+        isOpen={isLocationModalOpen}
+        onClose={() => setIsLocationModalOpen(false)}
+        onConfirm={handleConfirmLocation}
+        initialLat={modalCoords.lat}
+        initialLon={modalCoords.lon}
+        title={isEditModeModal ? 'UPDATE DELIVERY LOCATION' : 'SELECT DELIVERY LOCATION'}
+      />
     </div>
   )
 }
