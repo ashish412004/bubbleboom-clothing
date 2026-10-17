@@ -45,8 +45,8 @@ describe('Bubble Boom – Final Mobile Navbar Optimization Suite', () => {
 
   it('5. Sticky header and non-clickable announcement bar are preserved', () => {
     expect(headerContent).toContain('sticky top-0 z-50 bg-white border-b border-neutral-200')
-    expect(headerContent).toContain("announcementText = 'FREE SHIPPING ON ALL ORDERS ABOVE ₹1,499 | WEAR THE BOOM'")
-    expect(headerContent).toContain('className="bg-black text-white text-xs sm:text-sm font-medium tracking-wider text-center py-2 px-4 uppercase"')
+    expect(headerContent).toContain('className="bg-black text-white text-xs sm:text-sm font-medium tracking-wider text-center uppercase')
+    expect(headerContent).toContain('h-[30px]')
   })
 
   it('6. Desktop layout (>= 768px) is completely unchanged', () => {

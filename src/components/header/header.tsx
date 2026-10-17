@@ -49,8 +49,40 @@ export function Header({
     <header className="sticky top-0 z-50 bg-white border-b border-neutral-200">
       {/* Informational Announcement Bar (Non-clickable, informational display only) */}
       {announcementText && (
-        <div className="bg-black text-white text-xs sm:text-sm font-medium tracking-wider text-center py-2 px-4 uppercase">
-          <p className="m-0 leading-normal">{announcementText}</p>
+        <div className="bg-black text-white text-xs sm:text-sm font-medium tracking-wider text-center uppercase select-none cursor-default overflow-hidden h-[30px] md:h-auto md:py-2 px-4 flex items-center justify-center relative group"
+          role="region"
+          aria-label="Announcement"
+        >
+          {/* Accessible single announcement for screen readers */}
+          <p className="sr-only" aria-live="polite">
+            {announcementText}
+          </p>
+
+          {/* Visual Presentation */}
+          <div aria-hidden="true" className="w-full flex items-center justify-center overflow-hidden">
+            {/* Desktop / tablet display (>= 640px): Centered static single line */}
+            <div className="hidden sm:flex items-center justify-center w-full">
+              <p className="m-0 leading-normal text-xs sm:text-sm font-medium tracking-wider text-center uppercase whitespace-nowrap">
+                {announcementText}
+              </p>
+            </div>
+
+            {/* Mobile display (< 640px): Slim 30px bar with seamless ticker marquee */}
+            <div className="sm:hidden flex items-center w-full overflow-hidden">
+              <div className="announcement-ticker-track flex items-center whitespace-nowrap group-hover:[animation-play-state:paused]">
+                <div className="announcement-ticker-item flex items-center shrink-0">
+                  <span className="inline-block px-6 text-[11px] tracking-wider leading-none">
+                    {announcementText}
+                  </span>
+                </div>
+                <div className="announcement-ticker-item flex items-center shrink-0">
+                  <span className="inline-block px-6 text-[11px] tracking-wider leading-none">
+                    {announcementText}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
