@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { X, Heart, ShoppingBag, Check, ArrowRight } from 'lucide-react'
 import { formatPrice, formatDiscount, getSafeImageUrl, normalizeColor, parseProductImage } from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
+import { useAuthStore } from '@/lib/auth-store'
 import toast from 'react-hot-toast'
 
 export interface QuickViewProduct {
@@ -38,6 +40,8 @@ interface QuickViewModalProps {
 }
 
 export function QuickViewModal({ product, isOpen, onClose }: QuickViewModalProps) {
+  const router = useRouter()
+  const authUser = useAuthStore((state) => state.user)
   const isWishlisted = useCartStore((state) => (product ? state.isItemWishlisted(product.id) : false))
   const toggleWishlistStore = useCartStore((state) => state.toggleWishlistStore)
   const isVariantInCart = useCartStore((state) => state.isVariantInCart)
@@ -161,6 +165,15 @@ export function QuickViewModal({ product, isOpen, onClose }: QuickViewModalProps
   }
 
   const handleWishlistToggle = async () => {
+    if (!product) return
+
+    if (!authUser) {
+      onClose()
+      const returnUrl = `/products/${product.slug}?action=wishlist${activeVariant?.id ? `&variantId=${encodeURIComponent(activeVariant.id)}` : ''}`
+      router.push(`/login?next=${encodeURIComponent(returnUrl)}`)
+      return
+    }
+
     try {
       const res = await toggleWishlistStore(product.id, activeVariant?.id)
       if (res.inWishlist) {
@@ -176,6 +189,7 @@ export function QuickViewModal({ product, isOpen, onClose }: QuickViewModalProps
       toast.error('Failed to update wishlist')
     }
   }
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-8">

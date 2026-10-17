@@ -2,10 +2,12 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import { Heart, Eye } from 'lucide-react'
 import { formatPrice, formatDiscount, getSafeImageUrl } from '@/lib/utils'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useCartStore } from '@/lib/cart-store'
+import { useAuthStore } from '@/lib/auth-store'
 import { QuickViewModal } from './quick-view-modal'
 import toast from 'react-hot-toast'
 
@@ -31,10 +33,43 @@ export interface ProductCardProps {
 }
 
 export function ProductCard({ product, priority = false }: ProductCardProps) {
+  const router = useRouter()
+  const authUser = useAuthStore((state) => state.user)
   const [imageError, setImageError] = useState(false)
   const [quickViewOpen, setQuickViewOpen] = useState(false)
   const isWishlisted = useCartStore((state) => state.isItemWishlisted(product.id))
   const toggleWishlistStore = useCartStore((state) => state.toggleWishlistStore)
+  const handledWishlistRef = useRef(false)
+
+  // Smart Login Redirect: auto-resume wishlist addition upon authenticated return
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const searchParams = new URLSearchParams(window.location.search)
+    const action = searchParams.get('action')
+    const targetProductId = searchParams.get('productId')
+
+    if (action === 'wishlist' && targetProductId === product.id && authUser && !handledWishlistRef.current) {
+      handledWishlistRef.current = true
+      if (!isWishlisted) {
+        toggleWishlistStore(product.id)
+          .then((res) => {
+            if (res.inWishlist) {
+              toast.success('Added to wishlist', {
+                style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
+              })
+            }
+          })
+          .catch(() => {})
+      }
+
+      // Clean URL query parameters without page reload
+      const url = new URL(window.location.href)
+      url.searchParams.delete('action')
+      url.searchParams.delete('productId')
+      const newSearch = url.searchParams.toString()
+      window.history.replaceState({}, '', url.pathname + (newSearch ? `?${newSearch}` : ''))
+    }
+  }, [authUser, product.id, isWishlisted, toggleWishlistStore])
 
   const firstImage = product.images?.[0]
   const secondImage = product.images?.[1]
@@ -49,6 +84,17 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
   const handleWishlistToggle = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+
+    // If unauthenticated, redirect to login with safe return path and intended wishlist action
+    if (!authUser) {
+      const currentPath = typeof window !== 'undefined'
+        ? window.location.pathname + window.location.search
+        : '/shop'
+      const separator = currentPath.includes('?') ? '&' : '?'
+      const returnUrl = `${currentPath}${separator}action=wishlist&productId=${encodeURIComponent(product.id)}`
+      router.push(`/login?next=${encodeURIComponent(returnUrl)}`)
+      return
+    }
 
     try {
       const res = await toggleWishlistStore(product.id)
@@ -67,6 +113,7 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
       })
     }
   }
+
 
   return (
     <>

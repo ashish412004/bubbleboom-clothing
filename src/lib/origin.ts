@@ -81,20 +81,15 @@ export function getAppOrigin(request?: Request): string {
 }
 
 
+import { getSafeAuthReturnPath } from './auth-redirect'
+
+export { getSafeAuthReturnPath }
+
 /**
  * Validates a redirect target path to prevent open redirect vulnerabilities.
- * Allows only internal relative paths, and rejects auth loops (/login, /signup).
+ * Delegates to centralized getSafeAuthReturnPath.
  */
 export function getSafeRedirect(nextParam: string | null | undefined, fallback: string = '/'): string {
-  if (
-    nextParam &&
-    nextParam.startsWith('/') &&
-    !nextParam.startsWith('//') &&
-    !nextParam.startsWith('/\\') &&
-    !nextParam.startsWith('/login') &&
-    !nextParam.startsWith('/signup')
-  ) {
-    return nextParam
-  }
-  return fallback
+  return getSafeAuthReturnPath(nextParam, fallback)
 }
+

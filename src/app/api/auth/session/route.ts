@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
     if (action === 'logout') {
       const response = NextResponse.json({ success: true })
       response.cookies.delete('bb_auth_user')
+      response.cookies.delete('bb_auth_redirect')
 
       if (isSupabaseConfigured()) {
         try {

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import toast from 'react-hot-toast'
@@ -19,7 +20,9 @@ import {
 
 type ResetStep = 'email' | 'otp' | 'password' | 'completed'
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordForm() {
+  const searchParams = useSearchParams()
+  const nextParam = searchParams.get('next')
   const [step, setStep] = useState<ResetStep>('email')
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
@@ -188,12 +191,8 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-white text-black">
-      <Header />
-
-      <main className="flex-1 flex items-center justify-center py-16 px-4 bg-[#F8F8F6]">
-        <div className="w-full max-w-md mx-auto p-8 border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-          {/* STEP 4: Success Screen */}
+    <div className="w-full max-w-md mx-auto p-8 border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+      {/* STEP 4: Success Screen */}
           {step === 'completed' ? (
             <div className="text-center">
               <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-4 border border-black">
@@ -205,7 +204,7 @@ export default function ForgotPasswordPage() {
               </p>
               <div className="mt-8 pt-6 border-t border-neutral-200">
                 <Link
-                  href="/login?reset=success"
+                  href={`/login?reset=success${nextParam ? `&next=${encodeURIComponent(nextParam)}` : ''}`}
                   className="inline-block bg-black text-white px-6 py-2.5 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors"
                 >
                   Sign In With New Password
@@ -407,7 +406,7 @@ export default function ForgotPasswordPage() {
 
               <div className="mt-8 pt-6 border-t border-neutral-200 text-center">
                 <Link
-                  href="/login"
+                  href={`/login${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ''}`}
                   className="text-xs font-mono text-neutral-600 hover:text-black hover:underline uppercase tracking-wider"
                 >
                   ← Back to Sign In
@@ -415,10 +414,23 @@ export default function ForgotPasswordPage() {
               </div>
             </>
           )}
-        </div>
+    </div>
+  )
+}
+
+export default function ForgotPasswordPage() {
+  return (
+    <div className="flex flex-col min-h-screen bg-white text-black">
+      <Header />
+
+      <main className="flex-1 flex items-center justify-center py-16 px-4 bg-[#F8F8F6]">
+        <Suspense fallback={<div className="p-8 text-center font-mono text-xs uppercase">Loading reset portal...</div>}>
+          <ForgotPasswordForm />
+        </Suspense>
       </main>
 
       <Footer />
     </div>
   )
 }
+

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useCartStore } from '@/lib/cart-store'
 import { useAuthStore } from '@/lib/auth-store'
 import { createClient } from '@/lib/supabase/client'
-import { getSafeRedirect } from '@/lib/origin'
+import { getSafeAuthReturnPath } from '@/lib/auth-redirect'
 import toast from 'react-hot-toast'
 import {
   AlertCircle,
@@ -50,7 +50,7 @@ export function SignupForm() {
         if (res.ok) {
           const data = await res.json()
           if (data.user) {
-            const safeRedirect = getSafeRedirect(searchParams.get('next'), '/')
+            const safeRedirect = getSafeAuthReturnPath(searchParams.get('next'), '/')
             router.replace(safeRedirect)
           }
 
@@ -255,7 +255,7 @@ export function SignupForm() {
       await refreshCart()
 
       // Redirect to intended destination (or "/" by default) using history replacement
-      const safeRedirect = getSafeRedirect(searchParams.get('next'), '/')
+      const safeRedirect = getSafeAuthReturnPath(searchParams.get('next'), '/')
       window.location.replace(safeRedirect)
 
     } catch (err: any) {

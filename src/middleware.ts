@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getSafeAuthReturnPath } from '@/lib/auth-redirect'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -18,7 +19,9 @@ export async function middleware(request: NextRequest) {
       (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup') &&
       hasAuthCookie
     ) {
-      return NextResponse.redirect(new URL('/', request.url))
+      const nextParam = request.nextUrl.searchParams.get('next')
+      const target = getSafeAuthReturnPath(nextParam, '/')
+      return NextResponse.redirect(new URL(target, request.url))
     }
     return response
   }
@@ -29,6 +32,7 @@ export async function middleware(request: NextRequest) {
   const hasPotentialAuth = hasAuthTokenCookie || Boolean(rawAuth)
 
   const pathname = request.nextUrl.pathname
+  const fullTarget = pathname + (request.nextUrl.search || '')
 
   // Fast path: if visitor has no auth cookies whatsoever, resolve instantly in 0ms
   if (!hasPotentialAuth) {
@@ -37,10 +41,10 @@ export async function middleware(request: NextRequest) {
     }
     if (pathname.startsWith('/admin')) {
       if (process.env.NODE_ENV !== 'production') return response
-      return NextResponse.redirect(new URL('/login?next=' + encodeURIComponent(pathname), request.url))
+      return NextResponse.redirect(new URL('/login?next=' + encodeURIComponent(fullTarget), request.url))
     }
     if (pathname.startsWith('/account')) {
-      return NextResponse.redirect(new URL('/login?next=' + encodeURIComponent(pathname), request.url))
+      return NextResponse.redirect(new URL('/login?next=' + encodeURIComponent(fullTarget), request.url))
     }
   }
 
@@ -75,13 +79,15 @@ export async function middleware(request: NextRequest) {
 
   const hasAuth = Boolean(user || rawAuth)
 
-  // Redirect already signed-in customer away from /login and /signup to homepage
+  // Redirect already signed-in customer away from /login and /signup to intended return path or homepage
   if (
     request.nextUrl.pathname === '/login' ||
     request.nextUrl.pathname === '/signup'
   ) {
     if (hasAuth) {
-      return NextResponse.redirect(new URL('/', request.url))
+      const nextParam = request.nextUrl.searchParams.get('next')
+      const target = getSafeAuthReturnPath(nextParam, '/')
+      return NextResponse.redirect(new URL(target, request.url))
     }
     return response
   }
@@ -94,7 +100,7 @@ export async function middleware(request: NextRequest) {
     }
 
     if (!user) {
-      return NextResponse.redirect(new URL('/login?next=/admin', request.url))
+      return NextResponse.redirect(new URL('/login?next=' + encodeURIComponent(fullTarget), request.url))
     }
 
     // Check if user is admin
@@ -114,12 +120,13 @@ export async function middleware(request: NextRequest) {
   // Protect account routes
   if (request.nextUrl.pathname.startsWith('/account')) {
     if (!hasAuth) {
-      return NextResponse.redirect(new URL('/login?next=/account', request.url))
+      return NextResponse.redirect(new URL('/login?next=' + encodeURIComponent(fullTarget), request.url))
     }
   }
 
   return response
 }
+
 
 export const config = {
   matcher: ['/admin/:path*', '/account/:path*', '/login', '/signup'],

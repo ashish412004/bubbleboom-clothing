@@ -6,7 +6,8 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useCartStore } from '@/lib/cart-store'
 import { useAuthStore } from '@/lib/auth-store'
-import { getAppOrigin, getSafeRedirect } from '@/lib/origin'
+import { getAppOrigin } from '@/lib/origin'
+import { getSafeAuthReturnPath, setAuthRedirectCookie } from '@/lib/auth-redirect'
 import toast from 'react-hot-toast'
 import {
   AlertCircle,
@@ -28,7 +29,7 @@ export function LoginForm() {
   const isAdminTarget = nextParam?.startsWith('/admin')
 
   // Prevent open redirects: only allow safe local relative paths, default to homepage (/)
-  const safeRedirect = getSafeRedirect(nextParam, '/')
+  const safeRedirect = getSafeAuthReturnPath(nextParam, '/')
 
   const refreshCart = useCartStore((s) => s.refreshCart)
 
@@ -268,6 +269,9 @@ export function LoginForm() {
       const supabase = createClient()
       const appOrigin = getAppOrigin()
       const redirectTo = `${appOrigin}/auth/callback?next=${encodeURIComponent(safeRedirect)}`
+
+      // Persist intended destination in backup cookie in case OAuth provider drops query parameters
+      setAuthRedirectCookie(safeRedirect)
 
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',

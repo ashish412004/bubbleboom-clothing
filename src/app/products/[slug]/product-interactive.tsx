@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useAuthStore } from '@/lib/auth-store'
 import {
   Heart,
   ShoppingBag,
@@ -78,6 +79,7 @@ export function ProductInteractive({
   exchangeSettings?: StoreExchangeSettings
 }) {
   const router = useRouter()
+  const authUser = useAuthStore((state) => state.user)
   const incrementCart = useCartStore((state) => state.incrementCount)
   const isWishlistedInStore = useCartStore((state) => state.isItemWishlisted)
   const toggleWishlistStore = useCartStore((state) => state.toggleWishlistStore)
@@ -97,6 +99,42 @@ export function ProductInteractive({
     new Set(product.variants.map((v) => v.color?.trim()).filter(Boolean))
   ) as string[]
   const [selectedColor, setSelectedColor] = useState(colors[0] || '')
+
+  const handledWishlistRef = useRef(false)
+
+  // Smart Login Redirect: restore selected color and auto-resume wishlist addition upon authenticated return
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const searchParams = new URLSearchParams(window.location.search)
+
+    const colorFromUrl = searchParams.get('color')
+    if (colorFromUrl && colors.includes(colorFromUrl)) {
+      setSelectedColor(colorFromUrl)
+    }
+
+    const action = searchParams.get('action')
+    if (action === 'wishlist' && authUser && !handledWishlistRef.current) {
+      handledWishlistRef.current = true
+      const targetVariantId = searchParams.get('variantId')
+      if (!isWishlistedInStore(product.id, targetVariantId || undefined)) {
+        toggleWishlistStore(product.id, targetVariantId || undefined)
+          .then((res) => {
+            if (res.inWishlist) {
+              toast.success('Saved to wishlist', {
+                style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
+              })
+            }
+          })
+          .catch(() => {})
+      }
+
+      const url = new URL(window.location.href)
+      url.searchParams.delete('action')
+      url.searchParams.delete('variantId')
+      const newSearch = url.searchParams.toString()
+      window.history.replaceState({}, '', url.pathname + (newSearch ? `?${newSearch}` : ''))
+    }
+  }, [authUser, product.id, colors, isWishlistedInStore, toggleWishlistStore])
 
   // Images mapped specifically to selected colour: primary image first, then sort_order
   const activeColorLower = normalizeColor(selectedColor)
@@ -295,6 +333,12 @@ export function ProductInteractive({
 
 
   const toggleWishlist = async () => {
+    if (!authUser) {
+      const returnUrl = `/products/${product.slug}?action=wishlist&color=${encodeURIComponent(selectedColor)}${activeVariant?.id ? `&variantId=${encodeURIComponent(activeVariant.id)}` : ''}`
+      router.push(`/login?next=${encodeURIComponent(returnUrl)}`)
+      return
+    }
+
     try {
       const res = await toggleWishlistStore(product.id, activeVariant?.id)
       if (res.inWishlist) {
@@ -312,6 +356,7 @@ export function ProductInteractive({
       })
     }
   }
+
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStartX(e.targetTouches[0].clientX)

@@ -21,6 +21,7 @@ import { useAuthStore } from '@/lib/auth-store'
 import { useSearchStore } from '@/lib/search-store'
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { InstagramIcon } from '@/components/icons/instagram-icon'
+import { clearAuthRedirectCookie } from '@/lib/auth-redirect'
 import toast from 'react-hot-toast'
 import { NavigationItem, DEFAULT_NAVIGATION_ITEMS } from '@/types/navigation'
 
@@ -109,8 +110,9 @@ export function Header({
         throw new Error('Failed to invalidate session on server')
       }
 
-      // 3. Clear user-specific client auth state
+      // 3. Clear user-specific client auth state & clear stale redirect context
       useAuthStore.getState().clearUser()
+      clearAuthRedirectCookie()
 
       // 4. Close mobile sidebar
       setMobileMenuOpen(false)
@@ -334,7 +336,7 @@ export function Header({
             </Link>
 
             <Link
-              href={mounted && authUser ? '/account' : '/login'}
+              href={mounted && authUser ? '/account' : '/login?next=/account'}
               className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black inline-flex items-center gap-1.5"
               aria-label={mounted && authUser ? `Account (${authUser.name})` : 'Customer account'}
             >

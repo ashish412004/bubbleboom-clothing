@@ -1,7 +1,8 @@
 import { createServerClientWithCookieCollector } from '@/lib/supabase/server'
 import { mergeGuestCartIntoUserCart } from '@/lib/cart'
 import { mergeGuestWishlistIntoUserWishlist } from '@/lib/wishlist'
-import { getAppOrigin, getSafeRedirect } from '@/lib/origin'
+import { getAppOrigin } from '@/lib/origin'
+import { getSafeAuthReturnPath, AUTH_REDIRECT_COOKIE } from '@/lib/auth-redirect'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
@@ -12,11 +13,14 @@ export async function GET(request: Request) {
   const oauthError = requestUrl.searchParams.get('error')
   const oauthErrorDesc = requestUrl.searchParams.get('error_description')
 
+  const cookieStore = await cookies()
+  const cookieNext = cookieStore.get(AUTH_REDIRECT_COOKIE)?.value
+
   // Resolve approved app origin (guaranteed non-localhost in production)
   const appOrigin = getAppOrigin(request)
 
   // Validate redirect to prevent open redirect vulnerabilities, default to homepage (/)
-  const safeRedirect = getSafeRedirect(nextParam, '/')
+  const safeRedirect = getSafeAuthReturnPath(nextParam || cookieNext, '/')
 
   // 1. Handle incoming OAuth provider errors (e.g. user cancelled prompt)
   if (oauthError || oauthErrorDesc) {
@@ -151,6 +155,14 @@ export async function GET(request: Request) {
     sameSite: 'lax',
   })
 
+  // 10. Clear short-lived OAuth redirect backup cookie so it does not linger
+  response.cookies.set(AUTH_REDIRECT_COOKIE, '', {
+    path: '/',
+    maxAge: 0,
+    sameSite: 'lax',
+  })
+
   return response
 }
+
 
