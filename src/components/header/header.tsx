@@ -2,11 +2,26 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import {
+  Search,
+  User,
+  Heart,
+  ShoppingBag,
+  Menu,
+  X,
+  ChevronDown,
+  Headset,
+  LogOut,
+  Loader2,
+} from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useCartStore } from '@/lib/cart-store'
 import { useAuthStore } from '@/lib/auth-store'
 import { useSearchStore } from '@/lib/search-store'
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
+import { InstagramIcon } from '@/components/icons/instagram-icon'
+import toast from 'react-hot-toast'
 import { NavigationItem, DEFAULT_NAVIGATION_ITEMS } from '@/types/navigation'
 
 interface HeaderProps {
@@ -20,8 +35,10 @@ export function Header({
   announcementLink = '/shop',
   initialNavItems,
 }: HeaderProps) {
+  const router = useRouter()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
   const [navItems, setNavItems] = useState<NavigationItem[]>(initialNavItems || DEFAULT_NAVIGATION_ITEMS)
   const [mobileExpandedDropdown, setMobileExpandedDropdown] = useState<string | null>(null)
   const [desktopActiveDropdown, setDesktopActiveDropdown] = useState<string | null>(null)
@@ -65,6 +82,51 @@ export function Header({
       document.body.style.overflow = 'unset'
     }
   }, [mobileMenuOpen])
+
+  const handleSignOut = async () => {
+    if (signingOut) return
+    setSigningOut(true)
+
+    try {
+      // 1. Client-side Supabase signOut
+      if (isSupabaseConfigured()) {
+        try {
+          const supabase = createClient()
+          await supabase.auth.signOut()
+        } catch (supabaseErr) {
+          console.warn('[SignOut] Client signOut warning:', supabaseErr)
+        }
+      }
+
+      // 2. Invalidate server-side session cookie via /api/auth/session
+      const res = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to invalidate session on server')
+      }
+
+      // 3. Clear user-specific client auth state
+      useAuthStore.getState().clearUser()
+
+      // 4. Close mobile sidebar
+      setMobileMenuOpen(false)
+
+      toast.success('Signed out successfully')
+
+      // 5. Redirect to homepage & refresh server components
+      router.push('/')
+      router.refresh()
+    } catch (err: any) {
+      console.error('[SignOut] Error:', err)
+      toast.error('Failed to sign out. Please try again.')
+    } finally {
+      setSigningOut(false)
+    }
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-neutral-200">
@@ -353,7 +415,7 @@ export function Header({
               </div>
 
               {/* Navigation Links */}
-              <nav className="py-6 space-y-2 overflow-y-auto max-h-[calc(100vh-220px)]">
+              <nav className="py-4 sm:py-6 space-y-2 overflow-y-auto max-h-[calc(100vh-320px)]">
                 {navItems
                   .filter((item) => item.is_visible && item.show_on_mobile !== false)
                   .map((item) => {
@@ -423,32 +485,30 @@ export function Header({
             </div>
 
             {/* Mobile Footer Links */}
-            <div className="pt-6 border-t border-neutral-200 space-y-3">
+            <div className="pt-4 border-t border-neutral-200 space-y-2.5 shrink-0">
               <Link
-                href={mounted && authUser ? '/account' : '/login'}
+                href={mounted && authUser ? '/account' : '/login?next=/account'}
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center text-xs uppercase tracking-wider font-semibold text-black hover:text-neutral-600 py-1"
               >
-                <div className="relative mr-3 flex items-center justify-center">
+                <div className="relative mr-3 flex items-center justify-center shrink-0">
                   <User size={16} />
                   {mounted && authUser && (
                     <span className="absolute -top-1 -right-1 w-2 h-2 bg-black rounded-full ring-1 ring-white" />
                   )}
                 </div>
-                <span>
-                  {mounted && authUser
-                    ? `My Account (${authUser.name ? authUser.name.split(' ')[0] : 'Member'})`
-                    : 'My Account'}
-                </span>
+                <span>MY ACCOUNT</span>
               </Link>
+
               <Link
                 href="/wishlist"
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center text-xs uppercase tracking-wider font-semibold text-black hover:text-neutral-600 py-1"
               >
-                <Heart size={16} className="mr-3" />
+                <Heart size={16} className="mr-3 shrink-0" />
                 Wishlist {mounted && wishlistCount > 0 && `(${wishlistCount})`}
               </Link>
+
               <Link
                 href="/track-order"
                 onClick={() => setMobileMenuOpen(false)}
@@ -456,6 +516,55 @@ export function Header({
               >
                 Track Order
               </Link>
+
+              <Link
+                href="/contact"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center text-xs uppercase tracking-wider font-semibold text-black hover:text-neutral-600 py-1"
+              >
+                <Headset size={16} className="mr-3 shrink-0" />
+                <span>HELP & SUPPORT</span>
+              </Link>
+
+              {mounted && authUser && (
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="flex items-center w-full text-left text-xs uppercase tracking-wider font-semibold text-black hover:text-neutral-600 py-1 cursor-pointer disabled:opacity-50"
+                >
+                  {signingOut ? (
+                    <Loader2 size={16} className="mr-3 shrink-0 animate-spin" />
+                  ) : (
+                    <LogOut size={16} className="mr-3 shrink-0" />
+                  )}
+                  <span>{signingOut ? 'SIGNING OUT...' : 'SIGN OUT'}</span>
+                </button>
+              )}
+
+              {/* Coloured Instagram Icon & Official Link */}
+              <div className="pt-2 border-t border-neutral-100">
+                <a
+                  href="https://www.instagram.com/bubbleboomstore/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 text-xs uppercase tracking-wider font-semibold text-black hover:opacity-80 transition-opacity py-1"
+                  aria-label="Follow Bubble Boom on Instagram"
+                >
+                  <div
+                    className="w-7 h-7 rounded-[7px] flex items-center justify-center shrink-0 shadow-xs"
+                    style={{
+                      background:
+                        'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)',
+                    }}
+                  >
+                    <InstagramIcon size={15} className="text-white" />
+                  </div>
+                  <span className="text-xs uppercase tracking-wider font-semibold text-black">
+                    FOLLOW US ON INSTAGRAM
+                  </span>
+                </a>
+              </div>
             </div>
           </div>
         </div>
