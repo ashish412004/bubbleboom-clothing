@@ -213,7 +213,7 @@ export function HeroCarousel({
   return (
     <section
       suppressHydrationWarning
-      className="relative min-h-[75vh] sm:min-h-[85vh] h-[80vh] sm:h-[88vh] max-h-[960px] bg-black text-white flex items-center justify-center overflow-hidden"
+      className="relative min-h-[520px] sm:min-h-[580px] md:min-h-[75vh] h-auto md:h-[78vh] lg:h-[80vh] max-h-[820px] bg-black text-white flex items-center justify-center overflow-hidden"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onTouchStart={handleTouchStart}
@@ -300,29 +300,29 @@ export function HeroCarousel({
       </div>
 
       {/* 3. Fixed Headline, Description & CTAs (Completely stable, zero layout shift) */}
-      <div className="relative z-10 max-w-5xl mx-auto px-12 sm:px-16 md:px-20 py-16 sm:py-20 text-center flex flex-col items-center">
+      <div className="relative z-10 max-w-4xl mx-auto px-6 sm:px-10 md:px-12 py-10 sm:py-14 md:py-16 pb-16 sm:pb-20 text-center flex flex-col items-center">
         {/* Hero Main Heading */}
-        <h1 className="text-4xl sm:text-7xl md:text-8xl lg:text-9xl font-extrabold tracking-tighter uppercase leading-[0.9] mb-4 sm:mb-6 text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)]">
+        <h1 className="text-3xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold tracking-tighter uppercase leading-[0.92] mb-3 sm:mb-4 text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)]">
           {heroTitle || 'WEAR THE BOOM.'}
         </h1>
 
         {/* Description */}
-        <p className="text-sm sm:text-xl md:text-2xl text-white/95 max-w-2xl font-medium leading-relaxed mb-8 sm:mb-10 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+        <p className="text-xs sm:text-base md:text-lg lg:text-xl text-white/95 max-w-xl font-medium leading-relaxed mb-6 sm:mb-7 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
           {heroDescription || 'Every style. Every mood. Make it yours.'}
         </p>
 
         {/* CTAs */}
-        <div className="flex flex-col sm:flex-row items-center gap-3.5 sm:gap-4 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full sm:w-auto">
           <Link
             href={primaryCtaLink || '/shop'}
-            className="w-full sm:w-auto bg-white text-black hover:bg-neutral-200 px-8 py-4 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all hover:scale-105 shadow-2xl"
+            className="w-full sm:w-auto bg-white text-black hover:bg-neutral-200 px-7 sm:px-8 py-3.5 sm:py-4 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all hover:scale-105 shadow-2xl"
           >
             {primaryCtaText || 'SHOP NOW'}
             <ArrowRight size={16} className="ml-2" />
           </Link>
           <Link
             href={secondaryCtaLink || '/collections'}
-            className="w-full sm:w-auto bg-black/50 backdrop-blur-md border border-white text-white hover:bg-white hover:text-black px-8 py-4 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all shadow-2xl"
+            className="w-full sm:w-auto bg-black/50 backdrop-blur-md border border-white text-white hover:bg-white hover:text-black px-7 sm:px-8 py-3.5 sm:py-4 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all shadow-2xl"
           >
             {secondaryCtaText || 'EXPLORE COLLECTIONS'}
           </Link>
@@ -331,7 +331,7 @@ export function HeroCarousel({
 
       {/* 4. Minimal Animated Progress Bars (Option 5) with Accessible Pause/Play Control */}
       {slides.length > 1 && (
-        <div className="absolute bottom-4 sm:bottom-6 md:bottom-7 inset-x-0 z-20 flex items-center justify-center pointer-events-none">
+        <div className="absolute bottom-3 sm:bottom-4 md:bottom-5 inset-x-0 z-20 flex items-center justify-center pointer-events-none">
           <div
             className="inline-flex items-center gap-2 bg-black/45 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-full pointer-events-auto shadow-2xl"
             role="tablist"
