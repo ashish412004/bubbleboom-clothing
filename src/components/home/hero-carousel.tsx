@@ -213,7 +213,7 @@ export function HeroCarousel({
   return (
     <section
       suppressHydrationWarning
-      className="relative min-h-[520px] sm:min-h-[580px] md:min-h-[75vh] h-auto md:h-[78vh] lg:h-[80vh] max-h-[820px] bg-black text-white flex items-center justify-center overflow-hidden"
+      className="relative min-h-[580px] h-auto min-[360px]:h-[88svh] sm:min-h-[620px] md:min-h-[75vh] md:h-[78vh] lg:h-[80vh] max-h-[820px] bg-black text-white flex flex-col md:flex-row md:items-center md:justify-center overflow-hidden"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onTouchStart={handleTouchStart}
@@ -299,8 +299,89 @@ export function HeroCarousel({
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] rounded-full border border-neutral-500/20" />
       </div>
 
-      {/* 3. Fixed Headline, Description & CTAs (Completely stable, zero layout shift) */}
-      <div className="relative z-10 max-w-4xl mx-auto px-6 sm:px-10 md:px-12 py-10 sm:py-14 md:py-16 pb-16 sm:pb-20 text-center flex flex-col items-center">
+      {/* 3A. Mobile 3-Zone Layout (< 768px): Top Text, Middle Fashion Models, Bottom CTAs & Minimal Controls */}
+      <div className="md:hidden relative z-10 w-full h-full flex-1 flex flex-col justify-between items-center px-5 sm:px-8 pt-[clamp(48px,7vh,68px)] pb-4 text-center">
+        {/* TOP ZONE – HEADING AND SUBTITLE */}
+        <div className="flex flex-col items-center">
+          <h1 className="text-3xl min-[380px]:text-4xl min-[440px]:text-5xl font-extrabold tracking-tighter uppercase leading-[0.92] text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)]">
+            {heroTitle || 'WEAR THE BOOM.'}
+          </h1>
+          <p className="mt-3 min-[380px]:mt-3.5 text-xs min-[380px]:text-sm text-white/95 max-w-[280px] min-[380px]:max-w-xs font-medium leading-relaxed drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+            {heroDescription || 'Every style. Every mood. Make it yours.'}
+          </p>
+        </div>
+
+        {/* MIDDLE ZONE – UNOBSTRUCTED FASHION IMAGE AREA (Streetwear Models & Blue Lighting) */}
+        <div className="flex-1 w-full min-h-[140px] pointer-events-none" aria-hidden="true" />
+
+        {/* BOTTOM ZONE – STACKED CTAS & COMPACT SLIDER INDICATORS */}
+        <div className="w-full flex flex-col items-center">
+          {/* CTA Buttons: Vertically stacked, centered, identical width, 10-12px gap, 44-50px height */}
+          <div className="flex flex-col gap-2.5 sm:gap-3 w-full max-w-[280px] min-[380px]:max-w-[320px] mb-5 min-[380px]:mb-6">
+            <Link
+              href={primaryCtaLink || '/shop'}
+              className="w-full h-11 min-[380px]:h-12 bg-white text-black hover:bg-neutral-200 px-6 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all active:scale-98 shadow-2xl"
+            >
+              {primaryCtaText || 'SHOP NOW'}
+              <ArrowRight size={15} className="ml-2" />
+            </Link>
+            <Link
+              href={secondaryCtaLink || '/collections'}
+              className="w-full h-11 min-[380px]:h-12 bg-black/60 backdrop-blur-md border border-white text-white hover:bg-white hover:text-black px-6 text-xs uppercase tracking-widest font-extrabold flex items-center justify-center transition-all active:scale-98 shadow-2xl"
+            >
+              {secondaryCtaText || 'EXPLORE COLLECTIONS'}
+            </Link>
+          </div>
+
+          {/* Small Transparent Slider Progress Indicators Capsule (No Pause/Play button on mobile) */}
+          {slides.length > 1 && (
+            <div
+              className="inline-flex items-center gap-2 bg-black/25 backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg"
+              role="tablist"
+              aria-label="Mobile hero carousel slide navigation"
+            >
+              {slides.map((slide, idx) => {
+                const isActive = idx === currentIndex
+                return (
+                  <button
+                    key={`mobile-slide-${slide.id}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    aria-label={`Go to slide ${idx + 1}: ${slide.title || slide.alt}`}
+                    onClick={() => goToSlide(idx)}
+                    className="group relative flex items-center justify-center h-8 min-w-[26px] px-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full"
+                  >
+                    <span className="sr-only">{`Go to slide ${idx + 1}`}</span>
+                    <div
+                      className={`h-[3px] rounded-full overflow-hidden transition-all duration-300 ease-out ${
+                        isActive
+                          ? 'w-[30px] bg-white/30 relative'
+                          : 'w-[24px] bg-white/30 group-hover:bg-white/60'
+                      }`}
+                    >
+                      {isActive && (
+                        <div
+                          key={`mobile-progress-${idx}-${animKey}`}
+                          className="hero-progress-fill absolute inset-0 bg-white rounded-full origin-left"
+                          style={{
+                            animation: isReducedMotion ? 'none' : `heroProgressFill ${AUTOPLAY_INTERVAL}ms linear forwards`,
+                            animationPlayState: isAutoplayPaused ? 'paused' : 'running',
+                            transformOrigin: 'left',
+                          }}
+                        />
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3B. Desktop Headline, Description & CTAs (768px and above: COMPLETELY UNCHANGED) */}
+      <div className="hidden md:flex relative z-10 max-w-4xl mx-auto px-6 sm:px-10 md:px-12 py-10 sm:py-14 md:py-16 pb-16 sm:pb-20 text-center flex-col items-center">
         {/* Hero Main Heading */}
         <h1 className="text-3xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold tracking-tighter uppercase leading-[0.92] mb-3 sm:mb-4 text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)]">
           {heroTitle || 'WEAR THE BOOM.'}
@@ -329,9 +410,9 @@ export function HeroCarousel({
         </div>
       </div>
 
-      {/* 4. Minimal Animated Progress Bars (Option 5) with Accessible Pause/Play Control */}
+      {/* 4. Desktop Minimal Animated Progress Bars with Pause/Play Control (768px and above: COMPLETELY UNCHANGED) */}
       {slides.length > 1 && (
-        <div className="absolute bottom-3 sm:bottom-4 md:bottom-5 inset-x-0 z-20 flex items-center justify-center pointer-events-none">
+        <div className="hidden md:flex absolute bottom-3 sm:bottom-4 md:bottom-5 inset-x-0 z-20 items-center justify-center pointer-events-none">
           <div
             className="inline-flex items-center gap-2 bg-black/45 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-full pointer-events-auto shadow-2xl"
             role="tablist"
