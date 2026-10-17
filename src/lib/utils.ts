@@ -108,6 +108,7 @@ export interface ParsedProductImage {
   color: string | null
   alt_text: string | null
   sort_order: number
+  is_primary?: boolean
 }
 
 export function parseProductImage(img: any): ParsedProductImage | null {
@@ -121,16 +122,26 @@ export function parseProductImage(img: any): ParsedProductImage | null {
     color = img.color.trim()
   }
 
-  let altText = (typeof img === 'object' && img.alt_text ? img.alt_text : '') || ''
-  if (!color && altText) {
-    const match = altText.match(/\[color:([^\]]+)\]/i)
+  let rawAlt = (typeof img === 'object' && img.alt_text ? img.alt_text : '') || ''
+  if (!color && rawAlt) {
+    const match = rawAlt.match(/\[color:([^\]]+)\]/i)
     if (match) {
       color = match[1].trim()
     }
   }
 
-  // Strip [color:...] tag from user-facing alt text for clean accessibility presentation
-  const cleanAlt = altText.replace(/\[color:[^\]]+\]/gi, '').trim()
+  let isPrimary = false
+  if (typeof img === 'object' && typeof img.is_primary === 'boolean') {
+    isPrimary = img.is_primary
+  } else if (rawAlt && /\[primary\]/i.test(rawAlt)) {
+    isPrimary = true
+  }
+
+  // Strip [color:...] and [primary] tags from user-facing alt text for clean accessibility presentation
+  const cleanAlt = rawAlt
+    .replace(/\[color:[^\]]+\]/gi, '')
+    .replace(/\[primary\]/gi, '')
+    .trim()
 
   return {
     id: typeof img === 'object' ? img.id : undefined,
@@ -140,22 +151,68 @@ export function parseProductImage(img: any): ParsedProductImage | null {
     color: color || null,
     alt_text: cleanAlt || null,
     sort_order: typeof img === 'object' && typeof img.sort_order === 'number' ? img.sort_order : 0,
+    is_primary: isPrimary,
   }
 }
 
+/**
+ * Returns all images for a specific product colour variant, ordered with the primary image first.
+ * Never leaks photos from another named colour.
+ */
+export function findImagesForVariantColor(
+  images: any[],
+  color?: string | null
+): ParsedProductImage[] {
+  if (!images || images.length === 0) return []
+  const parsed = images
+    .map(parseProductImage)
+    .filter((i): i is ParsedProductImage => Boolean(i))
+  if (parsed.length === 0) return []
+
+  const hasAnyColorAssigned = parsed.some((img) => Boolean(img.color))
+
+  if (color) {
+    const targetNorm = normalizeColor(color)
+    const colorMatches = parsed.filter(
+      (img) => img.color && normalizeColor(img.color) === targetNorm
+    )
+
+    if (colorMatches.length > 0) {
+      return colorMatches.sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1
+        if (!a.is_primary && b.is_primary) return 1
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0)
+      })
+    }
+
+    // If colour has no specific photos:
+    // If other colours have photos, check if there are unassigned/general images
+    if (hasAnyColorAssigned) {
+      const general = parsed.filter((img) => !img.color)
+      return general.sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1
+        if (!a.is_primary && b.is_primary) return 1
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0)
+      })
+    }
+  }
+
+  // No colour specified or legacy product without colour tags: return all images
+  return parsed.sort((a, b) => {
+    if (a.is_primary && !b.is_primary) return -1
+    if (!a.is_primary && b.is_primary) return 1
+    return (a.sort_order ?? 0) - (b.sort_order ?? 0)
+  })
+}
+
+/**
+ * Returns the primary/main image for a colour variant.
+ */
 export function findImageForVariantColor(
   images: any[],
   color?: string | null
 ): ParsedProductImage | null {
-  if (!images || images.length === 0) return null
-  const parsed = images.map(parseProductImage).filter((i): i is ParsedProductImage => Boolean(i))
-  if (parsed.length === 0) return null
-
-  if (color) {
-    const targetNorm = normalizeColor(color)
-    const match = parsed.find((img) => img.color && normalizeColor(img.color) === targetNorm)
-    if (match) return match
-  }
-
-  return parsed[0]
+  const list = findImagesForVariantColor(images, color)
+  return list[0] || null
 }
+

@@ -81,6 +81,7 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
     color: string // '' for unassigned
     alt_text?: string
     sort_order?: number
+    is_primary?: boolean
   }
 
   const [images, setImages] = useState<AdminProductImage[]>(() => {
@@ -95,6 +96,7 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
             color: parsed?.color || (typeof img === 'object' && img.color ? img.color.trim() : ''),
             alt_text: parsed?.alt_text || (typeof img === 'object' ? img.alt_text : ''),
             sort_order: typeof img === 'object' && typeof img.sort_order === 'number' ? img.sort_order : idx,
+            is_primary: parsed?.is_primary || (typeof img === 'object' ? Boolean(img.is_primary) : false),
           }
         })
         .filter((img: AdminProductImage) => Boolean(img.image_url))
@@ -242,10 +244,15 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
       for (let i = 0; i < fileArray.length; i++) {
         setUploadProgressText(`Uploading photo ${i + 1} of ${fileArray.length}...`)
         const uploadedUrl = await uploadSingleFile(fileArray[i])
+        const hasExistingForColor =
+          defaultColor &&
+          images.some((img) => img.color?.trim().toLowerCase() === defaultColor.trim().toLowerCase())
+
         newItems.push({
           image_url: uploadedUrl,
           color: defaultColor,
           sort_order: images.length + i,
+          is_primary: !hasExistingForColor && i === 0,
         })
       }
 
@@ -354,17 +361,33 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
     setImages((prev) => {
       const target = prev[index]
       if (!target) return prev
-      const without = prev.filter((_, i) => i !== index)
-      if (!target.color) {
-        return [target, ...without]
+      const targetColor = target.color ? target.color.trim().toLowerCase() : ''
+
+      // 1. Mark target as is_primary = true, and all other photos with targetColor as is_primary = false
+      const updated = prev.map((img, i) => {
+        if (i === index) {
+          return { ...img, is_primary: true }
+        }
+        const imgColor = img.color ? img.color.trim().toLowerCase() : ''
+        if (targetColor && imgColor === targetColor) {
+          return { ...img, is_primary: false }
+        }
+        return img
+      })
+
+      // 2. Reorder target to the front of its colour group so it is sort_order 0 for that colour
+      const item = updated[index]
+      const without = updated.filter((_, i) => i !== index)
+      if (!targetColor) {
+        return [item, ...without]
       }
       const firstIndexOfColor = without.findIndex(
-        (img) => img.color.trim().toLowerCase() === target.color.trim().toLowerCase()
+        (img) => img.color?.trim().toLowerCase() === targetColor
       )
       if (firstIndexOfColor === -1) {
-        return [target, ...without]
+        return [item, ...without]
       }
-      without.splice(firstIndexOfColor, 0, target)
+      without.splice(firstIndexOfColor, 0, item)
       return without
     })
     toast.success('Set as primary cover photo!')
@@ -372,11 +395,31 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
 
   const moveImage = (index: number, direction: 'prev' | 'next') => {
     setImages((prev) => {
-      const targetIdx = direction === 'prev' ? index - 1 : index + 1
-      if (targetIdx < 0 || targetIdx >= prev.length) return prev
+      // Find all indices matching the current filter
+      const matchingIndices: number[] = []
+      prev.forEach((img, i) => {
+        if (selectedColorFilter === 'all') {
+          matchingIndices.push(i)
+        } else if (selectedColorFilter === 'unassigned') {
+          if (!img.color || img.color.trim() === '') matchingIndices.push(i)
+        } else {
+          if (img.color?.trim().toLowerCase() === selectedColorFilter.toLowerCase()) {
+            matchingIndices.push(i)
+          }
+        }
+      })
+
+      const posInFiltered = matchingIndices.indexOf(index)
+      if (posInFiltered === -1) return prev
+
+      const targetPosInFiltered = direction === 'prev' ? posInFiltered - 1 : posInFiltered + 1
+      if (targetPosInFiltered < 0 || targetPosInFiltered >= matchingIndices.length) return prev
+
+      const targetGlobalIdx = matchingIndices[targetPosInFiltered]
       const next = [...prev]
-      const [item] = next.splice(index, 1)
-      next.splice(targetIdx, 0, item)
+      const temp = next[index]
+      next[index] = next[targetGlobalIdx]
+      next[targetGlobalIdx] = temp
       return next
     })
   }
@@ -440,8 +483,19 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
           variants,
           images: validImages.map((img, idx) => {
             const color = img.color ? img.color.trim() : null
-            const baseAlt = (img.alt_text || name).replace(/\[color:[^\]]+\]/gi, '').trim()
-            const altText = color ? `[color:${color}] ${baseAlt}` : baseAlt
+            // Check if primary
+            const isFirstOfColor = color
+              ? validImages.findIndex((o) => o.color?.trim().toLowerCase() === color.toLowerCase()) === idx
+              : idx === 0
+            const isPrimary = Boolean(img.is_primary || isFirstOfColor)
+            const cleanAlt = (img.alt_text || name)
+              .replace(/\[color:[^\]]+\]/gi, '')
+              .replace(/\[primary\]/gi, '')
+              .trim()
+            let altText = cleanAlt
+            if (isPrimary) altText = `[primary] ${altText}`.trim()
+            if (color) altText = `[color:${color}] ${altText}`.trim()
+
             return {
               id: img.id,
               image_url: img.image_url,
@@ -449,6 +503,7 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
               color,
               alt_text: altText,
               sort_order: idx,
+              is_primary: isPrimary,
             }
           }),
         }),
@@ -856,8 +911,15 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
                 <Upload className="w-6 h-6 text-black" />
               </div>
               <div className="space-y-1">
+                {selectedColorFilter !== 'all' && selectedColorFilter !== 'unassigned' && (
+                  <div className="inline-block bg-black text-white px-2.5 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider mb-1">
+                    Direct Upload Target: {selectedColorFilter}
+                  </div>
+                )}
                 <p className="text-xs font-bold uppercase tracking-wider font-mono">
-                  Click to choose photos or drag &amp; drop files here
+                  {selectedColorFilter !== 'all' && selectedColorFilter !== 'unassigned'
+                    ? `Click to add photos for ${selectedColorFilter} or drag & drop`
+                    : 'Click to choose photos or drag & drop files here'}
                 </p>
                 <p className="text-[11px] text-neutral-500 font-mono">
                   Supports JPG, PNG, WEBP, AVIF (up to 10MB each). Direct Supabase Storage uploads.
@@ -867,7 +929,9 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
                 type="button"
                 className="mt-1 bg-black text-white px-4 py-2 text-xs uppercase font-mono font-bold hover:bg-neutral-800 transition-colors pointer-events-none"
               >
-                Select Photos from Device
+                {selectedColorFilter !== 'all' && selectedColorFilter !== 'unassigned'
+                  ? `Select Photos for ${selectedColorFilter}`
+                  : 'Select Photos from Device'}
               </button>
             </>
           )}
@@ -993,17 +1057,24 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
                   if (selectedColorFilter === 'unassigned') return !img.color || img.color.trim() === ''
                   return img.color?.trim().toLowerCase() === selectedColorFilter.toLowerCase()
                 })
-                .map(({ img, globalIdx }) => {
-                  const isColorPrimary =
-                    Boolean(img.color) &&
-                    images.findIndex(
-                      (other) => other.color?.trim().toLowerCase() === img.color.trim().toLowerCase()
-                    ) === globalIdx
+                .map(({ img, globalIdx }, filterIdx, filteredArr) => {
+                  const colorMatches = img.color
+                    ? images.filter((other) => other.color?.trim().toLowerCase() === img.color.trim().toLowerCase())
+                    : []
+                  const anyExplicitColorPrimary = colorMatches.some((other) => other.is_primary)
+                  const isColorPrimary = img.color
+                    ? Boolean(img.is_primary || (!anyExplicitColorPrimary && colorMatches[0] === img))
+                    : Boolean(img.is_primary || globalIdx === 0)
+
+                  const isFirstInFilter = filterIdx === 0
+                  const isLastInFilter = filterIdx === filteredArr.length - 1
 
                   return (
                     <div
                       key={`${img.image_url}-${globalIdx}`}
-                      className="group relative border border-black bg-white flex flex-col overflow-hidden shadow-sm"
+                      className={`group relative border bg-white flex flex-col overflow-hidden shadow-sm transition-all ${
+                        isColorPrimary ? 'border-emerald-600 ring-1 ring-emerald-600' : 'border-black'
+                      }`}
                     >
                       {/* Image container */}
                       <div className="relative aspect-square w-full bg-neutral-100 overflow-hidden">
@@ -1027,13 +1098,18 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
                         )}
 
                         {/* Status Badges */}
-                        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
+                        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start max-w-[85%]">
                           {globalIdx === 0 && (
-                            <span className="bg-black text-white text-[9px] font-mono font-black px-1.5 py-0.5 tracking-wider">
+                            <span className="bg-black text-white text-[9px] font-mono font-black px-1.5 py-0.5 tracking-wider shadow-sm">
                               CATALOG COVER
                             </span>
                           )}
-                          {img.color ? (
+                          {isColorPrimary ? (
+                            <span className="bg-emerald-600 text-white text-[9px] font-mono font-black px-1.5 py-0.5 tracking-wider shadow-sm flex items-center gap-1">
+                              <Star className="w-2.5 h-2.5 fill-white" />
+                              PRIMARY FOR {img.color ? img.color.toUpperCase() : 'CATALOG'}
+                            </span>
+                          ) : img.color ? (
                             <span className="bg-black/90 text-white text-[9px] font-mono font-bold px-1.5 py-0.5 tracking-wider">
                               {img.color.toUpperCase()}
                             </span>
@@ -1042,16 +1118,16 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
                               ⚠️ UNMAPPED
                             </span>
                           )}
-                          {isColorPrimary && (
-                            <span className="bg-emerald-600 text-white text-[9px] font-mono font-black px-1.5 py-0.5 tracking-wider">
-                              PRIMARY FOR {img.color.toUpperCase()}
-                            </span>
-                          )}
+                        </div>
+
+                        {/* Position in filtered gallery */}
+                        <div className="absolute top-2 right-2 bg-black/75 text-white text-[9px] font-mono font-bold px-1.5 py-0.5 tracking-wider">
+                          {filterIdx + 1}/{filteredArr.length}
                         </div>
                       </div>
 
                       {/* Card Content & Assignment */}
-                      <div className="p-2.5 bg-[#F8F8F6] border-t border-black space-y-2">
+                      <div className="p-2.5 bg-[#F8F8F6] border-t border-black space-y-2 flex-1 flex flex-col justify-between">
                         {/* Assigned Colour Dropdown */}
                         <div>
                           <label className="block text-[9px] uppercase font-mono font-bold text-neutral-500 mb-0.5">
@@ -1076,61 +1152,69 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
                         </div>
 
                         {/* Actions Bar */}
-                        <div className="flex items-center justify-between text-xs pt-1 border-t border-neutral-200">
-                          <div className="flex items-center gap-1">
+                        <div className="pt-2 border-t border-neutral-200 space-y-2">
+                          <div className="flex items-center justify-between">
                             <button
                               type="button"
                               onClick={() => makePrimary(globalIdx)}
                               title={
                                 img.color
-                                  ? `Make primary photo for ${img.color}`
+                                  ? `Make primary cover photo for ${img.color}`
                                   : 'Make overall catalog cover'
                               }
-                              className={`p-1 rounded text-neutral-700 hover:text-black cursor-pointer ${
-                                isColorPrimary || globalIdx === 0
-                                  ? 'bg-neutral-200 text-black font-bold'
-                                  : 'hover:bg-neutral-200'
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono font-bold uppercase transition-colors cursor-pointer ${
+                                isColorPrimary
+                                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                  : 'border border-neutral-300 bg-white hover:border-black text-neutral-700 hover:text-black'
                               }`}
                             >
-                              <Star className={`w-3.5 h-3.5 ${isColorPrimary || globalIdx === 0 ? 'fill-black' : ''}`} />
+                              <Star className={`w-3 h-3 ${isColorPrimary ? 'fill-white' : ''}`} />
+                              <span>{isColorPrimary ? 'Primary' : 'Set Primary'}</span>
                             </button>
+
                             <button
                               type="button"
                               onClick={() => triggerReplace(globalIdx)}
                               disabled={replacingIndex !== null || uploadingImages}
-                              title="Replace Photo with New Upload"
-                              className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black cursor-pointer disabled:opacity-30"
+                              title="Replace photo with new file"
+                              className="inline-flex items-center gap-1 px-2 py-1 border border-neutral-300 bg-white hover:border-black text-[10px] font-mono font-bold uppercase text-neutral-700 hover:text-black rounded transition-colors disabled:opacity-30 cursor-pointer"
                             >
-                              <RefreshCw className={`w-3.5 h-3.5 ${replacingIndex === globalIdx ? 'animate-spin' : ''}`} />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={globalIdx === 0}
-                              onClick={() => moveImage(globalIdx, 'prev')}
-                              title="Move Left / Earlier"
-                              className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black disabled:opacity-30 cursor-pointer"
-                            >
-                              <ChevronLeft className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={globalIdx === images.length - 1}
-                              onClick={() => moveImage(globalIdx, 'next')}
-                              title="Move Right / Later"
-                              className="p-1 hover:bg-neutral-200 rounded text-neutral-700 hover:text-black disabled:opacity-30 cursor-pointer"
-                            >
-                              <ChevronRight className="w-3.5 h-3.5" />
+                              <RefreshCw className={`w-3 h-3 ${replacingIndex === globalIdx ? 'animate-spin' : ''}`} />
+                              <span>Replace</span>
                             </button>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => removeImage(globalIdx)}
-                            title="Remove Photo"
-                            className="p-1 hover:bg-red-50 text-neutral-600 hover:text-red-600 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={isFirstInFilter}
+                                onClick={() => moveImage(globalIdx, 'prev')}
+                                title="Move Left / Earlier in Gallery"
+                                className="p-1 border border-neutral-300 bg-white hover:border-black hover:bg-neutral-100 rounded text-neutral-700 hover:text-black disabled:opacity-30 cursor-pointer"
+                              >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isLastInFilter}
+                                onClick={() => moveImage(globalIdx, 'next')}
+                                title="Move Right / Later in Gallery"
+                                className="p-1 border border-neutral-300 bg-white hover:border-black hover:bg-neutral-100 rounded text-neutral-700 hover:text-black disabled:opacity-30 cursor-pointer"
+                              >
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => removeImage(globalIdx)}
+                              title="Remove Photo"
+                              className="p-1 hover:bg-red-50 text-neutral-500 hover:text-red-600 rounded transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>

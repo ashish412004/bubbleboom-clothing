@@ -19,7 +19,15 @@ import {
   Image as ImageIcon,
   MessageCircle,
 } from 'lucide-react'
-import { formatPrice, formatDiscount, getSafeImageUrl, normalizeColor, parseProductImage, type ParsedProductImage } from '@/lib/utils'
+import {
+  formatPrice,
+  formatDiscount,
+  getSafeImageUrl,
+  normalizeColor,
+  parseProductImage,
+  findImagesForVariantColor,
+  type ParsedProductImage,
+} from '@/lib/utils'
 import { useCartStore } from '@/lib/cart-store'
 import toast from 'react-hot-toast'
 import { DeliveryExchangeCard } from '@/components/product/delivery-exchange-card'
@@ -41,6 +49,7 @@ interface ProductImage {
   alt_text: string | null
   sort_order: number
   color?: string | null
+  is_primary?: boolean
 }
 
 interface ProductDetails {
@@ -78,11 +87,10 @@ export function ProductInteractive({
 
   const categoryType = getProductCategoryType(product as any)
 
-  // Images sorted by sort_order and parsed for color tags
+  // Images sorted by sort_order and parsed for color and primary tags
   const allImages = (product.images?.length > 0 ? product.images : [])
     .map(parseProductImage)
     .filter((img): img is ParsedProductImage => Boolean(img))
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
 
   // Extract distinct colors and sizes
   const colors = Array.from(
@@ -90,18 +98,15 @@ export function ProductInteractive({
   ) as string[]
   const [selectedColor, setSelectedColor] = useState(colors[0] || '')
 
-  // Images mapped specifically to selected colour
-  const hasAnyColorAssigned = allImages.some((img) => Boolean(img.color))
+  // Images mapped specifically to selected colour: primary image first, then sort_order
   const activeColorLower = normalizeColor(selectedColor)
-  // If product has colour-assigned images, show ONLY the images for that colour.
-  // If a colour has no photos, activeColorImages will be empty and display the clear neutral fallback.
-  // If a legacy product has no colours assigned on any images at all, display general gallery.
-  const activeColorImages = hasAnyColorAssigned
-    ? allImages.filter((img) => img.color && normalizeColor(img.color) === activeColorLower)
-    : allImages
+  const activeColorImages = findImagesForVariantColor(allImages, selectedColor)
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [isZoomOpen, setIsZoomOpen] = useState(false)
+  const [zoomPos, setZoomPos] = useState<{ x: number; y: number } | null>(null)
+  const [touchStartX, setTouchStartX] = useState<number | null>(null)
+  const [touchEndX, setTouchEndX] = useState<number | null>(null)
   const [socialConfig, setSocialConfig] = useState<{ whatsapp_support_enabled: boolean; whatsapp_number: string } | null>(null)
 
   useEffect(() => {
@@ -308,86 +313,189 @@ export function ProductInteractive({
     }
   }
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.targetTouches[0].clientX)
+    setTouchEndX(null)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEndX(e.targetTouches[0].clientX)
+  }
+
+  const handleTouchEnd = () => {
+    if (touchStartX === null || touchEndX === null) return
+    const diff = touchStartX - touchEndX
+    const minSwipeDistance = 40
+    if (diff > minSwipeDistance && activeColorImages.length > 1) {
+      // Swiped left -> next image
+      setSelectedImageIndex((prev) => (prev < activeColorImages.length - 1 ? prev + 1 : 0))
+    } else if (diff < -minSwipeDistance && activeColorImages.length > 1) {
+      // Swiped right -> prev image
+      setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : activeColorImages.length - 1))
+    }
+    setTouchStartX(null)
+    setTouchEndX(null)
+  }
+
+  const handlePrevImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    if (activeColorImages.length <= 1) return
+    setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : activeColorImages.length - 1))
+  }
+
+  const handleNextImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    if (activeColorImages.length <= 1) return
+    setSelectedImageIndex((prev) => (prev < activeColorImages.length - 1 ? prev + 1 : 0))
+  }
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))
+    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100))
+    setZoomPos({ x, y })
+  }
+
+  const handleMouseLeave = () => {
+    setZoomPos(null)
+  }
+
   const currentDisplayImage = activeColorImages[selectedImageIndex] || activeColorImages[0]
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14">
       {/* 1. Image Gallery */}
       <div className="lg:col-span-7 space-y-4">
-        {/* Main Display Image */}
-        <div className="relative aspect-[3/4] bg-neutral-100 border border-neutral-200 overflow-hidden">
-          {activeColorImages.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => setIsZoomOpen(true)}
-              className="w-full h-full relative cursor-zoom-in group text-left block"
-              title="Click to zoom image"
-            >
-              <Image
-                src={currentDisplayImage?.image_url || activeColorImages[0].image_url}
-                alt={currentDisplayImage?.alt_text || `${product.name} - ${selectedColor}`}
-                fill
-                priority
-                className="object-cover object-center group-hover:scale-[1.02] transition-transform duration-300"
-                sizes="(max-width: 1024px) 100vw, 60vw"
-              />
-              <div className="absolute bottom-3 right-3 bg-black/70 text-white p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Maximize2 size={16} />
-              </div>
-            </button>
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center select-none bg-neutral-100">
-              <div className="w-12 h-12 rounded-full border border-neutral-300 bg-white flex items-center justify-center mb-3 shadow-sm">
-                <ImageIcon className="w-6 h-6 text-neutral-400 stroke-[1.5]" />
-              </div>
-              <p className="text-xs uppercase font-mono font-bold tracking-widest text-neutral-800">
-                Image Unavailable
-              </p>
-              <p className="text-[11px] text-neutral-500 mt-1 max-w-[220px]">
-                No photos uploaded yet for {selectedColor}.
-              </p>
+        {/* Main Product Gallery Layout: Left Thumbnail Strip on Desktop, Horizontal on Mobile */}
+        <div className="flex flex-col-reverse md:flex-row gap-3">
+          {/* Thumbnails Column for Active Colour */}
+          {activeColorImages.length > 1 && (
+            <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto md:max-h-[640px] shrink-0 no-scrollbar touch-pan-x">
+              {activeColorImages.map((img, idx) => (
+                <button
+                  key={img.id || idx}
+                  type="button"
+                  onClick={() => setSelectedImageIndex(idx)}
+                  className={`relative w-14 h-[72px] sm:w-16 sm:h-[84px] md:w-20 md:h-26 shrink-0 bg-neutral-100 border overflow-hidden transition-all cursor-pointer ${
+                    selectedImageIndex === idx
+                      ? 'border-black ring-1 ring-black'
+                      : 'border-neutral-200 hover:border-neutral-400 opacity-70 hover:opacity-100'
+                  }`}
+                  title={`View photo ${idx + 1} of ${selectedColor}`}
+                >
+                  <Image
+                    src={img.image_url}
+                    alt={img.alt_text || `${product.name} - View ${idx + 1}`}
+                    fill
+                    className="object-cover"
+                    sizes="80px"
+                  />
+                  {img.is_primary && (
+                    <span className="absolute bottom-0.5 left-0.5 right-0.5 bg-black/85 text-[8px] font-mono uppercase text-white text-center py-0.5 font-bold tracking-widest truncate">
+                      Cover
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
           )}
 
-          {hasDiscount && (
-            <div className="absolute top-4 left-4 z-10">
-              <span className="bg-black text-white text-xs uppercase tracking-widest font-extrabold px-3 py-1">
-                {discount}% OFF
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Thumbnail Row for Selected Colour */}
-        {activeColorImages.length > 1 && (
-          <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
-            {activeColorImages.map((img, idx) => (
-              <button
-                key={img.id || idx}
-                type="button"
-                onClick={() => setSelectedImageIndex(idx)}
-                className={`relative aspect-[3/4] bg-neutral-100 border overflow-hidden transition-all ${
-                  selectedImageIndex === idx
-                    ? 'border-black ring-1 ring-black'
-                    : 'border-neutral-200 hover:border-neutral-400 opacity-70 hover:opacity-100'
-                }`}
-                title={`View photo ${idx + 1} of ${selectedColor}`}
+          {/* Main Display Image */}
+          <div
+            className="relative flex-1 aspect-[3/4] bg-neutral-100 border border-neutral-200 overflow-hidden select-none touch-pan-y"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {activeColorImages.length > 0 ? (
+              <div
+                className="w-full h-full relative cursor-zoom-in group overflow-hidden"
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+                onClick={() => setIsZoomOpen(true)}
               >
                 <Image
-                  src={img.image_url}
-                  alt={img.alt_text || `View ${idx + 1}`}
+                  src={currentDisplayImage?.image_url || activeColorImages[0].image_url}
+                  alt={currentDisplayImage?.alt_text || `${product.name} - ${selectedColor}`}
                   fill
-                  className="object-cover"
-                  sizes="100px"
+                  priority
+                  style={
+                    zoomPos
+                      ? {
+                          transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
+                          transform: 'scale(1.75)',
+                          transition: 'transform 0.05s ease-out',
+                        }
+                      : {
+                          transition: 'transform 0.25s ease-out',
+                        }
+                  }
+                  className="object-cover object-center"
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 650px"
                 />
-              </button>
-            ))}
+
+                {/* Floating Prev / Next Navigation Arrows */}
+                {activeColorImages.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handlePrevImage}
+                      aria-label="Previous photo"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 bg-white/90 hover:bg-black hover:text-white border border-neutral-200 flex items-center justify-center transition-all shadow-md z-10 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNextImage}
+                      aria-label="Next photo"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 bg-white/90 hover:bg-black hover:text-white border border-neutral-200 flex items-center justify-center transition-all shadow-md z-10 cursor-pointer"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </>
+                )}
+
+                {/* Image Counter Pill */}
+                {activeColorImages.length > 1 && (
+                  <div className="absolute top-3 right-3 bg-black/80 backdrop-blur-xs text-white text-[11px] font-mono font-bold px-2.5 py-1 rounded-full z-10 pointer-events-none">
+                    {selectedImageIndex + 1} / {activeColorImages.length}
+                  </div>
+                )}
+
+                {/* Maximize Icon */}
+                <div className="absolute bottom-3 right-3 bg-black/75 text-white p-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                  <Maximize2 size={16} />
+                </div>
+              </div>
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center select-none bg-neutral-100">
+                <div className="w-12 h-12 rounded-full border border-neutral-300 bg-white flex items-center justify-center mb-3 shadow-sm">
+                  <ImageIcon className="w-6 h-6 text-neutral-400 stroke-[1.5]" />
+                </div>
+                <p className="text-xs uppercase font-mono font-bold tracking-widest text-neutral-800">
+                  Image Unavailable
+                </p>
+                <p className="text-[11px] text-neutral-500 mt-1 max-w-[220px]">
+                  No photos uploaded yet for {selectedColor}.
+                </p>
+              </div>
+            )}
+
+            {/* Genuine Discount Badge */}
+            {hasDiscount && (
+              <div className="absolute top-3 left-3 z-10 pointer-events-none">
+                <span className="bg-black text-white text-[11px] uppercase tracking-widest font-extrabold px-2.5 py-1">
+                  {discount}% OFF
+                </span>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Other Colours Quick Preview Thumbnails */}
         {colors.length > 1 && (
-          <div className="pt-1">
+          <div className="pt-2 border-t border-neutral-200/60">
             <span className="text-[10px] uppercase font-mono font-bold text-neutral-500 block mb-1.5">
               Available Colours ({colors.length}):
             </span>
@@ -396,15 +504,17 @@ export function ProductInteractive({
                 const cNorm = normalizeColor(c)
                 const isCurrent = cNorm === activeColorLower
                 const cPrimaryImg = allImages.find(
+                  (img) => img.color && normalizeColor(img.color) === cNorm && img.is_primary
+                ) || allImages.find(
                   (img) => img.color && normalizeColor(img.color) === cNorm
-                ) || (hasAnyColorAssigned ? null : allImages[0])
+                ) || (allImages.some((img) => Boolean(img.color)) ? null : allImages[0])
 
                 return (
                   <button
                     key={c}
                     type="button"
                     onClick={() => handleColorChange(c)}
-                    className={`group flex items-center gap-2 border p-1 pr-2.5 text-xs transition-all ${
+                    className={`group flex items-center gap-2 border p-1 pr-2.5 text-xs transition-all cursor-pointer ${
                       isCurrent
                         ? 'border-black bg-black text-white'
                         : 'border-neutral-200 bg-white text-neutral-800 hover:border-black'

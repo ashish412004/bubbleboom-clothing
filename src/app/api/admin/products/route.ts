@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
         product_id: newProdId,
         image_url: getSafeImageUrl(typeof img === 'string' ? img : img.image_url),
         color: typeof img === 'object' && img.color ? img.color.trim() : null,
+        is_primary: typeof img === 'object' && Boolean(img.is_primary),
         alt_text: typeof img === 'object' && img.alt_text ? img.alt_text : product.name,
         sort_order: typeof img === 'object' && typeof img.sort_order === 'number' ? img.sort_order : idx,
       }))
@@ -129,15 +130,20 @@ export async function POST(req: NextRequest) {
             ? img.storage_path
             : extractStoragePath(safeUrl)
           const color = typeof img === 'object' && img.color ? img.color.trim() : null
+          const isPrimary = typeof img === 'object' && Boolean(img.is_primary)
           let altText = (typeof img === 'object' && img.alt_text) ? img.alt_text : product.name
-          if (color && !altText.includes(`[color:${color}]`)) {
-            altText = `[color:${color}] ${altText.replace(/\[color:[^\]]+\]/gi, '').trim()}`
-          }
+          const cleanAlt = altText.replace(/\[color:[^\]]+\]/gi, '').replace(/\[primary\]/gi, '').trim()
+          let tags = ''
+          if (color) tags += `[color:${color}]`
+          if (isPrimary) tags += `[primary]`
+          altText = tags ? `${tags} ${cleanAlt}` : cleanAlt
+
           return {
             product_id: createdProduct.id,
             image_url: safeUrl,
             storage_path: storagePath || null,
             color: color || null,
+            is_primary: isPrimary,
             alt_text: altText,
             sort_order: (typeof img === 'object' && typeof img.sort_order === 'number') ? img.sort_order : idx,
           }
@@ -145,15 +151,16 @@ export async function POST(req: NextRequest) {
         .filter((item: any) => item.image_url)
 
       if (imagesToInsert.length > 0) {
-        let { error: imgErr } = await supabase.from('product_images').insert(imagesToInsert)
-        if (imgErr && (imgErr.message?.includes('color') || imgErr.message?.includes('storage_path'))) {
-          const fallbackImages = imagesToInsert.map(({ color, storage_path, ...rest }: any) => {
+        let { error: imgErr } = await supabase.from('product_images').insert(imagesToInsert as any)
+        if (imgErr && (imgErr.message?.includes('color') || imgErr.message?.includes('is_primary') || imgErr.message?.includes('storage_path'))) {
+          const fallbackImages = imagesToInsert.map(({ color, is_primary, storage_path, ...rest }: any) => {
             const fb: any = { ...rest }
             if (!imgErr?.message?.includes('storage_path')) fb.storage_path = storage_path
             if (!imgErr?.message?.includes('color')) fb.color = color
+            if (!imgErr?.message?.includes('is_primary')) fb.is_primary = is_primary
             return fb
           })
-          const fallbackRes = await supabase.from('product_images').insert(fallbackImages)
+          const fallbackRes = await supabase.from('product_images').insert(fallbackImages as any)
           imgErr = fallbackRes.error
         }
         if (imgErr) {
@@ -307,15 +314,20 @@ export async function PUT(req: NextRequest) {
             ? img.storage_path
             : extractStoragePath(safeUrl)
           const color = typeof img === 'object' && img.color ? img.color.trim() : null
+          const isPrimary = typeof img === 'object' && Boolean(img.is_primary)
           let altText = (typeof img === 'object' && img.alt_text) ? img.alt_text : product.name
-          if (color && !altText.includes(`[color:${color}]`)) {
-            altText = `[color:${color}] ${altText.replace(/\[color:[^\]]+\]/gi, '').trim()}`
-          }
+          const cleanAlt = altText.replace(/\[color:[^\]]+\]/gi, '').replace(/\[primary\]/gi, '').trim()
+          let tags = ''
+          if (color) tags += `[color:${color}]`
+          if (isPrimary) tags += `[primary]`
+          altText = tags ? `${tags} ${cleanAlt}` : cleanAlt
+
           return {
             product_id: product.id,
             image_url: safeUrl,
             storage_path: storagePath || null,
             color: color || null,
+            is_primary: isPrimary,
             alt_text: altText,
             sort_order: (typeof img === 'object' && typeof img.sort_order === 'number') ? img.sort_order : idx,
           }
@@ -331,15 +343,16 @@ export async function PUT(req: NextRequest) {
         const oldImageIds = (existingImages || []).map((ci: any) => ci.id)
 
         // Insert new sequence first
-        let { error: insertErr } = await supabase.from('product_images').insert(validImages)
-        if (insertErr && (insertErr.message?.includes('color') || insertErr.message?.includes('storage_path'))) {
-          const fallbackImages = validImages.map(({ color, storage_path, ...rest }: any) => {
+        let { error: insertErr } = await supabase.from('product_images').insert(validImages as any)
+        if (insertErr && (insertErr.message?.includes('color') || insertErr.message?.includes('is_primary') || insertErr.message?.includes('storage_path'))) {
+          const fallbackImages = validImages.map(({ color, is_primary, storage_path, ...rest }: any) => {
             const fb: any = { ...rest }
             if (!insertErr?.message?.includes('storage_path')) fb.storage_path = storage_path
             if (!insertErr?.message?.includes('color')) fb.color = color
+            if (!insertErr?.message?.includes('is_primary')) fb.is_primary = is_primary
             return fb
           })
-          const fallbackRes = await supabase.from('product_images').insert(fallbackImages)
+          const fallbackRes = await supabase.from('product_images').insert(fallbackImages as any)
           insertErr = fallbackRes.error
         }
 

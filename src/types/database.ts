@@ -355,6 +355,7 @@ export interface Database {
           image_url: string
           storage_path: string | null
           color: string | null
+          is_primary?: boolean
           alt_text: string | null
           sort_order: number
           created_at: string
@@ -365,6 +366,7 @@ export interface Database {
           image_url: string
           storage_path?: string | null
           color?: string | null
+          is_primary?: boolean
           alt_text?: string | null
           sort_order?: number
           created_at?: string
@@ -375,6 +377,7 @@ export interface Database {
           image_url?: string
           storage_path?: string | null
           color?: string | null
+          is_primary?: boolean
           alt_text?: string | null
           sort_order?: number
           created_at?: string
