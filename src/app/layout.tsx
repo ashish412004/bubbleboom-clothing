@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ToasterProvider } from "@/components/providers/toaster-provider";
 import { CartDrawer } from "@/components/cart/cart-drawer";
+import { SearchDrawer } from "@/components/search/search-drawer";
 import { WhatsAppFloatingButton } from "@/components/support/whatsapp-floating-button";
 
 const inter = Inter({
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body suppressHydrationWarning className="min-h-full flex flex-col">
         <ToasterProvider />
         <CartDrawer />
+        <SearchDrawer />
         {children}
         <WhatsAppFloatingButton />
       </body>

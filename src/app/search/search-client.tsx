@@ -8,6 +8,7 @@ import { ProductCard } from '@/components/product/product-card'
 
 interface SearchClientProps {
   initialQuery?: string
+  initialCategory?: string
   initialProducts?: any[]
 }
 
@@ -22,10 +23,12 @@ const POPULAR_SEARCHES = [
 
 export function SearchClient({
   initialQuery = '',
+  initialCategory = 'all',
   initialProducts = [],
 }: SearchClientProps) {
   const router = useRouter()
   const [query, setQuery] = useState(initialQuery)
+  const [category, setCategory] = useState(initialCategory)
   const [products, setProducts] = useState<any[]>(initialProducts)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -54,7 +57,8 @@ export function SearchClient({
     setLoading(true)
 
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}&limit=24`, {
+      const catParam = category && category !== 'all' ? `&category=${encodeURIComponent(category)}` : ''
+      const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}&limit=24${catParam}`, {
         signal: controller.signal,
       })
 
@@ -67,7 +71,7 @@ export function SearchClient({
       setTotalCount(data.total || 0)
 
       // Sync URL without full page reload
-      window.history.replaceState(null, '', `/search?q=${encodeURIComponent(trimmed)}`)
+      window.history.replaceState(null, '', `/search?q=${encodeURIComponent(trimmed)}${catParam}`)
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         console.error('Search error:', err)
@@ -77,7 +81,7 @@ export function SearchClient({
         setLoading(false)
       }
     }
-  }, [])
+  }, [category])
 
   // Handle typing with 300ms debounce
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

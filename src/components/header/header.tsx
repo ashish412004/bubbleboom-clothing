@@ -6,6 +6,7 @@ import { Search, User, Heart, ShoppingBag, Menu, X } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useCartStore } from '@/lib/cart-store'
 import { useAuthStore } from '@/lib/auth-store'
+import { useSearchStore } from '@/lib/search-store'
 
 interface HeaderProps {
   announcementText?: string
@@ -21,6 +22,7 @@ export function Header({
   const itemCount = useCartStore((state) => state.itemCount)
   const wishlistCount = useCartStore((state) => state.wishlistCount)
   const openCartDrawer = useCartStore((state) => state.openCartDrawer)
+  const openSearch = useSearchStore((state) => state.openSearch)
   const authUser = useAuthStore((state) => state.user)
   const refreshUser = useAuthStore((state) => state.refreshUser)
   const refreshWishlist = useCartStore((state) => state.refreshWishlist)
@@ -123,7 +125,11 @@ export function Header({
           <div className="flex items-center justify-end space-x-1">
             <Link
               href="/search"
-              className="w-11 h-11 flex items-center justify-center text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black"
+              className="w-11 h-11 flex items-center justify-center text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault()
+                openSearch()
+              }}
               aria-label="Search catalog"
             >
               <Search size={20} strokeWidth={2} />
@@ -228,7 +234,11 @@ export function Header({
           <div className="flex items-center space-x-2 sm:space-x-3">
             <Link
               href="/search"
-              className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black"
+              onClick={(e) => {
+                e.preventDefault()
+                openSearch()
+              }}
+              className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black cursor-pointer"
               aria-label="Search catalog"
             >
               <Search size={20} strokeWidth={2} />
