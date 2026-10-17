@@ -37,6 +37,7 @@ export function SignupForm() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [agreeTerms, setAgreeTerms] = useState(false)
+  const [marketingConsent, setMarketingConsent] = useState(false)
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -230,6 +231,7 @@ export function SignupForm() {
           password,
           full_name: fullName.trim(),
           email: email.trim().toLowerCase(),
+          marketing_consent: marketingConsent,
         }),
       })
 
@@ -356,6 +358,20 @@ export function SignupForm() {
               <Link href="/privacy-policy" target="_blank" className="text-black underline font-semibold">
                 Privacy Policy
               </Link>.
+            </label>
+          </div>
+
+          <div className="flex items-start gap-2 pt-1 pb-1">
+            <input
+              type="checkbox"
+              id="marketingConsent"
+              checked={marketingConsent}
+              onChange={(e) => setMarketingConsent(e.target.checked)}
+              disabled={loading}
+              className="mt-1 h-4 w-4 border-black rounded-none text-black focus:ring-black cursor-pointer"
+            />
+            <label htmlFor="marketingConsent" className="text-xs text-neutral-600 leading-snug cursor-pointer">
+              I'd like to receive Bubble Boom launch announcements, new drops and exclusive offers by email.
             </label>
           </div>
 

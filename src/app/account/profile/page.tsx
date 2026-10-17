@@ -47,6 +47,7 @@ export default async function ProfilePage() {
         initialEmail={user.email || ''}
         initialPhone={profile?.phone || ''}
         initialAvatar={profile?.avatar_url || ''}
+        initialMarketingConsent={Boolean(profile?.marketing_consent)}
         isGoogleOnly={isGoogleOnly}
       />
       <div className="sr-only">

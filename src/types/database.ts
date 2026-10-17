@@ -17,6 +17,8 @@ export interface Database {
           phone: string | null
           avatar_url: string | null
           role: 'customer' | 'admin'
+          marketing_consent?: boolean | null
+          marketing_consent_at?: string | null
           created_at: string
           updated_at: string
         }
@@ -27,6 +29,8 @@ export interface Database {
           phone?: string | null
           avatar_url?: string | null
           role?: 'customer' | 'admin'
+          marketing_consent?: boolean | null
+          marketing_consent_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -37,6 +41,8 @@ export interface Database {
           phone?: string | null
           avatar_url?: string | null
           role?: 'customer' | 'admin'
+          marketing_consent?: boolean | null
+          marketing_consent_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -1326,6 +1332,93 @@ export interface Database {
           updated_at?: string | null
           is_active?: boolean | null
           subscribed_at?: string | null
+        }
+        Relationships: []
+      }
+      marketing_campaigns: {
+        Row: {
+          id: string
+          name: string
+          subject: string
+          preheader: string | null
+          sender_name: string | null
+          audience_type: string | null
+          template_id: string | null
+          content: Json
+          status: string | null
+          total_recipients: number | null
+          sent_count: number | null
+          failed_count: number | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          sent_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          subject: string
+          preheader?: string | null
+          sender_name?: string | null
+          audience_type?: string | null
+          template_id?: string | null
+          content?: Json
+          status?: string | null
+          total_recipients?: number | null
+          sent_count?: number | null
+          failed_count?: number | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          sent_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          subject?: string
+          preheader?: string | null
+          sender_name?: string | null
+          audience_type?: string | null
+          template_id?: string | null
+          content?: Json
+          status?: string | null
+          total_recipients?: number | null
+          sent_count?: number | null
+          failed_count?: number | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          sent_at?: string | null
+        }
+        Relationships: []
+      }
+      campaign_recipients: {
+        Row: {
+          id: string
+          campaign_id: string
+          email: string
+          status: string | null
+          error_message: string | null
+          sent_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          campaign_id: string
+          email: string
+          status?: string | null
+          error_message?: string | null
+          sent_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          campaign_id?: string
+          email?: string
+          status?: string | null
+          error_message?: string | null
+          sent_at?: string | null
+          created_at?: string
         }
         Relationships: []
       }

@@ -51,11 +51,12 @@ export async function GET() {
 
         let phone = user.phone || null
         let avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || null
+        let marketingConsent = false
 
         try {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('full_name, phone, avatar_url')
+            .select('full_name, phone, avatar_url, marketing_consent')
             .eq('id', user.id)
             .maybeSingle()
 
@@ -67,6 +68,9 @@ export async function GET() {
           }
           if (profile?.avatar_url) {
             avatarUrl = profile.avatar_url
+          }
+          if (typeof profile?.marketing_consent === 'boolean') {
+            marketingConsent = profile.marketing_consent
           }
         } catch {
           // Non-blocking
@@ -84,11 +88,13 @@ export async function GET() {
             full_name: effectiveName || null,
             phone,
             avatar_url: avatarUrl,
+            marketing_consent: marketingConsent,
             user_metadata: {
               ...(user.user_metadata || {}),
               full_name: effectiveName || null,
               phone,
               avatar_url: avatarUrl,
+              marketing_consent: marketingConsent,
             },
             isGoogleOnly,
             hasGoogleIdentity,
@@ -330,14 +336,26 @@ export async function POST(request: NextRequest) {
       }
 
       // Step 4.4: Upsert profile securely with role 'customer' (Never grant admin access via registration)
+      const consentGiven = Boolean(body.marketing_consent)
       try {
         await serviceClient.from('profiles').upsert({
           id: user.id,
           email: userEmail || '',
           full_name: finalName,
           role: 'customer',
+          marketing_consent: consentGiven,
+          marketing_consent_at: consentGiven ? new Date().toISOString() : null,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'id' })
+
+        if (consentGiven && userEmail) {
+          await serviceClient.from('newsletter_subscribers').upsert({
+            email: userEmail.toLowerCase().trim(),
+            is_active: true,
+            source: 'registration',
+            subscribed_at: new Date().toISOString(),
+          }, { onConflict: 'email' })
+        }
       } catch (profErr) {
         console.error('Profile upsert warning:', profErr)
       }
@@ -655,9 +673,30 @@ export async function POST(request: NextRequest) {
       if (cleanName !== undefined) profileUpdates.full_name = cleanName
       if (cleanPhone !== undefined) profileUpdates.phone = cleanPhone
       if (cleanAvatar !== undefined) profileUpdates.avatar_url = cleanAvatar
+      if (typeof body.marketing_consent === 'boolean') {
+        profileUpdates.marketing_consent = body.marketing_consent
+        profileUpdates.marketing_consent_at = body.marketing_consent ? new Date().toISOString() : null
+      }
 
       try {
         await serviceClient.from('profiles').upsert(profileUpdates, { onConflict: 'id' })
+
+        if (typeof body.marketing_consent === 'boolean' && user.email) {
+          const userEmailLower = user.email.toLowerCase().trim()
+          if (body.marketing_consent) {
+            await serviceClient.from('newsletter_subscribers').upsert({
+              email: userEmailLower,
+              is_active: true,
+              source: 'profile_settings',
+              subscribed_at: new Date().toISOString(),
+            }, { onConflict: 'email' })
+          } else {
+            await serviceClient.from('newsletter_subscribers').update({
+              is_active: false,
+              unsubscribed_at: new Date().toISOString(),
+            }).eq('email', userEmailLower)
+          }
+        }
       } catch (profErr) {
         console.error('Error syncing profile update:', profErr)
       }
@@ -666,6 +705,7 @@ export async function POST(request: NextRequest) {
       const updatedUserMeta = {
         ...(user.user_metadata || {}),
         ...updateData,
+        ...(typeof body.marketing_consent === 'boolean' ? { marketing_consent: body.marketing_consent } : {}),
       }
 
       const response = NextResponse.json({
@@ -676,6 +716,7 @@ export async function POST(request: NextRequest) {
           full_name: cleanName !== undefined ? cleanName : user.user_metadata?.full_name,
           phone: cleanPhone !== undefined ? cleanPhone : user.phone,
           avatar_url: cleanAvatar !== undefined ? cleanAvatar : user.user_metadata?.avatar_url,
+          marketing_consent: typeof body.marketing_consent === 'boolean' ? body.marketing_consent : undefined,
           user_metadata: updatedUserMeta,
         },
       })

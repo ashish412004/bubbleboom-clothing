@@ -24,6 +24,7 @@ interface ProfileFormProps {
   initialEmail: string
   initialPhone?: string
   initialAvatar?: string
+  initialMarketingConsent?: boolean
   isGoogleOnly?: boolean
 }
 
@@ -32,11 +33,14 @@ export function ProfileForm({
   initialEmail,
   initialPhone = '',
   initialAvatar = '',
+  initialMarketingConsent = false,
   isGoogleOnly = false,
 }: ProfileFormProps) {
   const [fullName, setFullName] = useState(initialName)
   const [phone, setPhone] = useState(initialPhone)
   const [avatarUrl, setAvatarUrl] = useState(initialAvatar)
+  const [marketingConsent, setMarketingConsent] = useState(initialMarketingConsent)
+  const [loadingConsent, setLoadingConsent] = useState(false)
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [profileMsg, setProfileMsg] = useState<string | null>(null)
 
@@ -65,6 +69,9 @@ export function ProfileForm({
             }
             if (data.user.phone) setPhone(data.user.phone)
             if (data.user.avatar_url) setAvatarUrl(data.user.avatar_url)
+            if (typeof data.user.marketing_consent === 'boolean') {
+              setMarketingConsent(data.user.marketing_consent)
+            }
             if (typeof data.user.isGoogleOnly === 'boolean') {
               setIsGoogleAccount(data.user.isGoogleOnly)
             }
@@ -76,6 +83,37 @@ export function ProfileForm({
     }
     checkAuthMetadata()
   }, [])
+
+  const handleSaveMarketingConsent = async (nextConsent: boolean) => {
+    setLoadingConsent(true)
+    try {
+      const res = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update-profile',
+          marketing_consent: nextConsent,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to update marketing preferences')
+      }
+
+      setMarketingConsent(nextConsent)
+      await refreshUser()
+      toast.success(
+        nextConsent
+          ? 'Subscribed to Bubble Boom launch announcements and drops!'
+          : 'Unsubscribed from marketing emails.'
+      )
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update preferences')
+    } finally {
+      setLoadingConsent(false)
+    }
+  }
 
   // 1. UPDATE PROFILE INFORMATION
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -327,6 +365,48 @@ export function ProfileForm({
               </span>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Marketing Communication Preferences */}
+      <div className="space-y-4 pt-6 border-t border-neutral-100">
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-wider text-black">
+            EMAIL &amp; MARKETING PREFERENCES
+          </h3>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            Manage your subscription to Bubble Boom launch announcements and drops.
+          </p>
+        </div>
+
+        <div className="bg-[#F9F9FB] rounded-xl p-5 border border-neutral-200/80">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="profileMarketingConsent"
+                checked={marketingConsent}
+                onChange={(e) => handleSaveMarketingConsent(e.target.checked)}
+                disabled={loadingConsent}
+                className="mt-1 h-4 w-4 border-black rounded-none text-black focus:ring-black cursor-pointer"
+              />
+              <label htmlFor="profileMarketingConsent" className="text-xs text-neutral-700 font-medium leading-relaxed cursor-pointer select-none">
+                I'd like to receive Bubble Boom launch announcements, new drops and exclusive offers by email.
+              </label>
+            </div>
+            <span
+              className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-md shrink-0 uppercase tracking-wider ${
+                marketingConsent
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-neutral-200 text-neutral-600'
+              }`}
+            >
+              {loadingConsent ? 'Saving...' : marketingConsent ? 'Opted In' : 'Not Subscribed'}
+            </span>
+          </div>
+          <p className="text-[11px] text-neutral-500 mt-3 pt-3 border-t border-neutral-200/60 leading-normal">
+            Transactional messages such as order receipts, shipping updates, and password resets will continue to be delivered regardless of this preference.
+          </p>
         </div>
       </div>
     </div>
