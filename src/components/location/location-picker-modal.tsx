@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { X, Navigation, MapPin, Loader2, Check, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Edit3 } from 'lucide-react'
+import { X, Navigation, MapPin, Loader2, Check, AlertCircle, RefreshCw, ZoomIn, ZoomOut, Edit3, Crosshair } from 'lucide-react'
 
 export interface LocationAddressResult {
   address_line1: string
@@ -25,7 +25,7 @@ export interface LocationPickerModalProps {
   title?: string
 }
 
-// Neutral overview center of India for visual initialization only (NEVER treated as an address)
+// Neutral overview center of India for visual canvas initialization only (NEVER treated as an address)
 const DEFAULT_MAP_LAT = 20.5937
 const DEFAULT_MAP_LON = 78.9629
 const DEFAULT_MAP_ZOOM = 5
@@ -42,6 +42,7 @@ export function LocationPickerModal({
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
   const leafletInstanceRef = useRef<any>(null)
+  const accuracyCircleRef = useRef<any>(null)
   const isGoogleMapRef = useRef<boolean>(false)
 
   const hasInitialCoords = Boolean(
@@ -128,6 +129,7 @@ export function LocationPickerModal({
         setIsLocating(false)
         const lat = pos.coords.latitude
         const lon = pos.coords.longitude
+        const accuracy = pos.coords.accuracy
         setCoords({ lat, lon })
         setIsLocationVerified(true)
         setPermissionNote(null)
@@ -139,6 +141,24 @@ export function LocationPickerModal({
             mapInstanceRef.current.setZoom(VERIFIED_ZOOM)
           } else if (leafletInstanceRef.current) {
             leafletInstanceRef.current.setView([lat, lon], VERIFIED_ZOOM, { animate: true })
+
+            // Display subtle GPS accuracy radius circle on the map
+            const L = (window as any).L
+            if (L && accuracy && accuracy > 0) {
+              if (accuracyCircleRef.current) {
+                try {
+                  leafletInstanceRef.current.removeLayer(accuracyCircleRef.current)
+                } catch {}
+              }
+              accuracyCircleRef.current = L.circle([lat, lon], {
+                radius: Math.min(accuracy, 300),
+                color: '#000000',
+                fillColor: '#000000',
+                fillOpacity: 0.08,
+                weight: 1.5,
+                dashArray: '3, 4',
+              }).addTo(leafletInstanceRef.current)
+            }
           }
         }
         triggerReverseGeocode(lat, lon)
@@ -353,6 +373,12 @@ export function LocationPickerModal({
       isMounted = false
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
       if (leafletInstanceRef.current) {
+        if (accuracyCircleRef.current) {
+          try {
+            leafletInstanceRef.current.removeLayer(accuracyCircleRef.current)
+          } catch {}
+          accuracyCircleRef.current = null
+        }
         try {
           leafletInstanceRef.current.remove()
         } catch {}
@@ -444,45 +470,83 @@ export function LocationPickerModal({
         )}
 
         {/* Map Area */}
-        <div className="relative flex-1 w-full bg-neutral-100 overflow-hidden">
-          {/* Map canvas */}
-          <div ref={mapContainerRef} className="w-full h-full" tabIndex={0} />
+        <div className="relative flex-1 w-full bg-[#f4f3f0] overflow-hidden">
+          {/* Map canvas with improved contrast/brightness for clearer roads & buildings */}
+          <div
+            ref={mapContainerRef}
+            className="w-full h-full [&_.leaflet-tile-pane]:contrast-[1.12] [&_.leaflet-tile-pane]:brightness-[0.98] [&_.leaflet-tile-pane]:saturate-[1.15]"
+            tabIndex={0}
+          />
 
-          {/* Centered Delivery Location Pin (Swiggy / Google Maps Style) */}
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
+          {/* 1. Precision Centered Delivery Location Pin (Black Pin with White Center Dot) */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full pointer-events-none z-30 select-none">
             <div
-              className={`relative -mt-10 flex flex-col items-center transition-transform duration-200 ${
+              className={`flex flex-col items-center transition-transform duration-200 ease-out ${
                 isPanning ? '-translate-y-3 scale-105' : 'translate-y-0 scale-100'
               }`}
             >
               {/* Delivery Pin Badge */}
-              <div className="bg-black text-white text-[10px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full shadow-lg whitespace-nowrap mb-1 border border-white/20 select-none">
-                {isLocationVerified ? 'Order will be delivered here' : 'Move map to place pin'}
+              <div className="bg-black text-white text-[10px] font-bold tracking-wider uppercase px-3 py-1 rounded-full shadow-2xl whitespace-nowrap mb-1.5 border border-white/30 flex items-center gap-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${isLocationVerified ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
+                <span>
+                  {isPanning
+                    ? 'Locating point...'
+                    : isLocationVerified
+                    ? 'Order will be delivered here'
+                    : 'Move map to place pin'}
+                </span>
               </div>
 
-              {/* Delivery Pin Head */}
-              <div className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center shadow-xl border-2 border-white">
-                <MapPin size={20} className="fill-white text-white" />
+              {/* Pin Head: Solid Black Teardrop with White Center */}
+              <div className="relative flex flex-col items-center">
+                <div className="w-11 h-11 bg-black rounded-full shadow-2xl border-[3px] border-white flex items-center justify-center">
+                  <div className="w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-inner">
+                    <div className="w-1.5 h-1.5 bg-black rounded-full" />
+                  </div>
+                </div>
+                {/* Pointer Pointing Directly at Geographic Target */}
+                <div className="w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-t-[10px] border-t-black -mt-[2px]" />
               </div>
-              {/* Pin Pointer Point */}
-              <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-black -mt-[1px]" />
-              {/* Ground Shadow */}
+
+              {/* Ground Shadow Point */}
               <div
-                className={`w-3.5 h-1.5 bg-black/35 rounded-full blur-[1px] mt-0.5 transition-all duration-200 ${
-                  isPanning ? 'scale-75 opacity-40' : 'scale-100 opacity-80'
+                className={`w-3.5 h-1.5 bg-black/40 rounded-full blur-[1px] transition-all duration-200 ${
+                  isPanning ? 'scale-50 opacity-20 translate-y-3' : 'scale-100 opacity-70 translate-y-0'
                 }`}
               />
             </div>
           </div>
 
+          {/* Hidden reference for MapPin icon import compatibility */}
+          <span className="sr-only"><MapPin size={0} /></span>
+
           {/* Floating Instructions Pill */}
-          <div className="absolute top-3 inset-x-0 flex justify-center pointer-events-none z-10 px-4">
-            <div className="bg-white/95 backdrop-blur-xs border border-neutral-300 text-neutral-900 text-[11px] font-semibold tracking-wide py-1.5 px-3.5 rounded-full shadow-md flex items-center gap-1.5">
+          <div className="absolute top-3 left-4 pointer-events-none z-20">
+            <div className="bg-white/95 backdrop-blur-xs border border-neutral-300 text-neutral-900 text-[11px] font-semibold tracking-wide py-1.5 px-3 rounded-full shadow-md flex items-center gap-1.5">
               <span>📍 Move map to adjust exact delivery point</span>
             </div>
           </div>
 
-          {/* Map Controls: Recenter to GPS */}
+          {/* 2. Floating "USE CURRENT LOCATION" Action Button */}
+          <div className="absolute top-3 right-4 z-20">
+            <button
+              type="button"
+              onClick={() => requestCurrentLocation(true)}
+              disabled={isLocating}
+              aria-label="Use Current Location"
+              title="Detect and use my current location"
+              className="bg-black hover:bg-neutral-800 text-white border border-neutral-700 shadow-xl px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer active:scale-95 disabled:opacity-60"
+            >
+              {isLocating ? (
+                <Loader2 size={14} className="animate-spin text-white" />
+              ) : (
+                <Crosshair size={14} className="text-white" />
+              )}
+              <span>{isLocating ? 'Locating...' : 'Use Current Location'}</span>
+            </button>
+          </div>
+
+          {/* Map Controls: Floating Recenter & Desktop Zoom Buttons */}
           <div className="absolute bottom-4 right-4 z-20 flex flex-col gap-2">
             <button
               type="button"
@@ -522,13 +586,15 @@ export function LocationPickerModal({
         </div>
 
         {/* Bottom Address Confirmation Panel */}
-        <div className="p-4 sm:p-5 bg-white border-t border-neutral-200 shrink-0 space-y-3.5">
+        <div className="p-4 sm:p-5 bg-white border-t border-neutral-200 shrink-0 space-y-3.5 pb-[max(env(safe-area-inset-bottom),1rem)]">
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full bg-neutral-100 border border-neutral-300 flex items-center justify-center shrink-0 mt-0.5">
               {isResolvingAddress || isLocating ? (
                 <Loader2 size={16} className="animate-spin text-black" />
               ) : (
-                <MapPin size={16} className="text-black" />
+                <div className="w-4 h-4 bg-black rounded-full flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                </div>
               )}
             </div>
 
@@ -541,6 +607,11 @@ export function LocationPickerModal({
                 <div className="space-y-1 py-1">
                   <p className="text-xs font-semibold text-black animate-pulse">Detecting your GPS position...</p>
                   <p className="text-[11px] text-neutral-500">Please allow browser location access</p>
+                </div>
+              ) : isPanning ? (
+                <div className="space-y-1 py-1">
+                  <p className="text-xs font-semibold text-black">Updating pin location...</p>
+                  <p className="text-[11px] text-neutral-500">Release map to select address</p>
                 </div>
               ) : isResolvingAddress && !currentAddress ? (
                 <div className="space-y-1 py-1">
@@ -560,7 +631,7 @@ export function LocationPickerModal({
                 </div>
               ) : (
                 <p className="text-xs text-neutral-500 italic">
-                  Move map pin or click &quot;Recenter&quot; to detect your address...
+                  Move map pin or click &quot;Use Current Location&quot; to detect your address...
                 </p>
               )}
             </div>

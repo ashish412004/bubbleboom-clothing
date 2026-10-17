@@ -139,5 +139,23 @@ describe('Bubble Boom – Google Maps Style Location Picker & Address Autofill S
     expect(checkoutContent).toContain('maximumAge: 0')
     expect(addressContent).toContain('maximumAge: 0')
   })
+
+  it('11. Renders high-visibility monochrome pin, floating Use Current Location button, and sharpened map tiles', () => {
+    // Monochrome pin with white center
+    expect(modalContent).toContain('Pin Head: Solid Black Teardrop with White Center')
+    expect(modalContent).toContain('Pointer Pointing Directly at Geographic Target')
+    // Floating "Use Current Location" action button inside map
+    expect(modalContent).toContain('Use Current Location')
+    expect(modalContent).toContain('Crosshair')
+    // Leaflet GPS accuracy circle
+    expect(modalContent).toContain('accuracyCircleRef')
+    // Enhanced map contrast and saturation
+    expect(modalContent).toContain('contrast-[1.12]')
+    expect(modalContent).toContain('brightness-[0.98]')
+    expect(modalContent).toContain('saturate-[1.15]')
+    // Mobile safe-area inset
+    expect(modalContent).toContain('env(safe-area-inset-bottom)')
+  })
 })
+
 
