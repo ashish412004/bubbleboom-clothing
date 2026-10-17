@@ -29,13 +29,9 @@ export function SavedDropsView({ initialItems }: SavedDropsViewProps) {
 
       setItems((prev) => prev.filter((item) => item.variant_id !== variantId))
       await refreshWishlist()
-      toast.success('Removed from Saved Drops', {
-        style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
-      })
+      toast.success('Removed from Saved Drops')
     } catch {
-      toast.error('Could not remove item from Saved Drops', {
-        style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
-      })
+      toast.error('Could not remove item from Saved Drops')
     } finally {
       setLoadingVariantId(null)
     }
@@ -58,13 +54,9 @@ export function SavedDropsView({ initialItems }: SavedDropsViewProps) {
       }
 
       await refreshCart()
-      toast.success('Added to Bag!', {
-        style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
-      })
+      toast.success(`Added ${item.variant?.product?.name || 'item'} to bag!`)
     } catch (err: any) {
-      toast.error(err.message || 'Could not add to bag', {
-        style: { background: '#000000', color: '#FFFFFF', borderRadius: '0px' },
-      })
+      toast.error(err.message || 'Could not add to bag')
     } finally {
       setLoadingVariantId(null)
     }
@@ -72,39 +64,62 @@ export function SavedDropsView({ initialItems }: SavedDropsViewProps) {
 
   if (items.length === 0) {
     return (
-      <div className="border border-black bg-white p-8 sm:p-12 text-center">
-        <div className="w-16 h-16 bg-neutral-100 flex items-center justify-center mx-auto mb-4 border border-black">
-          <Heart className="w-8 h-8 text-neutral-400" />
+      <div className="space-y-6">
+        <div className="pb-6 border-b border-neutral-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-black uppercase tracking-tight text-black">
+              SAVED DROPS
+            </h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Your wishlist &amp; curated drops
+            </p>
+          </div>
+          <span className="text-[11px] font-mono font-bold text-neutral-600 bg-neutral-100 px-3 py-1 rounded-full self-start sm:self-auto">
+            0 Saved
+          </span>
         </div>
-        <h2 className="text-base uppercase tracking-tight font-black mb-2">No Saved Drops Yet</h2>
-        <p className="text-xs text-neutral-600 mb-6 max-w-sm mx-auto">
-          Save your favourite streetwear drops and limited editions to track sizing and stock right from your account.
-        </p>
-        <Link
-          href="/shop"
-          className="inline-flex items-center gap-2 bg-black text-white px-6 py-2.5 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors"
-        >
-          <span>Explore Drops</span>
-          <ArrowRight className="w-4 h-4" />
-        </Link>
+
+        <div className="bg-[#F9F9FB] rounded-2xl p-12 border border-dashed border-neutral-300 text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-white border border-neutral-200 flex items-center justify-center mx-auto shadow-2xs">
+            <Heart className="w-6 h-6 text-neutral-400" />
+          </div>
+          <h3 className="text-base uppercase tracking-tight font-black text-black">
+            No Saved Drops Yet
+          </h3>
+          <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+            You haven&apos;t saved any limited streetwear pieces or footwear drops to your vault yet.
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/shop"
+              className="inline-flex items-center gap-2 bg-black text-white px-6 py-2.5 rounded-xl text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 transition-colors shadow-xs"
+            >
+              <span>Explore Collection</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center pb-4 border-b border-neutral-200">
+      <div className="pb-6 border-b border-neutral-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-base uppercase tracking-tight font-black">Saved Drops</h2>
-          <p className="text-xs text-neutral-500 font-mono mt-0.5">
+          <h2 className="text-xl font-black uppercase tracking-tight text-black">
+            SAVED DROPS
+          </h2>
+          <p className="text-xs text-neutral-500 mt-0.5">
             {items.length} {items.length === 1 ? 'piece saved' : 'pieces saved'}
           </p>
         </div>
         <Link
           href="/shop"
-          className="text-xs uppercase tracking-wider font-bold underline hover:text-neutral-600"
+          className="text-xs uppercase tracking-wider font-bold text-neutral-800 hover:text-black flex items-center gap-1 self-start sm:self-auto"
         >
-          Explore Catalog →
+          <span>Explore Catalog</span>
+          <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
 
@@ -124,7 +139,7 @@ export function SavedDropsView({ initialItems }: SavedDropsViewProps) {
           return (
             <div
               key={item.id}
-              className="border border-black bg-white flex flex-col justify-between overflow-hidden hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
+              className="rounded-2xl border border-neutral-200/90 bg-white flex flex-col justify-between overflow-hidden shadow-2xs hover:border-black/50 transition-all"
             >
               {/* Product Image Box */}
               <div className="relative aspect-[3/4] bg-neutral-100 overflow-hidden">
@@ -139,13 +154,13 @@ export function SavedDropsView({ initialItems }: SavedDropsViewProps) {
                 </Link>
 
                 {/* Stock or Discount Badge */}
-                <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
+                <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10">
                   {isOutOfStock ? (
-                    <span className="bg-black text-white text-[10px] font-mono uppercase px-2 py-0.5 border border-white">
+                    <span className="bg-black text-white text-[10px] font-mono uppercase px-2 py-0.5 rounded-md font-bold">
                       Sold Out
                     </span>
                   ) : hasDiscount ? (
-                    <span className="bg-white text-black border border-black text-[10px] font-mono font-bold px-2 py-0.5 shadow-sm">
+                    <span className="bg-white text-black border border-neutral-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md shadow-xs">
                       {discountPercent}% OFF
                     </span>
                   ) : null}
@@ -158,21 +173,21 @@ export function SavedDropsView({ initialItems }: SavedDropsViewProps) {
                   disabled={isLoading}
                   aria-label="Remove from Saved Drops"
                   title="Remove from Saved Drops"
-                  className="absolute top-2 right-2 z-10 bg-white hover:bg-black hover:text-white p-2 border border-black transition-colors rounded-none shadow-sm cursor-pointer"
+                  className="absolute top-2.5 right-2.5 z-10 bg-white/90 backdrop-blur-xs hover:bg-white p-2 rounded-full border border-neutral-200 shadow-xs cursor-pointer transition-transform hover:scale-110"
                 >
                   <Heart className="w-4 h-4 fill-[#DC2626] text-[#DC2626]" />
                 </button>
               </div>
 
               {/* Product Meta */}
-              <div className="p-4 flex-1 flex flex-col justify-between">
+              <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                 <div>
                   <Link href={`/products/${product.slug}`}>
-                    <h3 className="text-sm font-bold uppercase tracking-tight text-black line-clamp-1 hover:underline">
+                    <h3 className="text-xs font-bold uppercase tracking-tight text-black line-clamp-1 hover:underline">
                       {product.name}
                     </h3>
                   </Link>
-                  <p className="text-xs text-neutral-500 font-mono mt-1">
+                  <p className="text-[11px] text-neutral-500 font-mono mt-1">
                     Size: <span className="font-bold text-black">{variant.size}</span> | Color:{' '}
                     <span className="font-bold text-black">{variant.color}</span>
                   </p>
@@ -190,12 +205,12 @@ export function SavedDropsView({ initialItems }: SavedDropsViewProps) {
                 </div>
 
                 {/* Actions */}
-                <div className="mt-4 space-y-2 pt-3 border-t border-neutral-200">
+                <div className="pt-3 border-t border-neutral-100 space-y-2">
                   <button
                     type="button"
                     onClick={() => handleAddToCart(item)}
                     disabled={isLoading || isOutOfStock}
-                    className="w-full bg-black text-white py-2 px-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-800 disabled:bg-neutral-200 disabled:text-neutral-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full bg-black text-white py-2 px-3 rounded-xl text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-200 disabled:text-neutral-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
                   >
                     <ShoppingBag className="w-3.5 h-3.5" />
                     <span>{isOutOfStock ? 'Sold Out' : 'Add to Bag'}</span>
@@ -204,7 +219,7 @@ export function SavedDropsView({ initialItems }: SavedDropsViewProps) {
                   <div className="flex gap-2">
                     <Link
                       href={`/products/${product.slug}`}
-                      className="flex-1 border border-black text-black py-2 px-3 text-xs uppercase tracking-widest font-bold hover:bg-neutral-100 transition-colors flex items-center justify-center gap-1.5"
+                      className="flex-1 border border-neutral-200 rounded-xl text-neutral-800 py-2 px-3 text-xs uppercase tracking-wider font-bold hover:bg-neutral-100 transition-colors flex items-center justify-center gap-1.5"
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span>View</span>
@@ -213,7 +228,7 @@ export function SavedDropsView({ initialItems }: SavedDropsViewProps) {
                       type="button"
                       onClick={() => handleRemove(item.variant_id)}
                       disabled={isLoading}
-                      className="border border-neutral-300 text-neutral-600 hover:text-black hover:border-black px-3 py-2 text-xs uppercase font-bold transition-colors flex items-center justify-center"
+                      className="border border-neutral-200 rounded-xl text-neutral-500 hover:text-red-600 hover:bg-red-50 hover:border-red-200 px-3 py-2 text-xs transition-colors flex items-center justify-center cursor-pointer"
                       title="Remove"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

@@ -16,6 +16,7 @@ import {
   KeyRound,
   ShieldCheck,
   Sparkles,
+  Loader2,
 } from 'lucide-react'
 
 interface ProfileFormProps {
@@ -99,23 +100,9 @@ export function ProfileForm({
         throw new Error(data.error || 'Failed to update profile')
       }
 
-      // Also trigger Supabase client session update
-      try {
-        const supabase = createClient()
-        await supabase.auth.updateUser({
-          data: {
-            full_name: fullName.trim(),
-            phone: phone.trim(),
-            avatar_url: avatarUrl.trim(),
-          },
-        })
-      } catch {
-        // Handled server-side
-      }
-
-      await refreshUser(true)
-      setProfileMsg('Profile information updated successfully!')
-      toast.success('Profile details saved')
+      await refreshUser()
+      setProfileMsg('Personal details saved successfully.')
+      toast.success('Profile updated successfully')
     } catch (err: any) {
       toast.error(err.message || 'Failed to update profile')
     } finally {
@@ -159,14 +146,14 @@ export function ProfileForm({
 
       setPasswordMsg(
         isGoogleAccount && !passwordSetupDone
-          ? 'Password Added Successfully! You can now sign in using both Google and your email & password.'
-          : 'Your password has been changed securely.'
+          ? 'Password added successfully! You can now sign in using both Google and email/password.'
+          : 'Your account password has been updated securely.'
       )
       setPasswordSetupDone(true)
       setIsGoogleAccount(false)
       setNewPassword('')
       setConfirmPassword('')
-      toast.success('Password updated successfully')
+      toast.success('Password saved successfully')
     } catch (err: any) {
       setPasswordErr(err.message || 'Failed to update password')
     } finally {
@@ -177,132 +164,61 @@ export function ProfileForm({
   const isSettingNewPassword = isGoogleAccount && !passwordSetupDone
 
   return (
-    <div className="space-y-8">
-      {/* Profile Details Form */}
-      <div className="border border-black bg-white p-6 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-neutral-200">
-          <div>
-            <h2 className="text-base uppercase tracking-tight font-black">
-              Personal Information
-            </h2>
-            <p className="text-xs text-neutral-500 mt-0.5">
-              Update your display name, contact phone, and avatar.
-            </p>
-          </div>
+    <div className="space-y-10">
+      {/* Section Header */}
+      <div className="pb-6 border-b border-neutral-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black uppercase tracking-tight text-black">
+            PROFILE &amp; SECURITY
+          </h2>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            Account authentication credentials &amp; security preferences
+          </p>
         </div>
-
-        {profileMsg && (
-          <div className="mb-4 p-3 bg-neutral-100 border-l-4 border-black text-xs text-black flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>{profileMsg}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleUpdateProfile} className="space-y-4">
-          <div>
-            <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-              Full Name
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Enter your full name"
-                required
-                className="w-full border border-black p-2.5 pl-10 text-xs focus:outline-none focus:ring-1 focus:ring-black"
-              />
-              <User className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-              Email Address (Account Identifier)
-            </label>
-            <div className="relative">
-              <input
-                type="email"
-                value={initialEmail}
-                disabled
-                className="w-full border border-neutral-300 bg-neutral-100 p-2.5 pl-10 text-xs text-neutral-500 cursor-not-allowed font-mono"
-              />
-              <Mail className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
-            </div>
-            <span className="text-[10px] text-neutral-400 font-mono mt-1 block">
-              Email address cannot be changed directly for security reasons.
-            </span>
-          </div>
-
-          <div>
-            <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-              Phone Number (Optional)
-            </label>
-            <div className="relative">
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+91 9876543210"
-                className="w-full border border-black p-2.5 pl-10 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-black"
-              />
-              <Phone className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={loadingProfile}
-              className="bg-black text-white px-6 py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-            >
-              {loadingProfile ? 'Saving Details...' : 'Save Profile Details'}
-            </button>
-          </div>
-        </form>
+        <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-neutral-600 bg-neutral-100 px-3 py-1 rounded-full self-start sm:self-auto">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+          <span>Protected Session</span>
+        </div>
       </div>
 
       {/* Account Security & Password Section */}
-      <div className="border border-black bg-white p-6 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-neutral-200">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base uppercase tracking-tight font-black">
-                {isSettingNewPassword ? 'SET A PASSWORD' : 'CHANGE PASSWORD'}
-              </h2>
-              {isSettingNewPassword && (
-                <span className="inline-flex items-center gap-1 bg-neutral-100 border border-neutral-300 text-black px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider">
-                  <Sparkles size={11} /> Optional
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-neutral-600 mt-1">
-              {isSettingNewPassword
-                ? 'Add a password to also sign in using your email and password. Google sign-in remains active.'
-                : 'Update your account password for email/password authentication.'}
-            </p>
+      <div className="space-y-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-black uppercase tracking-wider text-black">
+              {isSettingNewPassword ? 'SET AN ACCOUNT PASSWORD' : 'CHANGE PASSWORD'}
+            </h3>
+            {isSettingNewPassword && (
+              <span className="inline-flex items-center gap-1 bg-neutral-100 border border-neutral-200 text-neutral-700 px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider rounded-md">
+                <Sparkles size={11} /> Optional
+              </span>
+            )}
           </div>
-          <KeyRound className="w-5 h-5 text-neutral-400 shrink-0 hidden sm:block" />
+          <p className="text-xs text-neutral-500 mt-1">
+            {isSettingNewPassword
+              ? 'Add a password to enable email & password sign-in alongside your Google credentials.'
+              : 'Update your account password for secure email & password login.'}
+          </p>
         </div>
 
         {passwordMsg && (
-          <div className="mb-4 p-3 bg-neutral-100 border-l-4 border-black text-xs text-black flex items-center gap-2">
+          <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{passwordMsg}</span>
           </div>
         )}
 
         {passwordErr && (
-          <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-600 text-xs text-red-900 flex items-center gap-2">
+          <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
             <span>{passwordErr}</span>
           </div>
         )}
 
-        <form onSubmit={handlePasswordSubmit} className="space-y-4">
+        <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-lg">
           <div>
-            <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-              {isSettingNewPassword ? 'New Password' : 'New Password'}
+            <label className="block text-[11px] uppercase font-bold tracking-wider text-neutral-600 mb-1">
+              New Password *
             </label>
             <div className="relative">
               <input
@@ -312,26 +228,25 @@ export function ProfileForm({
                 placeholder="At least 8 characters"
                 autoComplete="new-password"
                 required
-                className="w-full border border-black p-2.5 pl-10 pr-10 text-xs focus:outline-none focus:ring-1 focus:ring-black"
+                className="w-full h-11 px-3.5 pr-10 rounded-xl bg-[#F9F9FB] border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
               />
-              <Lock className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3 text-neutral-500 hover:text-black"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black cursor-pointer"
                 title={showPassword ? 'Hide password' : 'Show password'}
               >
-                {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <span className="text-[10px] text-neutral-400 font-mono mt-1 block">
-              Must be at least 8 characters.
+            <span className="text-[10px] text-neutral-400 mt-1 block">
+              Minimum 8 characters with a mix of letters and numbers recommended.
             </span>
           </div>
 
           <div>
-            <label className="block text-xs uppercase font-mono tracking-wider font-bold mb-1">
-              Confirm Password
+            <label className="block text-[11px] uppercase font-bold tracking-wider text-neutral-600 mb-1">
+              Confirm New Password *
             </label>
             <div className="relative">
               <input
@@ -341,9 +256,8 @@ export function ProfileForm({
                 placeholder="Re-enter password"
                 autoComplete="new-password"
                 required
-                className="w-full border border-black p-2.5 pl-10 text-xs focus:outline-none focus:ring-1 focus:ring-black"
+                className="w-full h-11 px-3.5 rounded-xl bg-[#F9F9FB] border border-neutral-200/80 text-xs text-black focus:outline-none focus:border-black font-medium"
               />
-              <Lock className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
             </div>
           </div>
 
@@ -351,18 +265,70 @@ export function ProfileForm({
             <button
               type="submit"
               disabled={loadingPassword || !newPassword || !confirmPassword}
-              className="bg-black text-white px-6 py-2.5 text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              className="px-6 py-2.5 rounded-xl bg-black text-white text-xs uppercase tracking-wider font-bold hover:bg-neutral-800 disabled:opacity-50 transition-colors shadow-xs cursor-pointer inline-flex items-center gap-2"
             >
-              {loadingPassword
-                ? 'Saving Password...'
-                : isSettingNewPassword
-                ? 'Set Password'
-                : 'Change Password'}
+              {loadingPassword ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving Password...</span>
+                </>
+              ) : (
+                <span>{isSettingNewPassword ? 'Set Password' : 'Change Password'}</span>
+              )}
             </button>
           </div>
         </form>
       </div>
+
+      {/* Account Identity & Connected Logins */}
+      <div className="pt-6 border-t border-neutral-100 space-y-4">
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-wider text-black">
+            Connected Credentials
+          </h3>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            Your verified authentication identities.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-[#F9F9FB] rounded-xl p-4 border border-neutral-200/80 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center">
+                <Mail className="w-4 h-4 text-black" />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 block">Primary Email</span>
+                <span className="text-xs font-mono font-bold text-black">{initialEmail}</span>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+              Verified
+            </span>
+          </div>
+
+          <div className="bg-[#F9F9FB] rounded-xl p-4 border border-neutral-200/80 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center">
+                <Phone className="w-4 h-4 text-black" />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 block">Mobile Login</span>
+                <span className="text-xs font-mono font-bold text-black">{initialPhone || 'Not Connected'}</span>
+              </div>
+            </div>
+            {initialPhone ? (
+              <span className="text-[10px] font-bold font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                Verified
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold font-mono text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded-md">
+                Optional
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
-
