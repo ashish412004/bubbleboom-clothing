@@ -62,7 +62,7 @@ export function CategoryCard({
               src={category.cover_image!}
               alt={category.name}
               fill
-              sizes="(max-width: 640px) 74vw, (max-width: 1024px) 40vw, 340px"
+              sizes="(max-width: 640px) 66vw, (max-width: 1024px) 40vw, 340px"
               priority={priority}
               className="object-contain sm:object-cover object-center transition-transform duration-500 ease-out"
             />
@@ -84,7 +84,7 @@ export function CategoryCard({
       )}
 
       {/* Overlay Content: Positioned inside bottom-left of card matching reference screenshot */}
-      <div className="absolute bottom-0 inset-x-0 p-4 sm:p-6 z-20 flex flex-col items-start justify-end">
+      <div className="absolute bottom-0 inset-x-0 p-3.5 sm:p-6 z-20 flex flex-col items-start justify-end">
         {hasEmbeddedPosterText ? (
           // Avoid duplicate overlay headings when poster graphic already embeds typography
           <>
@@ -94,17 +94,17 @@ export function CategoryCard({
         ) : (
           // Display bold category title and description when plain product photo is used
           <>
-            <h3 className="text-[22px] sm:text-[30px] lg:text-[32px] font-black uppercase tracking-tight text-white leading-none mb-1.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+            <h3 className="text-[20px] sm:text-[30px] lg:text-[32px] font-black uppercase tracking-tight text-white leading-none mb-1.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
               {category.name}
             </h3>
-            <p className="text-[10px] sm:text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-200 leading-snug mb-3 max-w-[260px] whitespace-pre-line drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+            <p className="text-[10px] sm:text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-200 leading-snug mb-2.5 sm:mb-3 max-w-[230px] sm:max-w-[260px] whitespace-pre-line drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
               {tagline}
             </p>
           </>
         )}
 
         {/* Outlined "Shop Now →" Button */}
-        <span className="inline-flex items-center gap-2 border border-white text-white text-xs font-semibold px-3.5 py-1.5 sm:px-4 sm:py-2 bg-transparent rounded-none tracking-wide group-hover:bg-white group-hover:text-black transition-colors duration-200">
+        <span className="inline-flex items-center gap-2 border border-white text-white text-xs font-semibold px-3 py-1.5 sm:px-4 sm:py-2 bg-transparent rounded-none tracking-wide group-hover:bg-white group-hover:text-black transition-colors duration-200">
           <span>Shop Now</span>
           <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
         </span>

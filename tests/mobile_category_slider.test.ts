@@ -8,15 +8,18 @@ describe('Bubble Boom – Reference-Matched Mobile Category Carousel Suite', () 
   const sliderContent = fs.readFileSync(sliderPath, 'utf-8')
   const cardContent = fs.readFileSync(cardPath, 'utf-8')
 
-  it('1. Mobile card size matches reference with subtle 8-10% reduction, rounded corners, and 72-74vw width', () => {
+  it('1. Mobile card size matches reference with subtle 10% reduction, rounded corners, and 66vw width', () => {
     // Aspect ratio 3:4 on mobile, 4:5 on desktop
     expect(cardContent).toContain('aspect-[3/4]')
     expect(cardContent).toContain('sm:aspect-[4/5]')
     // Rounded corners
     expect(cardContent).toContain('rounded-[20px]')
-    // Mobile card width ~72-74vw and capped proportionally
-    expect(sliderContent).toMatch(/flex-\[0_0_7[234]vw\]/)
-    expect(sliderContent).toContain('max-w-[305px] sm:max-w-[340px]')
+    // Mobile card width ~66vw and capped proportionally at 275px (~10% reduction)
+    expect(sliderContent).toContain('flex-[0_0_66vw]')
+    expect(sliderContent).toContain('max-w-[275px] sm:max-w-[340px]')
+    // 16px scroll padding on left and right for mobile
+    expect(sliderContent).toContain('scroll-pl-4 sm:scroll-pl-6 lg:scroll-pl-8')
+    expect(sliderContent).toContain('scroll-pr-4 sm:scroll-pr-6 lg:scroll-pr-8')
     // Card gap is 12px (gap-3) on mobile
     expect(sliderContent).toContain('gap-3 sm:gap-6')
   })

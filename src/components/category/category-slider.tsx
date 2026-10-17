@@ -51,7 +51,7 @@ export function CategorySlider({ categories }: CategorySliderProps) {
     }
   }, [updateScrollState, categories.length])
 
-  // Scroll by one card step with smooth alignment
+  // Scroll by one card step with smooth alignment accounting for container padding
   const scroll = (direction: 'prev' | 'next') => {
     const el = sliderRef.current
     if (!el) return
@@ -59,28 +59,44 @@ export function CategorySlider({ categories }: CategorySliderProps) {
     const cards = Array.from(el.querySelectorAll('[data-category-card]')) as HTMLElement[]
     if (cards.length === 0) return
 
-    const currentScroll = el.scrollLeft
+    const paddingLeft = parseFloat(window.getComputedStyle(el).paddingLeft) || (window.innerWidth >= 640 ? 24 : 16)
+    const containerRect = el.getBoundingClientRect()
     const gap = window.innerWidth >= 640 ? 24 : 12
 
-    let targetScroll = currentScroll
+    let targetScroll = el.scrollLeft
+
     if (direction === 'next') {
-      const nextCard = cards.find((card) => card.offsetLeft > currentScroll + 15)
+      // Find the first card that is visually positioned beyond paddingLeft + threshold
+      const nextCard = cards.find((card) => {
+        const cardRect = card.getBoundingClientRect()
+        return cardRect.left - containerRect.left > paddingLeft + 15
+      })
+
       if (nextCard) {
-        targetScroll = nextCard.offsetLeft - el.offsetLeft
+        const cardRect = nextCard.getBoundingClientRect()
+        targetScroll = el.scrollLeft + (cardRect.left - containerRect.left) - paddingLeft
       } else {
-        targetScroll = currentScroll + (cards[0].offsetWidth + gap)
+        targetScroll = el.scrollLeft + (cards[0].offsetWidth + gap)
       }
     } else {
-      const prevCards = cards.filter((card) => card.offsetLeft < currentScroll - 15)
+      // Find previous cards that are visually positioned to the left of paddingLeft - threshold
+      const prevCards = cards.filter((card) => {
+        const cardRect = card.getBoundingClientRect()
+        return cardRect.left - containerRect.left < paddingLeft - 15
+      })
+
       if (prevCards.length > 0) {
         const prevCard = prevCards[prevCards.length - 1]
-        targetScroll = prevCard.offsetLeft - el.offsetLeft
+        const cardRect = prevCard.getBoundingClientRect()
+        targetScroll = el.scrollLeft + (cardRect.left - containerRect.left) - paddingLeft
       } else {
-        targetScroll = Math.max(0, currentScroll - (cards[0].offsetWidth + gap))
+        targetScroll = 0
       }
     }
 
-    el.scrollTo({ left: Math.max(0, targetScroll), behavior: 'smooth' })
+    const maxScroll = el.scrollWidth - el.clientWidth
+    const finalScroll = Math.max(0, Math.min(maxScroll, Math.round(targetScroll)))
+    el.scrollTo({ left: finalScroll, behavior: 'smooth' })
   }
 
   // Mouse Drag Handlers for Desktop (ultra-smooth 60/120fps motion)
@@ -128,17 +144,22 @@ export function CategorySlider({ categories }: CategorySliderProps) {
     if (hasMovedRef.current) {
       const cards = Array.from(el.querySelectorAll('[data-category-card]')) as HTMLElement[]
       if (cards.length > 0) {
-        const currentScroll = el.scrollLeft
+        const paddingLeft = parseFloat(window.getComputedStyle(el).paddingLeft) || (window.innerWidth >= 640 ? 24 : 16)
+        const containerRect = el.getBoundingClientRect()
         let closestCard = cards[0]
         let minDiff = Infinity
         for (const card of cards) {
-          const diff = Math.abs(card.offsetLeft - el.offsetLeft - currentScroll)
+          const cardRect = card.getBoundingClientRect()
+          const diff = Math.abs(cardRect.left - containerRect.left - paddingLeft)
           if (diff < minDiff) {
             minDiff = diff
             closestCard = card
           }
         }
-        el.scrollTo({ left: closestCard.offsetLeft - el.offsetLeft, behavior: 'smooth' })
+        const cardRect = closestCard.getBoundingClientRect()
+        const targetScroll = el.scrollLeft + (cardRect.left - containerRect.left) - paddingLeft
+        const maxScroll = el.scrollWidth - el.clientWidth
+        el.scrollTo({ left: Math.max(0, Math.min(maxScroll, Math.round(targetScroll))), behavior: 'smooth' })
       }
     }
   }
@@ -187,14 +208,14 @@ export function CategorySlider({ categories }: CategorySliderProps) {
           </Link>
         </div>
 
-        {/* Horizontal Category Carousel Row: 72-74vw on mobile so next card is clearly visible on right with elegant proportion */}
+        {/* Horizontal Category Carousel Row: 66vw on mobile (~10% card size reduction) with 16px scroll padding and next card preview */}
         <div
           ref={sliderRef}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
-          className="flex gap-3 sm:gap-6 overflow-x-auto scroll-smooth snap-x snap-mandatory touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] will-change-scroll pb-2 pt-1 px-4 sm:px-6 lg:px-8 -mx-4 sm:-mx-6 lg:-mx-8 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
+          className="flex gap-3 sm:gap-6 overflow-x-auto scroll-smooth snap-x snap-mandatory touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] will-change-scroll pb-2 pt-1 px-4 sm:px-6 lg:px-8 -mx-4 sm:-mx-6 lg:-mx-8 scroll-pl-4 sm:scroll-pl-6 lg:scroll-pl-8 scroll-pr-4 sm:scroll-pr-6 lg:scroll-pr-8 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing select-none"
           role="region"
           aria-label="Shop by category carousel"
           tabIndex={0}
@@ -203,7 +224,7 @@ export function CategorySlider({ categories }: CategorySliderProps) {
             <div
               key={cat.id}
               data-category-card
-              className="snap-start shrink-0 flex-[0_0_73vw] sm:flex-[0_0_42%] md:flex-[0_0_36%] lg:flex-[0_0_30.5%] xl:flex-[0_0_23.5%] max-w-[305px] sm:max-w-[340px]"
+              className="snap-start shrink-0 flex-[0_0_66vw] sm:flex-[0_0_42%] md:flex-[0_0_36%] lg:flex-[0_0_30.5%] xl:flex-[0_0_23.5%] max-w-[275px] sm:max-w-[340px]"
             >
               <CategoryCard
                 category={cat}

@@ -41,8 +41,11 @@ describe('Bubble Boom – Reference-Matched Shop By Category Carousel Suite', ()
 
   it('5. Responsive card width classes provide expected visible card ratios with next card peek', () => {
     const content = fs.readFileSync(sliderFilePath, 'utf-8')
-    // Mobile: 72-74vw card width so next card peeks in from the right edge with subtle 8-10% reduction
-    expect(content).toMatch(/flex-\[0_0_7[234]vw\]/)
+    // Mobile: 66vw card width (~10% reduction) with max-w-[275px] and 16px scroll padding
+    expect(content).toContain('flex-[0_0_66vw]')
+    expect(content).toContain('max-w-[275px]')
+    expect(content).toContain('scroll-pl-4 sm:scroll-pl-6 lg:scroll-pl-8')
+    expect(content).toContain('scroll-pr-4 sm:scroll-pr-6 lg:scroll-pr-8')
     // Tablet: 42% / 36%
     expect(content).toContain('sm:flex-[0_0_42%]')
     expect(content).toContain('md:flex-[0_0_36%]')

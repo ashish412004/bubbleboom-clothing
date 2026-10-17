@@ -96,8 +96,8 @@ describe('Bubble Boom – Mobile Website Zoom & Responsive Display Suite', () =>
     // Mobile Hero CTA uses responsive max-width
     expect(heroContent).toContain('max-w-[78vw]')
 
-    // Category card widths fit gracefully within viewport
-    expect(categorySliderContent).toContain('flex-[0_0_73vw]')
+    // Category card widths fit gracefully within viewport with ~10% reduction
+    expect(categorySliderContent).toContain('flex-[0_0_66vw]')
 
     // Product cards utilize responsive aspect ratio and rounded borders
     expect(productCardContent).toContain('aspect-[3/4]')
