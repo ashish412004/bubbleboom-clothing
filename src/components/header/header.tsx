@@ -47,16 +47,10 @@ export function Header({
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-neutral-200">
-      {/* Configurable Announcement Bar */}
+      {/* Informational Announcement Bar (Non-clickable, informational display only) */}
       {announcementText && (
-        <div className="bg-black text-white text-xs sm:text-sm font-medium tracking-wider text-center py-2 px-4 uppercase transition-colors">
-          {announcementLink ? (
-            <Link href={announcementLink} className="hover:underline">
-              {announcementText}
-            </Link>
-          ) : (
-            <span>{announcementText}</span>
-          )}
+        <div className="bg-black text-white text-xs sm:text-sm font-medium tracking-wider text-center py-2 px-4 uppercase">
+          <p className="m-0 leading-normal">{announcementText}</p>
         </div>
       )}
 
