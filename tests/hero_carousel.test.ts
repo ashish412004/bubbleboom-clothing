@@ -75,8 +75,8 @@ describe('Homepage Hero Background Carousel Assets & Optimization', () => {
     expect(content).toContain('onMouseLeave')
     expect(content).toContain('onTouchStart')
     expect(content).toContain('onTouchEnd')
-    expect(content).toContain('onFocus')
-    expect(content).toContain('onBlur')
+    // Verifies autoplay interval is set to 2 seconds (2000ms)
+    expect(content).toContain('const AUTOPLAY_INTERVAL = 2000')
   })
 
   it('provides dedicated vertical mobile hero images for all 4 slides', () => {

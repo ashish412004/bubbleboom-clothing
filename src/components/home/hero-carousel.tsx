@@ -59,7 +59,7 @@ export const HERO_SLIDES: HeroSlide[] = [
   },
 ]
 
-const AUTOPLAY_INTERVAL = 5000 // 5 seconds per slide
+const AUTOPLAY_INTERVAL = 2000 // 2 seconds per slide
 
 export function HeroCarousel({
   heroTitle,
