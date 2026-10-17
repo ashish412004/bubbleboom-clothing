@@ -2,7 +2,8 @@
  * Resolves the approved application origin for OAuth redirects and public URLs.
  * Strictly eliminates accidental localhost fallbacks in production environments.
  */
-export const PRODUCTION_ORIGIN = 'https://bubbleboom-clothing.vercel.app'
+export const PRODUCTION_ORIGIN = 'https://bubbleboomstore.com'
+export const OFFICIAL_DOMAIN = 'https://bubbleboomstore.com'
 
 export function getAppOrigin(request?: Request): string {
   // 1. If Request object is provided (server runtime / route handler)

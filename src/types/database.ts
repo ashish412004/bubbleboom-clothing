@@ -303,6 +303,8 @@ export interface Database {
           seo_description: string | null
           tags: string[]
           department?: string | null
+          product_mode?: 'test' | 'live' | null
+          is_test?: boolean | null
           created_at: string
           updated_at: string
         }
@@ -323,6 +325,8 @@ export interface Database {
           seo_description?: string | null
           tags?: string[]
           department?: string | null
+          product_mode?: 'test' | 'live' | null
+          is_test?: boolean | null
           created_at?: string
           updated_at?: string
         }
@@ -343,6 +347,8 @@ export interface Database {
           seo_description?: string | null
           tags?: string[]
           department?: string | null
+          product_mode?: 'test' | 'live' | null
+          is_test?: boolean | null
           created_at?: string
           updated_at?: string
         }

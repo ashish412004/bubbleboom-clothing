@@ -21,14 +21,37 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://bubbleboomstore.com"),
   title: {
-    default: "BUBBLE BOOM | Wear The Boom",
-    template: "%s | BUBBLE BOOM",
+    default: "Bubble Boom | Oversized T-Shirts, Hoodies & Streetwear",
+    template: "%s | Bubble Boom",
   },
-  description: "Bubble Boom - Premium Indian Fashion & Streetwear. Wear The Boom. Every style. Every mood. Make it yours.",
-  keywords: ["Bubble Boom", "Indian streetwear", "oversized t-shirts", "hoodies", "cargo pants", "fashion"],
+  description: "Discover Bubble Boom streetwear. Explore bold fashion, oversized essentials and upcoming collections. Wear the Boom.",
+  keywords: ["Bubble Boom", "streetwear", "oversized t-shirts", "hoodies", "cargo pants", "fashion", "Indian streetwear"],
+  alternates: {
+    canonical: "https://bubbleboomstore.com",
+  },
+  openGraph: {
+    title: "Bubble Boom | Oversized T-Shirts, Hoodies & Streetwear",
+    description: "Discover Bubble Boom streetwear. Explore bold fashion, oversized essentials and upcoming collections. Wear the Boom.",
+    url: "https://bubbleboomstore.com",
+    siteName: "Bubble Boom",
+    locale: "en_IN",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Bubble Boom | Oversized T-Shirts, Hoodies & Streetwear",
+    description: "Discover Bubble Boom streetwear. Explore bold fashion, oversized essentials and upcoming collections. Wear the Boom.",
+    site: "@bubbleboomstore",
+    creator: "@bubbleboomstore",
+  },
   icons: {
     icon: "/favicon.ico",
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 };
 

@@ -8,7 +8,7 @@ import { sendOrderShippedEmail, sendOrderDeliveredEmail } from '@/lib/emails/res
 import { queueOrderNotification, OrderNotificationEvent } from '@/lib/emails/notifications'
 import { isAdmin } from '@/lib/auth'
 import { MOCK_PRODUCTS, MOCK_ORDERS } from '@/lib/mock-data'
-import { getDevProducts } from '@/lib/products'
+import { getDevProducts, isProductTest } from '@/lib/products'
 import { parseProductImage, findImageForVariantColor, normalizeColor, toAbsoluteEmailImageUrl } from '@/lib/utils'
 import fs from 'fs'
 import path from 'path'
@@ -455,6 +455,8 @@ export async function createOrder(input: CreateOrderInput) {
 
   // 3. Verify publication, availability, and build line items with authoritative prices
   let subtotalPaise = 0
+  let hasTestProducts = false
+  const testProductNames: string[] = []
   const itemSnapshots: Array<{
     variant_id: string
     product_id: string
@@ -476,6 +478,11 @@ export async function createOrder(input: CreateOrderInput) {
     const prod = (v as any).product
     if (!prod.is_published || !prod.is_active || !v.is_active) {
       return { error: `"${prod.name}" is no longer available.` }
+    }
+
+    if (isProductTest(prod)) {
+      hasTestProducts = true
+      testProductNames.push(prod.name)
     }
 
     productIds.push(prod.id)
@@ -505,7 +512,21 @@ export async function createOrder(input: CreateOrderInput) {
     })
   }
 
-  // 4. Shipping & COD rules from settings
+  // 4. Production purchase safety for test merchandise
+  if (hasTestProducts) {
+    const cfConfig = getCashfreeConfig()
+    const isProdEnvironment =
+      process.env.NODE_ENV === 'production' &&
+      !process.env.VERCEL_ENV?.includes('preview')
+
+    if (cfConfig.isProduction || isProdEnvironment) {
+      return {
+        error: `Order contains demo/test product ("${testProductNames[0]}"). Real payment collection and COD submission are blocked for test products in production. Convert this product to LIVE in Admin to enable real orders.`,
+      }
+    }
+  }
+
+  // 5. Shipping & COD rules from settings
   const shippingSettings = await getStoreSettings<StoreShippingSettings>('shipping')
   const freeThreshold = shippingSettings.free_shipping_threshold_paise
   const shippingPaise = subtotalPaise >= freeThreshold ? 0 : shippingSettings.standard_shipping_paise
@@ -651,7 +672,7 @@ export async function createOrder(input: CreateOrderInput) {
     }
   }
 
-  return { data: { ...order, order_items: itemsToInsert } }
+  return { data: { ...order, order_items: itemsToInsert, has_test_products: hasTestProducts } }
 }
 
 /**
@@ -659,6 +680,18 @@ export async function createOrder(input: CreateOrderInput) {
  */
 export async function createCashfreeSessionForOrder(order: Order) {
   const config = getCashfreeConfig()
+
+  if ((order as any)?.has_test_products) {
+    const isProdEnvironment =
+      process.env.NODE_ENV === 'production' &&
+      !process.env.VERCEL_ENV?.includes('preview')
+    if (config.isProduction || isProdEnvironment) {
+      return {
+        error: 'Cannot initiate live Cashfree production payment session for demo/test products.',
+      }
+    }
+  }
+
   const hasCashfree = Boolean(
     config.appId &&
     config.appId !== 'your-cashfree-client-id' &&

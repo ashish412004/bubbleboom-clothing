@@ -217,49 +217,65 @@ export async function POST(request: NextRequest) {
       // before returning a response, otherwise execution is frozen.
       // We run them concurrently with safe fallback so order creation is never aborted.
       try {
-        await Promise.allSettled([
-          // 1. Customer order_placed email via Outbox
-          queueOrderNotification(
-            {
-              order_id: order.id,
-              order_number: order.order_number,
-              event: 'order_placed',
-              recipient_email: email,
-              customer_name: full_name,
-              total_amount: order.total_amount,
-              subtotal: (order as any).subtotal_amount || order.total_amount,
-              shipping_amount: order.shipping_amount,
-              discount_amount: order.coupon_discount,
-              payment_method: 'cod',
-              payment_status: 'pending',
-              items: notificationItems,
-              shipping_address: order.shipping_address as any,
-            },
-            { immediate: true }
-          ),
+        const isTestOrder = Boolean((order as any).has_test_products)
+        if (!isTestOrder) {
+          await Promise.allSettled([
+            // 1. Customer order_placed email via Outbox
+            queueOrderNotification(
+              {
+                order_id: order.id,
+                order_number: order.order_number,
+                event: 'order_placed',
+                recipient_email: email,
+                customer_name: full_name,
+                total_amount: order.total_amount,
+                subtotal: (order as any).subtotal_amount || order.total_amount,
+                shipping_amount: order.shipping_amount,
+                discount_amount: order.coupon_discount,
+                payment_method: 'cod',
+                payment_status: 'pending',
+                items: notificationItems,
+                shipping_address: order.shipping_address as any,
+              },
+              { immediate: true }
+            ),
 
-          // 2. Immediate Admin notification to bubbleboomstore2026@gmail.com
-          queueAdminNewOrderNotification(
+            // 2. Immediate Admin notification to bubbleboomstore2026@gmail.com
+            queueAdminNewOrderNotification(
+              {
+                ...order,
+                customer_name: full_name,
+                customer_email: email,
+                customer_phone: phone,
+                order_items: notificationItems,
+              },
+              { immediate: true }
+            ),
+
+            // 3. Fallback direct confirmation email
+            sendOrderConfirmationEmail({
+              email,
+              orderId: order.order_number,
+              customerName: full_name,
+              totalAmount: order.total_amount,
+              items: (order as any).order_items || [],
+              shippingAddress: order.shipping_address,
+            }),
+          ])
+        } else {
+          // Safeguard: For simulated test purchases, suppress customer-facing fulfillment emails
+          console.log(`[checkout] Simulated test purchase (${order.order_number}): Customer confirmation email suppressed.`)
+          await queueAdminNewOrderNotification(
             {
               ...order,
-              customer_name: full_name,
+              customer_name: `[SIMULATED TEST ORDER] ${full_name}`,
               customer_email: email,
               customer_phone: phone,
               order_items: notificationItems,
             },
             { immediate: true }
-          ),
-
-          // 3. Fallback direct confirmation email
-          sendOrderConfirmationEmail({
-            email,
-            orderId: order.order_number,
-            customerName: full_name,
-            totalAmount: order.total_amount,
-            items: (order as any).order_items || [],
-            shippingAddress: order.shipping_address,
-          }),
-        ])
+          )
+        }
       } catch (notifyErr) {
         console.warn('[checkout] Non-fatal notification error during COD order placement:', notifyErr)
       }

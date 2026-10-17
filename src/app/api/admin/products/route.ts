@@ -55,7 +55,13 @@ export async function POST(req: NextRequest) {
         selling_price: product.selling_price,
         is_published: Boolean(product.is_published),
         is_active: true,
-        tags: product.tags || [],
+        product_mode: product.product_mode === 'live' || product.is_test === false ? 'live' : 'test',
+        is_test: product.product_mode === 'live' || product.is_test === false ? false : true,
+        tags: [
+          ...(product.tags || []).filter((t: string) => !['mode:test', 'mode:live', 'test-product', 'live-product'].includes(t.toLowerCase())),
+          (product.product_mode === 'live' || product.is_test === false) ? 'mode:live' : 'mode:test',
+          (product.product_mode === 'live' || product.is_test === false) ? 'live-product' : 'test-product',
+        ],
         department: product.department || 'unisex',
         variants: newVariants,
         images: newImages,
@@ -68,6 +74,11 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = await createServiceClient()
+
+    const mode = product.product_mode === 'live' || product.is_test === false ? 'live' : 'test'
+    const isTest = mode === 'test'
+    const cleanTags = (product.tags || []).filter((t: string) => !['mode:test', 'mode:live', 'test-product', 'live-product'].includes(t.toLowerCase()))
+    const finalTags = [...cleanTags, mode === 'test' ? 'mode:test' : 'mode:live', mode === 'test' ? 'test-product' : 'live-product']
 
     // 1. Insert product
     const insertPayload: any = {
@@ -82,7 +93,9 @@ export async function POST(req: NextRequest) {
       selling_price: product.selling_price,
       is_published: Boolean(product.is_published),
       is_active: true,
-      tags: product.tags || [],
+      product_mode: mode,
+      is_test: isTest,
+      tags: finalTags,
       department: product.department || 'unisex',
     }
 
@@ -92,8 +105,10 @@ export async function POST(req: NextRequest) {
       .select()
       .single()
 
-    if (prodErr && prodErr.message?.includes('department')) {
-      delete insertPayload.department
+    if (prodErr && (prodErr.message?.includes('department') || prodErr.message?.includes('product_mode') || prodErr.message?.includes('is_test'))) {
+      if (prodErr.message?.includes('department')) delete insertPayload.department
+      if (prodErr.message?.includes('product_mode')) delete insertPayload.product_mode
+      if (prodErr.message?.includes('is_test')) delete insertPayload.is_test
       const retry = await supabase.from('products').insert(insertPayload).select().single()
       createdProduct = retry.data
       prodErr = retry.error
@@ -236,6 +251,11 @@ export async function PUT(req: NextRequest) {
 
     const supabase = await createServiceClient()
 
+    const mode = product.product_mode === 'live' || product.is_test === false ? 'live' : 'test'
+    const isTest = mode === 'test'
+    const cleanTags = (product.tags || []).filter((t: string) => !['mode:test', 'mode:live', 'test-product', 'live-product'].includes(t.toLowerCase()))
+    const finalTags = [...cleanTags, mode === 'test' ? 'mode:test' : 'mode:live', mode === 'test' ? 'test-product' : 'live-product']
+
     // 1. Update core product fields
     const updatePayload: any = {
       name: product.name,
@@ -248,7 +268,9 @@ export async function PUT(req: NextRequest) {
       mrp: Number(product.mrp) || Number(product.selling_price),
       selling_price: Number(product.selling_price),
       is_published: Boolean(product.is_published),
-      tags: product.tags || [],
+      product_mode: mode,
+      is_test: isTest,
+      tags: finalTags,
       department: product.department || 'unisex',
       updated_at: new Date().toISOString(),
     }
@@ -260,8 +282,10 @@ export async function PUT(req: NextRequest) {
       .select()
       .single()
 
-    if (prodErr && prodErr.message?.includes('department')) {
-      delete updatePayload.department
+    if (prodErr && (prodErr.message?.includes('department') || prodErr.message?.includes('product_mode') || prodErr.message?.includes('is_test'))) {
+      if (prodErr.message?.includes('department')) delete updatePayload.department
+      if (prodErr.message?.includes('product_mode')) delete updatePayload.product_mode
+      if (prodErr.message?.includes('is_test')) delete updatePayload.is_test
       const retry = await supabase
         .from('products')
         .update(updatePayload)
@@ -423,7 +447,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized admin access' }, { status: 403 })
     }
 
-    const { id, is_published, selling_price, mrp, name } = await req.json()
+    const { id, is_published, selling_price, mrp, name, product_mode, is_test } = await req.json()
     if (!id) {
       return NextResponse.json({ error: 'Product ID required' }, { status: 400 })
     }
@@ -435,12 +459,35 @@ export async function PATCH(req: NextRequest) {
     if (mrp !== undefined) updateData.mrp = Number(mrp)
     if (name !== undefined) updateData.name = name
 
-    const { data, error } = await supabase
+    if (product_mode !== undefined || is_test !== undefined) {
+      const mode = product_mode === 'live' || is_test === false ? 'live' : 'test'
+      updateData.product_mode = mode
+      updateData.is_test = mode === 'test'
+
+      // Also sync tags for compatibility
+      try {
+        const { data: curr } = await supabase.from('products').select('tags').eq('id', id).single()
+        if (curr) {
+          const cleanTags = (curr.tags || []).filter((t: string) => !['mode:test', 'mode:live', 'test-product', 'live-product'].includes(t.toLowerCase()))
+          updateData.tags = [...cleanTags, mode === 'test' ? 'mode:test' : 'mode:live', mode === 'test' ? 'test-product' : 'live-product']
+        }
+      } catch {}
+    }
+
+    let { data, error } = await supabase
       .from('products')
       .update(updateData)
       .eq('id', id)
       .select()
       .single()
+
+    if (error && (error.message?.includes('product_mode') || error.message?.includes('is_test'))) {
+      delete updateData.product_mode
+      delete updateData.is_test
+      const retry = await supabase.from('products').update(updateData).eq('id', id).select().single()
+      data = retry.data
+      error = retry.error
+    }
 
     if (error) throw error
 

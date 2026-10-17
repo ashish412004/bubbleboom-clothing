@@ -27,8 +27,49 @@ export default async function HomePage() {
   // Distinct products for secondary storefront display (no duplicates from New Arrivals)
   const distinctFeaturedProducts = products.filter((p) => !newArrivalIds.has(p.id)).slice(0, 4)
 
+  const websiteSchema = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Organization',
+        '@id': 'https://bubbleboomstore.com/#organization',
+        name: 'Bubble Boom',
+        url: 'https://bubbleboomstore.com',
+        logo: 'https://bubbleboomstore.com/images/brand/logo.png',
+        sameAs: ['https://www.instagram.com/bubbleboomstore/'],
+        contactPoint: {
+          '@type': 'ContactPoint',
+          email: 'bubbleboomstore2026@gmail.com',
+          contactType: 'customer service',
+          areaServed: 'IN',
+          availableLanguage: ['English', 'Hindi'],
+        },
+      },
+      {
+        '@type': 'WebSite',
+        '@id': 'https://bubbleboomstore.com/#website',
+        url: 'https://bubbleboomstore.com',
+        name: 'Bubble Boom',
+        description:
+          'Discover Bubble Boom streetwear. Explore bold fashion, oversized essentials and upcoming collections. Wear the Boom.',
+        publisher: {
+          '@id': 'https://bubbleboomstore.com/#organization',
+        },
+        potentialAction: {
+          '@type': 'SearchAction',
+          target: 'https://bubbleboomstore.com/search?q={search_term_string}',
+          'query-input': 'required name=search_term_string',
+        },
+      },
+    ],
+  }
+
   return (
     <div suppressHydrationWarning className="flex flex-col min-h-screen bg-white text-black">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+      />
       <Header
         announcementText={generalSettings.announcement_text}
         announcementLink={generalSettings.announcement_link}

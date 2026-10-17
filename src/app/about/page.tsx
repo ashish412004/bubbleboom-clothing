@@ -1,13 +1,24 @@
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
-import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, Compass, Scissors, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowRight, Compass, Sparkles } from 'lucide-react'
 import { InstagramIcon as Instagram } from '@/components/icons/instagram-icon'
 
 export const metadata = {
   title: 'About Bubble Boom | Wear the Boom',
-  description: 'Bubble Boom is a modern Indian fashion brand engineered for bold individuality, distinct silhouettes, and heavyweight streetwear.',
+  description:
+    'Bubble Boom is a streetwear brand built around bold expression, everyday comfort and individual style. Wear the Boom.',
+  alternates: {
+    canonical: 'https://bubbleboomstore.com/about',
+  },
+  openGraph: {
+    title: 'About Bubble Boom | Wear the Boom',
+    description:
+      'Bubble Boom is a streetwear brand built around bold expression, everyday comfort and individual style. Wear the Boom.',
+    url: 'https://bubbleboomstore.com/about',
+    siteName: 'Bubble Boom',
+    type: 'website',
+  },
 }
 
 export default function AboutPage() {
@@ -22,70 +33,72 @@ export default function AboutPage() {
             <span className="text-xs uppercase font-mono tracking-widest text-neutral-400 block mb-3">
               Brand Manifesto
             </span>
-            <h1 className="text-4xl md:text-7xl font-black uppercase tracking-tight">
-              WEAR THE BOOM.
+            <h1 className="text-3xl sm:text-5xl md:text-7xl font-black uppercase tracking-tight">
+              NOT JUST CLOTHING. IT&apos;S THE BOOM.
             </h1>
-            <p className="mt-4 text-lg md:text-xl font-light text-neutral-300 max-w-2xl mx-auto">
+            <p className="mt-4 text-base md:text-xl font-light text-neutral-300 max-w-2xl mx-auto">
               Every style. Every mood. Make it yours.
             </p>
           </div>
         </section>
 
-        {/* Philosophy Block */}
+        {/* Brand Mission & Philosophy Block */}
         <section className="border-b border-black py-16 md:py-24 bg-[#F8F8F6]">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="space-y-6 text-sm md:text-base leading-relaxed text-neutral-800">
               <span className="text-xs uppercase font-mono tracking-widest text-neutral-500 font-bold block">
-                The Bubble Boom Origin
+                Who We Are
               </span>
               <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tight text-black">
                 YOUR STYLE. YOUR RULES.
               </h2>
-              <p>
-                Bubble Boom was founded in India with a clear mission: break away from cookie-cutter, disposable fast fashion. We create clothing that speaks with attitude, designed for individuals who move at their own rhythm and refuse to conform to standard commercial molds.
+              <p className="text-base sm:text-lg text-neutral-900 leading-relaxed font-medium">
+                Bubble Boom is a streetwear brand built around bold expression, everyday comfort and individual style.
               </p>
-              <p>
-                From drop-shoulder relaxed tees and heavyweight hoodies to precision-cut cargo trousers, every Bubble Boom garment is a statement of architectural silhouette, durable construction, and raw youthful expression.
+              <p className="leading-relaxed">
+                We&apos;re building a collection of statement essentials for people who wear their personality with confidence.
               </p>
             </div>
           </div>
         </section>
 
-        {/* Pillars */}
+        {/* Brand Pillars */}
         <section className="py-16 md:py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <span className="text-xs uppercase font-mono tracking-widest text-neutral-500 block mb-2">Our Standards</span>
-            <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tight">How We Build</h2>
+            <span className="text-xs uppercase font-mono tracking-widest text-neutral-500 block mb-2">Our Vision</span>
+            <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tight">Designed for Expression</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="border border-black p-8 bg-white">
-              <Scissors className="w-8 h-8 text-black mb-4" />
-              <h3 className="text-lg font-black uppercase tracking-tight mb-2">Custom Silhouettes</h3>
+              <Compass className="w-8 h-8 text-black mb-4" />
+              <h3 className="text-lg font-black uppercase tracking-tight mb-2">Bold Streetwear Cuts</h3>
               <p className="text-xs text-neutral-600 leading-relaxed">
-                We don&apos;t use off-the-shelf blanks. Every tee, hoodie, and pant pattern is developed in-house with dropped shoulders, wide sleeves, and a structured boxy drape.
+                Relaxed, drop-shoulder silhouettes and modern boxy fits engineered for effortless daily layering.
               </p>
             </div>
 
             <div className="border border-black p-8 bg-white">
               <Sparkles className="w-8 h-8 text-black mb-4" />
-              <h3 className="text-lg font-black uppercase tracking-tight mb-2">Heavyweight Textiles</h3>
+              <h3 className="text-lg font-black uppercase tracking-tight mb-2">Everyday Comfort</h3>
               <p className="text-xs text-neutral-600 leading-relaxed">
-                Premium combed cotton and French terry weaves. Bio-washed, silicone softened, and preshrunk for longevity and zero post-wash warping.
+                Carefully selected fabrics that balance durability with comfortable wear, built for people living on the move.
               </p>
             </div>
 
             <div className="border border-black p-8 bg-white">
-              <ShieldCheck className="w-8 h-8 text-black mb-4" />
-              <h3 className="text-lg font-black uppercase tracking-tight mb-2">Transparent Production</h3>
+              <div className="w-8 h-8 flex items-center justify-center font-black text-xl mb-4">
+                ★
+              </div>
+              <h3 className="text-lg font-black uppercase tracking-tight mb-2">Signature Identity</h3>
               <p className="text-xs text-neutral-600 leading-relaxed">
-                Ethically knitted, dyed, and stitched in small batch runs across audited textile hubs in India. Limited capsules to eliminate deadstock.
+                Clean monochrome aesthetics and authentic attitude. Distinct essentials made to be styled your way.
               </p>
             </div>
           </div>
         </section>
 
-        {/* Social Follow Section */}
+        {/* Official Instagram Compact Section */}
         <section className="border-t border-black bg-[#F8F8F6] py-14 md:py-20 text-center">
           <div className="max-w-2xl mx-auto px-4 sm:px-6 space-y-4">
             <div className="w-12 h-12 rounded-full border-2 border-black bg-white flex items-center justify-center mx-auto shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
@@ -119,16 +132,16 @@ export default function AboutPage() {
         <section className="border-t border-black bg-black text-white py-16 text-center">
           <div className="max-w-2xl mx-auto px-4">
             <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tight mb-4">
-              Explore the Latest Drops
+              Explore Collections
             </h2>
             <p className="text-xs md:text-sm text-neutral-400 mb-8">
-              Limited run collections. When a drop sells out, it rarely restocks in the same colorway.
+              Explore statement essentials and upcoming streetwear drops.
             </p>
             <Link
               href="/shop"
               className="inline-flex items-center gap-2 bg-white text-black px-8 py-3.5 text-xs uppercase tracking-widest font-black hover:bg-neutral-200 transition-colors"
             >
-              <span>Shop All Drops</span>
+              <span>Explore The Shop</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>

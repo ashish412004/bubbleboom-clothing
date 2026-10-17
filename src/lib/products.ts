@@ -99,6 +99,8 @@ export type ProductUpdate = Database['public']['Tables']['products']['Update']
 export type ProductVariant = Database['public']['Tables']['product_variants']['Row']
 export type ProductImage = Database['public']['Tables']['product_images']['Row']
 
+export { isProductTest, getProductMode, validateProductForLive } from './product-mode'
+
 export interface ProductFilterOptions {
   category?: string
   department?: string

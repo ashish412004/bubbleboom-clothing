@@ -6,8 +6,18 @@ import { ContactClient } from './contact-client'
 export const dynamic = 'force-dynamic'
 
 export const metadata = {
-  title: 'Contact Us | BUBBLE BOOM',
-  description: 'Reach out to Bubble Boom customer care for order updates, returns, and fit consultations.',
+  title: 'Contact Us | Bubble Boom',
+  description: 'Reach out to Bubble Boom customer support for order assistance, shipping inquiries, and fit advice.',
+  alternates: {
+    canonical: 'https://bubbleboomstore.com/contact',
+  },
+  openGraph: {
+    title: 'Contact Us | Bubble Boom',
+    description: 'Reach out to Bubble Boom customer support for order assistance, shipping inquiries, and fit advice.',
+    url: 'https://bubbleboomstore.com/contact',
+    siteName: 'Bubble Boom',
+    type: 'website',
+  },
 }
 
 export default async function ContactPage() {

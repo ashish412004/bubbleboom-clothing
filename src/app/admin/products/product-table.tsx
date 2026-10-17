@@ -5,8 +5,9 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Trash2, ExternalLink, Search, Loader2, AlertTriangle, Eye, EyeOff, Pencil } from 'lucide-react'
+import { Trash2, ExternalLink, Search, Loader2, AlertTriangle, Eye, EyeOff, Pencil, CheckCircle2, AlertCircle } from 'lucide-react'
 import { getSafeImageUrl } from '@/lib/utils'
+import { isProductTest, validateProductForLive } from '@/lib/product-mode'
 
 interface ProductTableProps {
   initialProducts: any[]
@@ -18,8 +19,12 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
+  const [selectedMode, setSelectedMode] = useState<string>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmDeleteProduct, setConfirmDeleteProduct] = useState<any | null>(null)
+  const [confirmLiveProduct, setConfirmLiveProduct] = useState<any | null>(null)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [showValidationModal, setShowValidationModal] = useState(false)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [quickEditProduct, setQuickEditProduct] = useState<any | null>(null)
   const [quickSellingPrice, setQuickSellingPrice] = useState<string>('')
@@ -45,9 +50,85 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
       selectedStatus === 'all' ||
       (selectedStatus === 'published' && p.is_published) ||
       (selectedStatus === 'draft' && !p.is_published)
+    const isTest = isProductTest(p)
+    const matchesMode =
+      selectedMode === 'all' ||
+      (selectedMode === 'live' && !isTest) ||
+      (selectedMode === 'test' && isTest)
 
-    return matchesSearch && matchesCategory && matchesStatus
+    return matchesSearch && matchesCategory && matchesStatus && matchesMode
   })
+
+  const handleToggleMode = async (product: any) => {
+    const isCurrentTest = isProductTest(product)
+    if (isCurrentTest) {
+      // Switching to LIVE: validate first!
+      const validation = validateProductForLive(
+        product,
+        product.variants || [],
+        product.images || []
+      )
+      if (!validation.valid) {
+        setValidationErrors(validation.errors)
+        setShowValidationModal(true)
+        return
+      }
+      setConfirmLiveProduct(product)
+    } else {
+      // Switching to TEST: safe immediate action
+      setUpdatingId(product.id)
+      try {
+        const res = await fetch('/api/admin/products', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: product.id,
+            product_mode: 'test',
+            is_test: true,
+          }),
+        })
+        if (!res.ok) throw new Error('Failed to update product mode')
+        setProducts((prev) =>
+          prev.map((p) =>
+            p.id === product.id ? { ...p, product_mode: 'test', is_test: true } : p
+          )
+        )
+        toast.success(`"${product.name}" moved to Test / Demo mode`)
+      } catch (err: any) {
+        toast.error(err.message || 'Error updating product mode')
+      } finally {
+        setUpdatingId(null)
+      }
+    }
+  }
+
+  const handleConfirmLiveConversion = async () => {
+    if (!confirmLiveProduct) return
+    setUpdatingId(confirmLiveProduct.id)
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: confirmLiveProduct.id,
+          product_mode: 'live',
+          is_test: false,
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to convert product to Live mode')
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === confirmLiveProduct.id ? { ...p, product_mode: 'live', is_test: false } : p
+        )
+      )
+      toast.success(`"${confirmLiveProduct.name}" is now LIVE!`)
+      setConfirmLiveProduct(null)
+    } catch (err: any) {
+      toast.error(err.message || 'Error converting product to Live mode')
+    } finally {
+      setUpdatingId(null)
+    }
+  }
 
   const handleDelete = async (product: any) => {
     setDeletingId(product.id)
@@ -196,6 +277,16 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
             <option value="published">Published</option>
             <option value="draft">Draft</option>
           </select>
+
+          <select
+            value={selectedMode}
+            onChange={(e) => setSelectedMode(e.target.value)}
+            className="flex-1 sm:flex-initial bg-white border border-neutral-300 px-3 py-2 text-xs font-mono uppercase focus:outline-none focus:border-black min-h-[44px]"
+          >
+            <option value="all">All Modes (Live &amp; Test)</option>
+            <option value="live">Live Mode Only</option>
+            <option value="test">Test / Demo Only</option>
+          </select>
         </div>
       </div>
 
@@ -334,6 +425,7 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
                 <th className="p-3">Price / MRP</th>
                 <th className="p-3">Variants</th>
                 <th className="p-3">Total Stock</th>
+                <th className="p-3">Mode</th>
                 <th className="p-3">Status</th>
                 <th className="p-3 text-right">Actions</th>
               </tr>
@@ -345,6 +437,7 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
                   const totalStock =
                     p.variants?.reduce((sum: number, v: any) => sum + (v.stock || 0), 0) || 0
                   const isUpdating = updatingId === p.id
+                  const isTest = isProductTest(p)
 
                   return (
                     <tr key={p.id} className="hover:bg-neutral-50 transition-colors">
@@ -399,6 +492,21 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
                       <td className="p-3">
                         <button
                           type="button"
+                          onClick={() => handleToggleMode(p)}
+                          disabled={isUpdating}
+                          title={isTest ? 'Click to convert to LIVE mode' : 'Click to move to TEST mode'}
+                          className={`text-[10px] uppercase font-mono px-2 py-1 font-bold transition-all border min-h-[32px] cursor-pointer inline-flex items-center gap-1 ${
+                            isTest
+                              ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+                              : 'bg-black text-white border-black hover:bg-neutral-800'
+                          }`}
+                        >
+                          {isUpdating ? '...' : isTest ? '▲ TEST' : '● LIVE'}
+                        </button>
+                      </td>
+                      <td className="p-3">
+                        <button
+                          type="button"
                           onClick={() => handleTogglePublish(p)}
                           disabled={isUpdating}
                           title="Click to toggle publish status"
@@ -445,8 +553,8 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-neutral-500 font-mono">
-                    {searchTerm || selectedCategory !== 'all' || selectedStatus !== 'all'
+                  <td colSpan={8} className="p-12 text-center text-neutral-500 font-mono">
+                    {searchTerm || selectedCategory !== 'all' || selectedStatus !== 'all' || selectedMode !== 'all'
                       ? 'No products match the selected filters.'
                       : 'No products found in catalog. Create your first product above.'}
                   </td>
@@ -456,6 +564,105 @@ export function ProductTable({ initialProducts }: ProductTableProps) {
           </table>
         </div>
       </div>
+
+      {/* Live Conversion Confirmation Modal */}
+      {confirmLiveProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white border-2 border-black max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-black text-white flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-black uppercase tracking-tight">Convert to LIVE Mode</h3>
+                <p className="text-xs text-neutral-600 font-mono mt-1">
+                  Are you sure you want to make <strong className="text-black">"{confirmLiveProduct.name}"</strong> a Live purchasable product?
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-neutral-50 border border-neutral-300 p-4 space-y-2 text-xs font-mono text-neutral-700">
+              <div className="font-bold uppercase text-black text-[11px] mb-1">Live Mode Checklist Passed:</div>
+              <div className="flex items-center gap-2 text-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Price: ₹{confirmLiveProduct.selling_price?.toLocaleString('en-IN')} verified</span>
+              </div>
+              <div className="flex items-center gap-2 text-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Inventory: {confirmLiveProduct.variants?.reduce((s: number, v: any) => s + (v.stock || 0), 0) || 0} units declared</span>
+              </div>
+              <div className="flex items-center gap-2 text-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Search Engine: Google Indexing &amp; Sitemap will be activated</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-neutral-500 font-mono">
+              Real customers will be able to complete checkout with real payments or COD.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-200">
+              <button
+                type="button"
+                onClick={() => setConfirmLiveProduct(null)}
+                className="px-4 py-2 border border-black text-xs font-mono uppercase font-bold hover:bg-neutral-100 min-h-[40px] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLiveConversion}
+                disabled={updatingId !== null}
+                className="bg-black text-white px-5 py-2 text-xs font-mono uppercase font-bold hover:bg-neutral-800 min-h-[40px] cursor-pointer"
+              >
+                {updatingId ? 'Converting...' : 'Confirm Live Mode'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Mode Validation Error Modal */}
+      {showValidationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white border-2 border-black max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 text-amber-900" />
+              </div>
+              <div>
+                <h3 className="text-base font-black uppercase tracking-tight">Cannot Convert to Live Mode</h3>
+                <p className="text-xs text-neutral-600 font-mono mt-0.5">
+                  The following requirements must be resolved before converting to Live mode:
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 p-4 space-y-2 text-xs font-mono text-red-900">
+              {validationErrors.map((err, idx) => (
+                <div key={idx} className="flex items-start gap-2">
+                  <span className="font-bold text-red-700">•</span>
+                  <span>{err}</span>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-[11px] text-neutral-500 font-mono">
+              Edit the product to add stock, photos, or description before setting to Live mode.
+            </p>
+
+            <div className="flex items-center justify-end pt-2 border-t border-neutral-200">
+              <button
+                type="button"
+                onClick={() => setShowValidationModal(false)}
+                className="bg-black text-white px-5 py-2 text-xs font-mono uppercase font-bold hover:bg-neutral-800 min-h-[40px] cursor-pointer"
+              >
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -221,7 +221,7 @@ describe('Shopping Flows & Navigation Suite', () => {
   })
 
   describe('4. Google OAuth Origin Resolution & Callback Protection', () => {
-    it('guarantees production origin is https://bubbleboom-clothing.vercel.app and never localhost in production', () => {
+    it('guarantees production origin is https://bubbleboomstore.com and never localhost in production', () => {
       const originalEnv = process.env.NODE_ENV
       const originalSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
       try {
@@ -230,7 +230,7 @@ describe('Shopping Flows & Navigation Suite', () => {
         delete process.env.NEXT_PUBLIC_SITE_URL
 
         const origin = getAppOrigin()
-        expect(origin).toBe('https://bubbleboom-clothing.vercel.app')
+        expect(origin).toBe('https://bubbleboomstore.com')
         expect(origin).not.toContain('localhost')
         expect(origin).not.toContain('127.0.0.1')
       } finally {
@@ -247,13 +247,13 @@ describe('Shopping Flows & Navigation Suite', () => {
         process.env.NODE_ENV = 'production'
         const req = new Request('http://localhost:3000/auth/callback?code=mock_code', {
           headers: {
-            'x-forwarded-host': 'bubbleboom-clothing.vercel.app',
+            'x-forwarded-host': 'bubbleboomstore.com',
             'x-forwarded-proto': 'https',
           },
         })
 
         const origin = getAppOrigin(req)
-        expect(origin).toBe('https://bubbleboom-clothing.vercel.app')
+        expect(origin).toBe('https://bubbleboomstore.com')
       } finally {
         // @ts-ignore
         process.env.NODE_ENV = originalEnv
@@ -270,7 +270,7 @@ describe('Shopping Flows & Navigation Suite', () => {
 
         const origin = getAppOrigin(req)
         // Must fallback to approved production origin, NOT localhost!
-        expect(origin).toBe('https://bubbleboom-clothing.vercel.app')
+        expect(origin).toBe('https://bubbleboomstore.com')
       } finally {
         // @ts-ignore
         process.env.NODE_ENV = originalEnv
@@ -288,7 +288,7 @@ describe('Shopping Flows & Navigation Suite', () => {
         const redirectTo = `${appOrigin}/auth/callback?next=${encodeURIComponent(safeTarget)}`
 
         expect(redirectTo).toBe(
-          'https://bubbleboom-clothing.vercel.app/auth/callback?next=%2Fcheckout%3Fvariant_id%3Dv_tee_blk%26quantity%3D1'
+          'https://bubbleboomstore.com/auth/callback?next=%2Fcheckout%3Fvariant_id%3Dv_tee_blk%26quantity%3D1'
         )
       } finally {
         // @ts-ignore

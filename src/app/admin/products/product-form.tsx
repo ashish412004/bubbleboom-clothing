@@ -16,10 +16,13 @@ import {
   Link2,
   RefreshCw,
   AlertTriangle,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { parseProductImage } from '@/lib/utils'
+import { validateProductForLive, isProductTest } from '@/lib/product-mode'
 
 interface ProductFormProps {
   categories: Array<{ id: string; name: string; slug: string }>
@@ -46,6 +49,16 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
   const [mrp, setMrp] = useState<number | ''>(initialProduct?.mrp ?? '')
   const [sellingPrice, setSellingPrice] = useState<number | ''>(initialProduct?.selling_price ?? '')
   const [isPublished, setIsPublished] = useState(initialProduct?.is_published ?? true)
+  const [productMode, setProductMode] = useState<'test' | 'live'>(() => {
+    if (initialProduct) {
+      return isProductTest(initialProduct) ? 'test' : 'live'
+    }
+    return 'test'
+  })
+  const [showLiveConfirmModal, setShowLiveConfirmModal] = useState(false)
+  const [liveValidationErrors, setLiveValidationErrors] = useState<string[]>([])
+  const [showValidationModal, setShowValidationModal] = useState(false)
+
   const [department, setDepartment] = useState<'men' | 'women' | 'unisex'>(() => {
     if (initialProduct?.department) {
       const d = initialProduct.department.toLowerCase().trim()
@@ -428,6 +441,35 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
     new Set(variants.map((v) => v.color.trim()).filter(Boolean))
   )
 
+  const handleSelectLiveMode = () => {
+    const validImages = images.filter((img) => Boolean(img.image_url))
+    const validation = validateProductForLive(
+      {
+        name,
+        slug,
+        description,
+        selling_price: sellingPrice,
+        mrp,
+        category_id: categoryId,
+        is_published: isPublished,
+      },
+      variants,
+      validImages
+    )
+
+    if (!validation.valid) {
+      setLiveValidationErrors(validation.errors)
+      setShowValidationModal(true)
+      return
+    }
+
+    if (productMode === 'test') {
+      setShowLiveConfirmModal(true)
+    } else {
+      setProductMode('live')
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name || !slug || sellingPrice === '') {
@@ -447,6 +489,27 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
     if (hasDiskPath) {
       toast.error('Local disk paths cannot be viewed by browsers. Please use the Upload Photos button to upload directly from your computer!', { duration: 6000 })
       return
+    }
+
+    if (productMode === 'live') {
+      const validation = validateProductForLive(
+        {
+          name,
+          slug,
+          description,
+          selling_price: sellingPrice,
+          mrp,
+          category_id: categoryId,
+          is_published: isPublished,
+        },
+        variants,
+        validImages
+      )
+      if (!validation.valid) {
+        setLiveValidationErrors(validation.errors)
+        setShowValidationModal(true)
+        return
+      }
     }
 
     setLoading(true)
@@ -473,11 +536,14 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
             selling_price: Number(sellingPrice),
             is_published: isPublished,
             department,
+            product_mode: productMode,
+            is_test: productMode === 'test',
             tags: (() => {
               const existingTags: string[] = Array.isArray(initialProduct?.tags)
-                ? initialProduct.tags.filter((t: string) => !['men', 'women', 'unisex'].includes(t.toLowerCase()))
+                ? initialProduct.tags.filter((t: string) => !['men', 'women', 'unisex', 'mode:test', 'mode:live', 'test-product', 'live-product'].includes(t.toLowerCase()))
                 : []
-              return [...existingTags, department]
+              const modeTags = productMode === 'live' ? ['mode:live', 'live-product'] : ['mode:test', 'test-product']
+              return [...existingTags, department, ...modeTags]
             })(),
           },
           variants,
@@ -539,6 +605,120 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
         >
           {loading ? 'Saving...' : isEdit ? 'Update Product' : 'Publish Product'}
         </button>
+      </div>
+
+      {/* Product Mode Selection */}
+      <div className="border-2 border-black bg-white p-6 space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-neutral-200">
+          <div>
+            <span className="text-xs uppercase font-mono tracking-wider font-bold text-neutral-500 block">
+              Catalog Classification
+            </span>
+            <h2 className="text-base font-black uppercase tracking-tight flex items-center gap-2 mt-0.5">
+              <span>Product Mode</span>
+              <span
+                className={`text-[10px] px-2.5 py-0.5 font-bold uppercase font-mono border ${
+                  productMode === 'live'
+                    ? 'bg-black text-white border-black'
+                    : 'bg-amber-100 text-amber-900 border-amber-300'
+                }`}
+              >
+                {productMode === 'live' ? '● Live Storefront Mode' : '▲ Test / Demo Mode'}
+              </span>
+            </h2>
+          </div>
+          <span className="text-[11px] font-mono text-neutral-500">
+            {productMode === 'live'
+              ? 'Real customer purchasing & Google SEO enabled'
+              : 'Safe sandbox testing & Google noindex active'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Option: Test / Demo Mode */}
+          <div
+            onClick={() => setProductMode('test')}
+            className={`p-4 border-2 cursor-pointer transition-all ${
+              productMode === 'test'
+                ? 'border-black bg-neutral-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                : 'border-neutral-300 hover:border-black bg-white'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <input
+                type="radio"
+                name="product_mode_select"
+                checked={productMode === 'test'}
+                onChange={() => setProductMode('test')}
+                className="mt-1 cursor-pointer"
+              />
+              <div className="space-y-1">
+                <span className="font-black text-xs uppercase tracking-wider block text-black">
+                  Test / Demo Product (Default)
+                </span>
+                <p className="text-[11px] text-neutral-600 font-mono leading-relaxed">
+                  Preserves product for layout, variant, image, wishlist, and cart testing.
+                </p>
+                <div className="pt-1.5 space-y-0.5 text-[10px] font-mono text-neutral-700">
+                  <div className="flex items-center gap-1.5 text-amber-800 font-bold">
+                    <span>✓</span>
+                    <span>Excluded from Google Index &amp; Sitemap</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-neutral-800">
+                    <span>✓</span>
+                    <span>Blocks real payments &amp; COD in production</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-neutral-800">
+                    <span>✓</span>
+                    <span>No misleading Product schema rich results</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Option: Live Product */}
+          <div
+            onClick={handleSelectLiveMode}
+            className={`p-4 border-2 cursor-pointer transition-all ${
+              productMode === 'live'
+                ? 'border-black bg-neutral-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                : 'border-neutral-300 hover:border-black bg-white'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <input
+                type="radio"
+                name="product_mode_select"
+                checked={productMode === 'live'}
+                onChange={handleSelectLiveMode}
+                className="mt-1 cursor-pointer"
+              />
+              <div className="space-y-1">
+                <span className="font-black text-xs uppercase tracking-wider block text-black">
+                  Live Product (Genuine Inventory)
+                </span>
+                <p className="text-[11px] text-neutral-600 font-mono leading-relaxed">
+                  Published for genuine customer orders with verified physical stock.
+                </p>
+                <div className="pt-1.5 space-y-0.5 text-[10px] font-mono text-neutral-700">
+                  <div className="flex items-center gap-1.5 text-black font-bold">
+                    <span>✓</span>
+                    <span>Included in public Sitemap &amp; Google SEO</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-black">
+                    <span>✓</span>
+                    <span>Real Cashfree payment &amp; COD enabled</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-black">
+                    <span>✓</span>
+                    <span>Emits Schema.org Product structured data</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Basic Info */}
@@ -1224,6 +1404,112 @@ export function ProductForm({ categories, collections = [], initialProduct }: Pr
           )}
         </div>
       </div>
+
+      {/* Live Mode Confirmation Dialog */}
+      {showLiveConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white border-2 border-black max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-black text-white flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-black uppercase tracking-tight">Confirm Live Mode Conversion</h3>
+                <p className="text-xs text-neutral-600 font-mono mt-1">
+                  You are preparing to publish <strong className="text-black">"{name || 'This Product'}"</strong> in <span className="font-bold text-black uppercase">Live Mode</span>.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-neutral-50 border border-neutral-300 p-4 space-y-2 text-xs font-mono text-neutral-700">
+              <div className="font-bold uppercase text-black text-[11px] mb-1">Live Mode Checklist Verified:</div>
+              <div className="flex items-center gap-2 text-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Selling Price: ₹{Number(sellingPrice).toLocaleString('en-IN')} (verified)</span>
+              </div>
+              <div className="flex items-center gap-2 text-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Physical Inventory: {variants.reduce((s, v) => s + (Number(v.stock) || 0), 0)} units declared</span>
+              </div>
+              <div className="flex items-center gap-2 text-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Photographs: {images.filter((img) => Boolean(img.image_url)).length} product images uploaded</span>
+              </div>
+              <div className="flex items-center gap-2 text-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Search Engine: Google Indexing &amp; Sitemap will be activated upon save</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-neutral-500 font-mono leading-relaxed">
+              Once saved, real customers can place genuine orders with Cashfree payment and COD fulfillment.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-200">
+              <button
+                type="button"
+                onClick={() => setShowLiveConfirmModal(false)}
+                className="px-4 py-2 border border-black text-xs font-mono uppercase font-bold hover:bg-neutral-100 min-h-[40px] cursor-pointer"
+              >
+                Keep In Test Mode
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setProductMode('live')
+                  setShowLiveConfirmModal(false)
+                  toast.success('Product mode set to LIVE!')
+                }}
+                className="bg-black text-white px-5 py-2 text-xs font-mono uppercase font-bold hover:bg-neutral-800 min-h-[40px] cursor-pointer flex items-center gap-2"
+              >
+                <span>Confirm Live Mode</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Mode Validation Error Modal */}
+      {showValidationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white border-2 border-black max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 text-amber-900" />
+              </div>
+              <div>
+                <h3 className="text-base font-black uppercase tracking-tight">Live Mode Requirements Missing</h3>
+                <p className="text-xs text-neutral-600 font-mono mt-0.5">
+                  The following requirements must be resolved before converting to Live mode:
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 p-4 space-y-2 text-xs font-mono text-red-900">
+              {liveValidationErrors.map((err, idx) => (
+                <div key={idx} className="flex items-start gap-2">
+                  <span className="font-bold text-red-700">•</span>
+                  <span>{err}</span>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-[11px] text-neutral-500 font-mono">
+              You can keep this product in <strong className="text-black">Test / Demo Mode</strong> to test images, layout, and variants without completing these requirements.
+            </p>
+
+            <div className="flex items-center justify-end pt-2 border-t border-neutral-200">
+              <button
+                type="button"
+                onClick={() => setShowValidationModal(false)}
+                className="bg-black text-white px-5 py-2 text-xs font-mono uppercase font-bold hover:bg-neutral-800 min-h-[40px] cursor-pointer"
+              >
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   )
 }

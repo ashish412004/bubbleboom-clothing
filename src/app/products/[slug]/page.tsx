@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 import { ProductCard } from '@/components/product/product-card'
-import { getProducts, getProductBySlug, getRelatedProducts } from '@/lib/products'
+import { getProducts, getProductBySlug, getRelatedProducts, isProductTest } from '@/lib/products'
 import { getStoreSettings, StoreShippingSettings, StoreExchangeSettings } from '@/lib/settings'
 import { ProductInteractive } from './product-interactive'
 import Link from 'next/link'
@@ -29,18 +29,38 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
   if (!product) {
     return {
-      title: 'Product Not Found | BUBBLE BOOM',
+      title: 'Product Not Found | Bubble Boom',
     }
   }
 
+  const isTest = isProductTest(product)
+  const canonicalUrl = `https://bubbleboomstore.com/products/${product.slug}`
   const firstImage = (product as any).images?.[0]?.image_url
 
   return {
-    title: `${product.name} | BUBBLE BOOM`,
-    description: product.description.slice(0, 160),
+    title: `${product.name} | Bubble Boom`,
+    description: (product.description || '').slice(0, 160),
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    robots: isTest
+      ? {
+          index: false,
+          follow: true,
+          nocache: true,
+          googleBot: {
+            index: false,
+            follow: true,
+          },
+        }
+      : {
+          index: true,
+          follow: true,
+        },
     openGraph: {
-      title: `${product.name} | BUBBLE BOOM`,
-      description: product.description.slice(0, 160),
+      title: `${product.name} | Bubble Boom`,
+      description: (product.description || '').slice(0, 160),
+      url: canonicalUrl,
       images: firstImage ? [{ url: firstImage }] : [],
     },
   }
@@ -58,40 +78,46 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
     notFound()
   }
 
+  const isTest = isProductTest(product)
   const relatedProducts = await getRelatedProducts(product.id, product.category_id || undefined, 4)
 
-  // Structured Data (Schema.org Product)
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Product',
-    name: product.name,
-    description: product.description,
-    image: (product as any).images?.map((i: any) => i.image_url) || [],
-    offers: {
-      '@type': 'Offer',
-      priceCurrency: 'INR',
-      price: product.selling_price,
-      availability: 'https://schema.org/InStock',
-      seller: {
-        '@type': 'Organization',
-        name: 'BUBBLE BOOM',
-      },
-    },
-  }
+  // Structured Data (Schema.org Product) - strictly emitted ONLY for genuine LIVE merchandise
+  const jsonLd = !isTest
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: product.name,
+        description: product.description,
+        image: (product as any).images?.map((i: any) => i.image_url) || [],
+        offers: {
+          '@type': 'Offer',
+          priceCurrency: 'INR',
+          price: product.selling_price,
+          availability: 'https://schema.org/InStock',
+          url: `https://bubbleboomstore.com/products/${product.slug}`,
+          seller: {
+            '@type': 'Organization',
+            name: 'Bubble Boom',
+          },
+        },
+      }
+    : null
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-black">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
 
       <Header />
 
       <main className="flex-1">
         {/* Breadcrumb Bar */}
         <div className="border-b border-neutral-200 py-3.5 bg-[#F8F8F6]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
             <nav className="text-xs uppercase tracking-widest text-neutral-500 flex items-center space-x-2">
               <Link href="/" className="hover:underline">Home</Link>
               <span>/</span>
@@ -99,6 +125,11 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
               <span>/</span>
               <span className="text-black font-semibold truncate max-w-xs">{product.name}</span>
             </nav>
+            {isTest && (
+              <span className="text-[10px] font-mono uppercase font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-0.5 shrink-0">
+                Test / Demo Merchandise
+              </span>
+            )}
           </div>
         </div>
 

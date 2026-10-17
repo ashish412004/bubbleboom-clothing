@@ -2,8 +2,11 @@ import { Header } from '@/components/header/header'
 import { Footer } from '@/components/footer/footer'
 
 export const metadata = {
-  title: 'Privacy Policy | BUBBLE BOOM',
+  title: 'Privacy Policy | Bubble Boom',
   description: 'How Bubble Boom collects, protects, and handles personal data under Indian data protection regulations.',
+  alternates: {
+    canonical: 'https://bubbleboomstore.com/privacy-policy',
+  },
 }
 
 export default function PrivacyPolicyPage() {
@@ -28,7 +31,7 @@ export default function PrivacyPolicyPage() {
             <section>
               <h2 className="text-lg font-black uppercase tracking-tight text-black mb-2">1. Overview &amp; Commitment</h2>
               <p>
-                BUBBLE BOOM (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;) is committed to safeguarding your personal data and respecting your individual privacy. This Privacy Policy details the types of personal data we collect through our online storefront (bubbleboom.in), how we process and store it, and your statutory rights regarding your personal information.
+                BUBBLE BOOM (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;) is committed to safeguarding your personal data and respecting your individual privacy. This Privacy Policy details the types of personal data we collect through our online storefront (https://bubbleboomstore.com), how we process and store it, and your statutory rights regarding your personal information.
               </p>
             </section>
 
