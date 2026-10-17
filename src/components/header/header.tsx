@@ -55,9 +55,69 @@ export function Header({
       )}
 
       {/* Main Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-18 sm:h-20">
-          {/* Mobile Menu Trigger */}
+      {/* 1. Mobile Navigation Bar (< 768px): 60px height, centered 80px logo, 3-column grid */}
+      <div className="md:hidden max-w-7xl mx-auto px-4">
+        <div className="grid grid-cols-3 items-center h-[60px]">
+          {/* LEFT: Hamburger Menu */}
+          <div className="flex items-center justify-start">
+            <button
+              type="button"
+              className="w-11 h-11 -ml-2 flex items-center justify-center text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black cursor-pointer"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open navigation menu"
+              aria-expanded={mobileMenuOpen}
+            >
+              <Menu size={24} />
+            </button>
+          </div>
+
+          {/* CENTER: Bubble Boom Logo (80px width, mathematically centered in viewport) */}
+          <div className="flex items-center justify-center">
+            <Link href="/" className="flex items-center justify-center py-1 group" aria-label="Bubble Boom Home">
+              <div className="relative w-[80px] h-[44px] transition-transform group-hover:scale-[1.02]">
+                <Image
+                  src="/images/brand/bubble-boom-logo-black.png"
+                  alt="BUBBLE BOOM"
+                  fill
+                  priority
+                  className="object-contain object-center"
+                  sizes="80px"
+                />
+              </div>
+            </Link>
+          </div>
+
+          {/* RIGHT: Search & Cart */}
+          <div className="flex items-center justify-end space-x-1">
+            <Link
+              href="/search"
+              className="w-11 h-11 flex items-center justify-center text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black"
+              aria-label="Search catalog"
+            >
+              <Search size={20} strokeWidth={2} />
+            </Link>
+
+            <button
+              type="button"
+              onClick={openCartDrawer}
+              className="w-11 h-11 flex items-center justify-center text-black hover:bg-neutral-100 transition-colors rounded-sm relative focus:outline-none focus:ring-1 focus:ring-black cursor-pointer"
+              aria-label="View shopping bag"
+            >
+              <ShoppingBag size={20} strokeWidth={2} />
+              {mounted && itemCount > 0 && (
+                <span className="absolute top-1 right-1 bg-[#DC2626] text-white text-[10px] font-bold min-w-5 h-5 px-1 rounded-full flex items-center justify-center ring-2 ring-white pointer-events-none">
+                  {itemCount > 99 ? '99+' : itemCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Desktop Navigation Bar (>= 768px): Completely preserved height, logo, links, & icons */}
+      <div className="hidden md:block max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-20">
+          {/* Mobile/Tablet Menu Trigger for intermediate tablet screens (< lg) */}
           <div className="flex items-center lg:hidden">
             <button
               type="button"
@@ -73,14 +133,14 @@ export function Header({
           {/* Bubble Boom Logo linking Home */}
           <div className="flex items-center">
             <Link href="/" className="flex items-center py-1 group" aria-label="Bubble Boom Home">
-              <div className="relative h-9 sm:h-11 w-36 sm:w-44 transition-transform group-hover:scale-[1.02]">
+              <div className="relative h-11 w-44 transition-transform group-hover:scale-[1.02]">
                 <Image
                   src="/images/brand/bubble-boom-logo-black.png"
                   alt="BUBBLE BOOM"
                   fill
                   priority
                   className="object-contain object-left"
-                  sizes="(max-width: 640px) 150px, 180px"
+                  sizes="180px"
                 />
               </div>
             </Link>
@@ -144,7 +204,7 @@ export function Header({
 
             <Link
               href={mounted && authUser ? '/account' : '/login'}
-              className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black hidden sm:inline-flex items-center gap-1.5"
+              className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm focus:outline-none focus:ring-1 focus:ring-black inline-flex items-center gap-1.5"
               aria-label={mounted && authUser ? `Account (${authUser.name})` : 'Customer account'}
             >
               <div className="relative flex items-center justify-center">
@@ -162,7 +222,7 @@ export function Header({
 
             <Link
               href="/wishlist"
-              className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm relative focus:outline-none focus:ring-1 focus:ring-black hidden sm:inline-flex"
+              className="p-2 text-black hover:bg-neutral-100 transition-colors rounded-sm relative focus:outline-none focus:ring-1 focus:ring-black inline-flex"
               aria-label="View wishlist"
             >
               <Heart size={20} strokeWidth={2} className={mounted && wishlistCount > 0 ? 'text-[#DC2626]' : 'text-black'} />
